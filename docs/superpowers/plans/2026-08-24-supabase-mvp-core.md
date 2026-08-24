@@ -41,15 +41,15 @@
 
 **Checklist:**
 
-- [ ] Add a direct `tsx` dev dependency and a `test:unit` script using `node --import tsx --test`.
-- [ ] Write failing tests for missing URL, malformed URL, missing key, and valid values.
-- [ ] Run `npm run test:unit -- tests/supabase-env.test.ts`; expect failure because the parser is absent.
-- [ ] Implement the strict parser and safe `.env.example`.
-- [ ] Pin `@supabase/supabase-js` to `2.112.4` and `@supabase/ssr` to `0.12.5` exactly.
-- [ ] Implement browser/server factories with no service-role path and no raw environment access in UI modules.
-- [ ] Run the focused unit test; expect all cases to pass.
-- [ ] Run `npm run build` with public test credentials; expect a successful Vinext build.
-- [ ] Commit as `feat: add Supabase runtime foundation`.
+- [x] Add a direct `tsx` dev dependency and a `test:unit` script using `node --import tsx --test`.
+- [x] Write failing tests for missing URL, malformed URL, missing key, and valid values.
+- [x] Run `npm run test:unit -- tests/supabase-env.test.ts`; expect failure because the parser is absent.
+- [x] Implement the strict parser and safe `.env.example`.
+- [x] Pin `@supabase/supabase-js` to `2.112.4` and `@supabase/ssr` to `0.12.5` exactly.
+- [x] Implement browser/server factories with no service-role path and no raw environment access in UI modules.
+- [x] Run the focused unit test; expect all cases to pass.
+- [x] Run `npm run build` with public test credentials; expect a successful Vinext build.
+- [x] Commit as `feat: add Supabase runtime foundation`.
 
 ---
 
@@ -69,15 +69,15 @@
 
 **Checklist:**
 
-- [ ] Write a failing SQL contract test that checks all tables, constraints, indexes, RLS enables, policy names, default ACL revocations, explicit grants, helper hardening, trigger names, invitation hash redaction, and seeded permissions.
-- [ ] Run `node --test tests/supabase-schema.test.mjs`; expect failure because the migration is absent.
-- [ ] Create one idempotency-safe-for-history migration: revoke broad defaults before object creation, create `private`, tables, constraints, indexes, functions, triggers, seeds, RLS, policies, and explicit grants.
-- [ ] Use `security definer set search_path = ''`, fully qualified identifiers, `(select auth.uid())`, and revoked `PUBLIC` execution for every trusted helper.
-- [ ] Ensure client grants cannot write ownership, system flags, timestamps, invitation tokens/status, or audit rows.
-- [ ] Ensure `service_role` receives only explicit application-object privileges.
-- [ ] Run the SQL contract test; expect all clauses to pass.
-- [ ] Perform a manual security review against the specification before any remote DDL.
-- [ ] Commit as `feat: add secure team RBAC schema`.
+- [x] Write a failing SQL contract test that checks all tables, constraints, indexes, RLS enables, policy names, default ACL revocations, explicit grants, helper hardening, trigger names, invitation hash redaction, and seeded permissions.
+- [x] Run `node --test tests/supabase-schema.test.mjs`; expect failure because the migration is absent.
+- [x] Create one idempotency-safe-for-history migration: revoke broad defaults before object creation, create `private`, tables, constraints, indexes, functions, triggers, seeds, RLS, policies, and explicit grants.
+- [x] Use `security definer set search_path = ''`, fully qualified identifiers, `(select auth.uid())`, and revoked `PUBLIC` execution for every trusted helper.
+- [x] Ensure client grants cannot write ownership, system flags, timestamps, invitation tokens/status, or audit rows.
+- [x] Ensure `service_role` receives only explicit application-object privileges.
+- [x] Run the SQL contract test; expect all clauses to pass.
+- [x] Perform a manual security review against the specification before any remote DDL.
+- [x] Commit as `feat: add secure team RBAC schema`.
 
 ---
 
@@ -104,15 +104,15 @@
 
 **Checklist:**
 
-- [ ] Write failing unit tests for safe/unsafe return paths and reserved Sites/Supabase auth routes.
-- [ ] Add failing source/render contracts for `/login`, `/auth/callback`, protected `/`, `getUser()`, and logout.
-- [ ] Run focused tests; expect failures because auth modules/routes are absent.
-- [ ] Implement auth helpers and callback without mixing ChatGPT Auth.
-- [ ] Build the black/white/red login form with email/password, disabled/loading behavior, Vietnamese error handling, and safe redirect.
-- [ ] Require a verified Supabase user at `/`; add a compact logout control without restructuring the dashboard.
-- [ ] Run focused tests and `npm test`; expect all existing and new tests to pass.
-- [ ] Run `npm run build` with public test credentials; expect success.
-- [ ] Commit as `feat: add Supabase login boundary`.
+- [x] Write failing unit tests for safe/unsafe return paths and reserved Sites/Supabase auth routes.
+- [x] Add failing source/render contracts for `/login`, `/auth/callback`, protected `/`, `getUser()`, and logout.
+- [x] Run focused tests; expect failures because auth modules/routes are absent.
+- [x] Implement auth helpers and callback without mixing ChatGPT Auth.
+- [x] Build the black/white/red login form with email/password, disabled/loading behavior, Vietnamese error handling, and safe redirect.
+- [x] Require a verified Supabase user at `/`; add a compact logout control without restructuring the dashboard.
+- [x] Run focused tests and `npm test`; expect all existing and new tests to pass.
+- [x] Run `npm run build` with public test credentials; expect success.
+- [x] Commit as `feat: add Supabase login boundary`.
 
 ---
 
@@ -132,15 +132,15 @@
 
 **Checklist:**
 
-- [ ] Confirm the remote public schema and migration history are still empty immediately before apply.
-- [ ] Create a transactional verification script covering profile bootstrap, team bootstrap, tenant isolation, owner/admin/member permissions, immutable owner/system roles, cross-team role rejection, invitation token secrecy/single use, audit redaction, and privilege/default-ACL inspection.
-- [ ] Apply the reviewed migration exactly once through the Supabase migration capability.
-- [ ] Execute verification probes transactionally; roll back fixtures and record each assertion result.
-- [ ] Generate current TypeScript database types from the project and commit them.
-- [ ] Parameterize browser/server clients with `Database`.
-- [ ] Re-run Supabase security and performance advisors; resolve every Phase 1 finding or document why it is non-actionable.
-- [ ] Run `npm run test:unit`, `npm test`, the SQL contract test, and `npm run build`; expect success.
-- [ ] Commit as `feat: verify Supabase MVP core`.
+- [x] Confirm the remote public schema and migration history are still empty immediately before apply.
+- [x] Create a transactional verification script covering profile bootstrap, team bootstrap, tenant isolation, owner/admin/member permissions, immutable owner/system roles, cross-team role rejection, invitation token secrecy/single use, audit redaction, and privilege/default-ACL inspection.
+- [x] Apply the reviewed migration exactly once through the Supabase migration capability.
+- [x] Execute verification probes transactionally; roll back fixtures and record each assertion result.
+- [x] Generate current TypeScript database types from the project and commit them.
+- [x] Parameterize browser/server clients with `Database`.
+- [x] Re-run Supabase security and performance advisors; resolve every Phase 1 finding or document why it is non-actionable.
+- [x] Run `npm run test:unit`, `npm test`, the SQL contract test, and `npm run build`; expect success.
+- [x] Commit as `feat: verify Supabase MVP core`.
 
 ---
 
@@ -155,8 +155,8 @@
 
 - [ ] Request a fresh code/security review of the full branch diff.
 - [ ] Fix all critical/important findings with focused regression tests.
-- [ ] Run the complete verification set from a clean worktree state and capture evidence.
-- [ ] Document schema objects, permission matrix, local environment setup, remote migration name, advisor status, known baseline lint/typecheck issues, and safe next modules.
-- [ ] Mark all plan checkboxes accurately; do not mark unverified steps complete.
-- [ ] Commit as `docs: add Supabase MVP handoff`.
+- [x] Run the complete verification set from a clean worktree state and capture evidence.
+- [x] Document schema objects, permission matrix, local environment setup, remote migration name, advisor status, known baseline lint/typecheck issues, and safe next modules.
+- [x] Mark all plan checkboxes accurately; do not mark unverified steps complete.
+- [x] Commit as `docs: add Supabase MVP handoff`.
 - [ ] Use `superpowers:finishing-a-development-branch` to present merge/integration options.
