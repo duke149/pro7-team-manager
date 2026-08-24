@@ -5,10 +5,13 @@ import test from "node:test";
 import { createServer, type ViteDevServer } from "vite";
 
 import { matchesMiddleware } from "../node_modules/vinext/dist/server/middleware-matcher.js";
+import { mergeMiddlewareResponseHeaders } from "../node_modules/vinext/dist/server/middleware-response-headers.js";
+import { normalizePath } from "../node_modules/vinext/dist/server/normalize-path.js";
 import {
   NextRequest,
   type NextResponse,
 } from "../node_modules/vinext/dist/shims/server.js";
+import { normalizePathnameForRouteMatchStrict } from "../node_modules/vinext/dist/routing/utils.js";
 
 type CookieOptions = Record<string, unknown>;
 type CookieToSet = {
@@ -52,7 +55,10 @@ type CallbackClientFactory = (
   auth: {
     exchangeCodeForSession(
       code: string,
-    ): Promise<{ data: { session: null; user: null }; error: null }>;
+    ): Promise<{
+      data: { session: null; user: null };
+      error: unknown;
+    }>;
   };
 };
 
@@ -167,13 +173,17 @@ test("middleware forwards refreshed cookies to the render and browser with cache
   assert.equal(response.headers.get("pragma"), "no-cache");
 });
 
-test("middleware matcher refreshes app and auth routes but skips static assets", async () => {
+function middlewarePathname(rawPathname: string): string {
+  return normalizePath(normalizePathnameForRouteMatchStrict(rawPathname));
+}
+
+test("middleware matcher refreshes app routes but skips static assets", async () => {
   const middleware = await loadModule<AuthBoundaryModule>(
     "/middleware.ts",
     "middleware.ts must expose its matcher",
   );
 
-  for (const pathname of ["/", "/login", "/auth/callback", "/squad"] ) {
+  for (const pathname of ["/", "/login", "/auth/ordinary", "/squad"]) {
     assert.equal(
       matchesMiddleware(pathname, middleware.config.matcher),
       true,
@@ -192,6 +202,105 @@ test("middleware matcher refreshes app and auth routes but skips static assets",
       pathname,
     );
   }
+});
+
+test("middleware gives callback routes one response owner after Vinext normalization", async () => {
+  const middleware = await loadModule<AuthBoundaryModule>(
+    "/middleware.ts",
+    "middleware.ts must expose its matcher",
+  );
+
+  for (const rawPathname of [
+    "/auth/callback",
+    "/auth/callback/",
+    "/auth/callback/again",
+    "/auth//callback",
+    "/auth//callback/again",
+  ]) {
+    const pathname = middlewarePathname(rawPathname);
+    assert.equal(
+      matchesMiddleware(pathname, middleware.config.matcher),
+      false,
+      `${rawPathname} normalized to ${pathname}`,
+    );
+  }
+});
+
+test("Vinext finalization cannot append a middleware session after callback exchange", async () => {
+  const middleware = await loadModule<AuthBoundaryModule>(
+    "/middleware.ts",
+    "middleware.ts must expose the Supabase refresh boundary",
+  );
+  const callback = await loadModule<CallbackModule>(
+    "/app/auth/callback/route.ts",
+    "the auth callback module must load",
+  );
+  const request = new NextRequest(
+    "https://pro7.example/auth//callback?code=valid-code&next=%2Fsquad",
+    { headers: { cookie: "sb-session=old-session; pkce=verifier" } },
+  );
+  const pathname = middlewarePathname(new URL(request.url).pathname);
+  let middlewareResponse: NextResponse | undefined;
+
+  if (matchesMiddleware(pathname, middleware.config.matcher)) {
+    middlewareResponse = await middleware.refreshSupabaseSession(
+      request,
+      (_url, _key, { cookies }) => ({
+        auth: {
+          async getUser() {
+            await cookies.setAll(
+              [
+                {
+                  name: "sb-session",
+                  value: "middleware-old-refresh",
+                  options: { httpOnly: true, path: "/" },
+                },
+              ],
+              { "Cache-Control": "private, no-store" },
+            );
+            return { data: { user: null }, error: null };
+          },
+        },
+      }),
+    );
+  }
+
+  const callbackResponse = await callback.handleAuthCallback(
+    request,
+    (_url, _key, { cookies }) => ({
+      auth: {
+        async exchangeCodeForSession() {
+          await cookies.setAll(
+            [
+              {
+                name: "sb-session",
+                value: "callback-new-session",
+                options: { httpOnly: true, path: "/" },
+              },
+            ],
+            { "Cache-Control": "private, no-cache, no-store" },
+          );
+          return { data: { session: null, user: null }, error: null };
+        },
+      },
+    }),
+  );
+  const finalizedHeaders = new Headers(callbackResponse.headers);
+  mergeMiddlewareResponseHeaders(
+    finalizedHeaders,
+    middlewareResponse?.headers ?? null,
+  );
+
+  const sessionCookies = finalizedHeaders
+    .getSetCookie()
+    .filter((value) => value.startsWith("sb-session="));
+  assert.deepEqual(sessionCookies, [
+    "sb-session=callback-new-session; Path=/; HttpOnly",
+  ]);
+  assert.equal(
+    finalizedHeaders.get("cache-control"),
+    "private, no-cache, no-store",
+  );
 });
 
 test("callback success keeps exchanged cookies and cache headers on its redirect", async () => {
@@ -241,6 +350,61 @@ test("callback success keeps exchanged cookies and cache headers on its redirect
   assert.equal(
     response.headers.get("cache-control"),
     "private, no-cache, no-store, must-revalidate, max-age=0",
+  );
+  assert.equal(response.headers.get("expires"), "0");
+  assert.equal(response.headers.get("pragma"), "no-cache");
+});
+
+test("callback failure preserves response-owned cookies and cache headers on a safe redirect", async () => {
+  const callback = await loadModule<CallbackModule>(
+    "/app/auth/callback/route.ts",
+    "the auth callback module must load",
+  );
+  const request = new NextRequest(
+    "https://pro7.example/auth/callback?code=expired-code&next=%2Fauth%2F%2Fcallback",
+    { headers: { cookie: "pkce=expired-verifier" } },
+  );
+  const response = await callback.handleAuthCallback(
+    request,
+    (_url, _key, { cookies }) => ({
+      auth: {
+        async exchangeCodeForSession() {
+          await cookies.setAll(
+            [
+              {
+                name: "pkce",
+                value: "",
+                options: { expires: new Date(0), httpOnly: true, path: "/" },
+              },
+            ],
+            {
+              "Cache-Control": "private, no-cache, no-store, must-revalidate",
+              Expires: "0",
+              Pragma: "no-cache",
+            },
+          );
+          return {
+            data: { session: null, user: null },
+            error: new Error("expired code"),
+          };
+        },
+      },
+    }),
+  );
+
+  assert.equal(response.status, 303);
+  assert.equal(
+    response.headers.get("location"),
+    "https://pro7.example/login?next=%2F&error=callback",
+  );
+  assert.ok(
+    setCookies(response).some((value) =>
+      value.startsWith("pkce=; Path=/; Expires=Thu, 01 Jan 1970"),
+    ),
+  );
+  assert.equal(
+    response.headers.get("cache-control"),
+    "private, no-cache, no-store, must-revalidate",
   );
   assert.equal(response.headers.get("expires"), "0");
   assert.equal(response.headers.get("pragma"), "no-cache");
