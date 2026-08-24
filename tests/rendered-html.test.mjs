@@ -2,23 +2,32 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-async function render() {
+async function render(pathname = "/") {
   const workerUrl = new URL("../dist/server/index.js", import.meta.url);
   workerUrl.searchParams.set("test", `${process.pid}-${Date.now()}`);
   const { default: worker } = await import(workerUrl.href);
-  return worker.fetch(new Request("https://pro7.example/", { headers: { accept: "text/html" } }), {
+  return worker.fetch(new Request(`https://pro7.example${pathname}`, { headers: { accept: "text/html" } }), {
     ASSETS: { fetch: async () => new Response("Not found", { status: 404 }) },
   }, { waitUntil() {}, passThroughOnException() {} });
 }
 
-test("server-renders the PRO7 application shell", async () => {
-  const response = await render();
+test("server-renders the Vietnamese Supabase login boundary", async () => {
+  const response = await render("/login?next=%2F");
   assert.equal(response.status, 200);
   assert.match(response.headers.get("content-type") ?? "", /^text\/html\b/i);
   const html = await response.text();
   assert.match(html, /PRO7 Team Manager/);
-  assert.match(html, /Quản lý đội bóng 7 người/);
+  assert.match(html, /Đăng nhập/);
+  assert.match(html, /Email/);
+  assert.match(html, /Mật khẩu/);
   assert.doesNotMatch(html, /codex-preview|react-loading-skeleton/);
+});
+
+test("redirects an unauthenticated dashboard request to the Supabase login", async () => {
+  const response = await render("/");
+
+  assert.equal(response.status, 307);
+  assert.equal(response.headers.get("location"), "/login?next=%2F");
 });
 
 test("includes the five core surfaces and social metadata", async () => {
@@ -32,4 +41,25 @@ test("includes the five core surfaces and social metadata", async () => {
   assert.match(layout, /openGraph/);
   assert.match(layout, /twitter/);
   assert.doesNotMatch(layout, /og\.png/);
+});
+
+test("wires verified Supabase auth without changing Sites auth routes", async () => {
+  const [auth, callback, home, dashboard, chatgptAuth] = await Promise.all([
+    readFile(new URL("../lib/supabase/auth.ts", import.meta.url), "utf8").catch(() => ""),
+    readFile(new URL("../app/auth/callback/route.ts", import.meta.url), "utf8").catch(() => ""),
+    readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/pro7-app.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/chatgpt-auth.ts", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(auth, /auth\.getUser\(\)/, "server identity must be verified");
+  assert.match(auth, /redirect\([^)]*\/login/, "unauthenticated users must be sent to /login");
+  assert.match(callback, /auth\.exchangeCodeForSession\(code\)/, "callback must exchange its PKCE code");
+  assert.match(callback, /safeRelativeReturnPath\(/, "callback redirects must be local-only");
+  assert.match(home, /await requireCurrentUser\("\/"\)/, "the dashboard must require a verified user");
+  assert.match(dashboard, /auth\.signOut\(\)/, "the dashboard must expose Supabase logout");
+  assert.match(dashboard, /Đăng xuất/, "logout must have an accessible Vietnamese label");
+  assert.match(chatgptAuth, /const SIGN_IN_PATH = "\/signin-with-chatgpt"/);
+  assert.match(chatgptAuth, /const CALLBACK_PATH = "\/callback"/);
+  assert.doesNotMatch(chatgptAuth, /Supabase|\/auth\/callback/);
 });

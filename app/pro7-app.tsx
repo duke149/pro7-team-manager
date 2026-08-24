@@ -4,10 +4,12 @@ import { useMemo, useState } from "react";
 import {
   Activity, Bell, CalendarDays, Check, ChevronDown, CircleDollarSign,
   ClipboardList, Clock3, Coins, CreditCard, Grid2X2, HandCoins, HeartPulse,
-  LayoutDashboard, MapPin, Menu, MessageCircle, MoreHorizontal, Plus, Save,
+  LayoutDashboard, LogOut, MapPin, Menu, MessageCircle, MoreHorizontal, Plus, Save,
   Search, Send, Settings2, Share2, ShieldCheck, Shirt, SlidersHorizontal, Sun,
   Target, TrendingUp, Trophy, UserPlus, Users, WalletCards, X, Moon,
 } from "lucide-react";
+
+import { createBrowserSupabaseClient } from "../lib/supabase/client";
 
 type View = "dashboard" | "squad" | "matches" | "tactics" | "funds";
 type ModalType = "player" | "expense" | "payment" | null;
@@ -49,6 +51,7 @@ export default function Pro7App() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [modal, setModal] = useState<ModalType>(null);
   const [toast, setToast] = useState("");
+  const [isSigningOut, setIsSigningOut] = useState(false);
   const meta = viewMeta[view];
 
   const notify = (message: string) => {
@@ -62,6 +65,22 @@ export default function Pro7App() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
+  const signOut = async () => {
+    setIsSigningOut(true);
+    try {
+      const { error } = await createBrowserSupabaseClient().auth.signOut();
+      if (error) {
+        notify("Không thể đăng xuất. Vui lòng thử lại.");
+        return;
+      }
+      window.location.assign("/login");
+    } catch {
+      notify("Không thể đăng xuất. Vui lòng thử lại.");
+    } finally {
+      setIsSigningOut(false);
+    }
+  };
+
   return (
     <div className={`pro7-shell ${theme}`}>
       <Sidebar view={view} menuOpen={menuOpen} onSelect={selectView} onClose={() => setMenuOpen(false)} />
@@ -73,6 +92,7 @@ export default function Pro7App() {
             <button className="icon-button theme-button" aria-label={theme === "light" ? "Bật giao diện tối" : "Bật giao diện sáng"} onClick={() => setTheme(theme === "light" ? "dark" : "light")}>{theme === "light" ? <Moon size={19} /> : <Sun size={19} />}</button>
             <button className="icon-button notification" aria-label="Thông báo" onClick={() => notify("Bạn không có thông báo mới")}><Bell size={20} /><i>2</i></button>
             <button className="primary-button header-cta" onClick={() => setModal(view === "funds" ? "expense" : "player")}><Plus size={18} />{view === "funds" ? "Thêm khoản chi" : "Thêm cầu thủ"}</button>
+            <button className="logout-button" onClick={signOut} disabled={isSigningOut} aria-busy={isSigningOut} aria-label={isSigningOut ? "Đang đăng xuất" : "Đăng xuất"}><LogOut size={17} /><span>{isSigningOut ? "Đang xuất…" : "Đăng xuất"}</span></button>
           </div>
         </header>
 
@@ -87,7 +107,7 @@ export default function Pro7App() {
 
       <MobileNav view={view} onSelect={selectView} />
       {modal && <ActionModal type={modal} onClose={() => setModal(null)} onDone={(message) => { setModal(null); notify(message); }} />}
-      {toast && <div className="toast"><Check size={18} />{toast}</div>}
+      {toast && <div className="toast" role="status" aria-live="polite"><Check size={18} />{toast}</div>}
     </div>
   );
 }
