@@ -301,6 +301,86 @@ begin
     raise exception 'live verification: exact API-role table ACL matrix differs';
   end if;
 
+  -- Raw ACL equality cannot see privileges inherited through parent roles.
+  -- Compare every effective table privilege as well. Column-only grants do not
+  -- count as table-level privileges (notably invitations SELECT and all UPDATEs).
+  if exists (
+    with
+    roles(role_name) as (
+      values ('anon'), ('authenticated'), ('service_role')
+    ),
+    application_tables(table_name) as (
+      values
+        ('invitations'),
+        ('memberships'),
+        ('permissions'),
+        ('profiles'),
+        ('role_permissions'),
+        ('roles'),
+        ('team_settings'),
+        ('teams')
+    ),
+    privileges(privilege_type) as (
+      values
+        ('SELECT'),
+        ('INSERT'),
+        ('UPDATE'),
+        ('DELETE'),
+        ('TRUNCATE'),
+        ('REFERENCES'),
+        ('TRIGGER')
+    ),
+    matrix as (
+      select
+        roles.role_name,
+        application_tables.table_name,
+        privileges.privilege_type,
+        pg_catalog.has_table_privilege(
+          roles.role_name,
+          pg_catalog.format('public.%I', application_tables.table_name),
+          privileges.privilege_type
+        ) as actual_allowed,
+        case roles.role_name
+          when 'anon' then false
+          when 'service_role' then
+            privileges.privilege_type = any (
+              array['SELECT', 'INSERT', 'UPDATE', 'DELETE']::text[]
+            )
+          when 'authenticated' then
+            case privileges.privilege_type
+              when 'SELECT' then
+                application_tables.table_name = any (array[
+                  'memberships',
+                  'permissions',
+                  'profiles',
+                  'role_permissions',
+                  'roles',
+                  'team_settings',
+                  'teams'
+                ]::text[])
+              when 'INSERT' then
+                application_tables.table_name = 'role_permissions'
+              when 'DELETE' then
+                application_tables.table_name = any (array[
+                  'memberships',
+                  'role_permissions',
+                  'roles',
+                  'teams'
+                ]::text[])
+              else false
+            end
+        end as expected_allowed
+      from roles
+      cross join application_tables
+      cross join privileges
+    )
+    select 1
+    from matrix
+    where actual_allowed is distinct from expected_allowed
+  ) then
+    raise exception 'live verification: effective API-role table privilege matrix differs';
+  end if;
+
   if exists (
     with
     expected(
@@ -1696,7 +1776,7 @@ rollback;
 
 select
   'ok'::text as status,
-  83::integer as assertions,
+  84::integer as assertions,
   16::integer as coverage_groups,
   'profile/team bootstrap; exact roles/mappings/settings; tenant isolation; owner/admin/member permissions; owner/system immutability; cross-team role rejection; custom team.delete denial; invitation secrecy/confirmed-email/single-use/generic failure; audit redaction; ACLs; functions; RLS/policies/triggers'::text as coverage,
   'rolled back'::text as fixtures;
