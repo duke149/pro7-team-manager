@@ -155,7 +155,8 @@ test("the Supabase migration satisfies the reviewed schema and security contract
   await t.test("revokes broad defaults before creating application objects", () => {
     const requiredRevocations = [
       /alter default privileges for role postgres in schema public revoke select, insert, update, delete on tables from (?:public, )?anon, authenticated, service_role;/,
-      /alter default privileges for role postgres in schema public revoke execute on functions from public, anon, authenticated, service_role;/,
+      /alter default privileges for role postgres revoke execute on functions from public;/,
+      /alter default privileges for role postgres in schema public revoke execute on functions from anon, authenticated, service_role;/,
       /alter default privileges for role postgres in schema public revoke usage, select on sequences from anon, authenticated, service_role;/,
     ];
     const firstObject = Math.min(
@@ -355,6 +356,20 @@ test("the Supabase migration satisfies the reviewed schema and security contract
       roleBelongsToTeam,
       /where r\.id = p_role_id and r\.team_id = p_team_id and not \(r\.is_system and r\.slug = 'owner'\)/,
       "membership assignment must reject the canonical system owner role",
+    );
+
+    const canManageMembership = extractFunction(sql, "private.can_manage_membership");
+    assertClause(
+      canManageMembership,
+      /from public\.teams as t where t\.id = p_team_id and t\.owner_user_id <> p_target_user_id and private\.has_team_permission\(p_team_id, 'members\.manage'\)/,
+      "membership management must be team-authorized and always deny the canonical owner",
+    );
+
+    const canManageRole = extractFunction(sql, "private.can_manage_role");
+    assertClause(
+      canManageRole,
+      /from public\.roles as r where r\.id = p_role_id and not r\.is_system and private\.has_team_permission\(r\.team_id, 'roles\.manage'\)/,
+      "role management must be team-authorized and deny every system role",
     );
 
     assertClause(
