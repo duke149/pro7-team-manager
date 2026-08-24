@@ -2,7 +2,10 @@
 --
 -- This script is intentionally rollback-only. Synthetic invitation tokens are
 -- generated inside the anonymous block, are never selected or logged, and are
--- discarded with the transaction.
+-- discarded with the transaction. The success path reaches the explicit
+-- ROLLBACK; an unhandled assertion aborts the open transaction and the SQL
+-- executor rolls it back when the request ends. After either path, run the
+-- separate fixture cleanup query documented in the Task 4 report.
 
 begin;
 
@@ -204,31 +207,324 @@ begin
   end if;
 
   -- Object, column, schema, function, and default ACLs are an independent
-  -- authorization layer in addition to RLS.
+  -- authorization layer in addition to RLS. Compare full sets so one valid
+  -- representative grant cannot hide a missing or extra privilege elsewhere.
   if exists (
-    select 1
-    from pg_catalog.pg_class as c
-    join pg_catalog.pg_namespace as n on n.oid = c.relnamespace
-    where n.nspname in ('public', 'private')
-      and c.relname = any (array[
-        'audit_events',
-        'invitations',
-        'memberships',
-        'permissions',
-        'profiles',
-        'role_permissions',
-        'roles',
-        'team_settings',
-        'teams'
-      ]::text[])
-      and (
-        pg_catalog.has_table_privilege('anon', c.oid, 'SELECT')
-        or pg_catalog.has_table_privilege('anon', c.oid, 'INSERT')
-        or pg_catalog.has_table_privilege('anon', c.oid, 'UPDATE')
-        or pg_catalog.has_table_privilege('anon', c.oid, 'DELETE')
-      )
+    with
+    expected(grantee_name, table_name, privilege_type, is_grantable) as (
+      values
+        ('authenticated', 'profiles', 'SELECT', false),
+        ('authenticated', 'teams', 'DELETE', false),
+        ('authenticated', 'teams', 'SELECT', false),
+        ('authenticated', 'memberships', 'DELETE', false),
+        ('authenticated', 'memberships', 'SELECT', false),
+        ('authenticated', 'roles', 'DELETE', false),
+        ('authenticated', 'roles', 'SELECT', false),
+        ('authenticated', 'permissions', 'SELECT', false),
+        ('authenticated', 'role_permissions', 'DELETE', false),
+        ('authenticated', 'role_permissions', 'INSERT', false),
+        ('authenticated', 'role_permissions', 'SELECT', false),
+        ('authenticated', 'team_settings', 'SELECT', false),
+        ('service_role', 'profiles', 'DELETE', false),
+        ('service_role', 'profiles', 'INSERT', false),
+        ('service_role', 'profiles', 'SELECT', false),
+        ('service_role', 'profiles', 'UPDATE', false),
+        ('service_role', 'teams', 'DELETE', false),
+        ('service_role', 'teams', 'INSERT', false),
+        ('service_role', 'teams', 'SELECT', false),
+        ('service_role', 'teams', 'UPDATE', false),
+        ('service_role', 'roles', 'DELETE', false),
+        ('service_role', 'roles', 'INSERT', false),
+        ('service_role', 'roles', 'SELECT', false),
+        ('service_role', 'roles', 'UPDATE', false),
+        ('service_role', 'permissions', 'DELETE', false),
+        ('service_role', 'permissions', 'INSERT', false),
+        ('service_role', 'permissions', 'SELECT', false),
+        ('service_role', 'permissions', 'UPDATE', false),
+        ('service_role', 'role_permissions', 'DELETE', false),
+        ('service_role', 'role_permissions', 'INSERT', false),
+        ('service_role', 'role_permissions', 'SELECT', false),
+        ('service_role', 'role_permissions', 'UPDATE', false),
+        ('service_role', 'memberships', 'DELETE', false),
+        ('service_role', 'memberships', 'INSERT', false),
+        ('service_role', 'memberships', 'SELECT', false),
+        ('service_role', 'memberships', 'UPDATE', false),
+        ('service_role', 'invitations', 'DELETE', false),
+        ('service_role', 'invitations', 'INSERT', false),
+        ('service_role', 'invitations', 'SELECT', false),
+        ('service_role', 'invitations', 'UPDATE', false),
+        ('service_role', 'team_settings', 'DELETE', false),
+        ('service_role', 'team_settings', 'INSERT', false),
+        ('service_role', 'team_settings', 'SELECT', false),
+        ('service_role', 'team_settings', 'UPDATE', false)
+    ),
+    actual as (
+      select
+        case
+          when acl.grantee = 0 then 'PUBLIC'
+          else grantee.rolname
+        end as grantee_name,
+        c.relname as table_name,
+        acl.privilege_type,
+        acl.is_grantable
+      from pg_catalog.pg_class as c
+      join pg_catalog.pg_namespace as n on n.oid = c.relnamespace
+      cross join lateral pg_catalog.aclexplode(
+        coalesce(c.relacl, pg_catalog.acldefault('r', c.relowner))
+      ) as acl
+      left join pg_catalog.pg_roles as grantee on grantee.oid = acl.grantee
+      where n.nspname = 'public'
+        and c.relname = any (array[
+          'invitations',
+          'memberships',
+          'permissions',
+          'profiles',
+          'role_permissions',
+          'roles',
+          'team_settings',
+          'teams'
+        ]::text[])
+        and acl.grantee = any (array[
+          0::oid,
+          'anon'::pg_catalog.regrole::oid,
+          'authenticated'::pg_catalog.regrole::oid,
+          'service_role'::pg_catalog.regrole::oid
+        ])
+    ),
+    differences as (
+      (select * from expected except select * from actual)
+      union all
+      (select * from actual except select * from expected)
+    )
+    select 1 from differences
   ) then
-    raise exception 'live verification: anon has an application-table privilege';
+    raise exception 'live verification: exact API-role table ACL matrix differs';
+  end if;
+
+  if exists (
+    with
+    expected(
+      grantee_name,
+      table_name,
+      column_name,
+      privilege_type,
+      is_grantable
+    ) as (
+      values
+        ('authenticated', 'profiles', 'avatar_url', 'UPDATE', false),
+        ('authenticated', 'profiles', 'display_name', 'UPDATE', false),
+        ('authenticated', 'teams', 'name', 'INSERT', false),
+        ('authenticated', 'teams', 'name', 'UPDATE', false),
+        ('authenticated', 'teams', 'slug', 'INSERT', false),
+        ('authenticated', 'teams', 'slug', 'UPDATE', false),
+        ('authenticated', 'memberships', 'role_id', 'UPDATE', false),
+        ('authenticated', 'roles', 'description', 'INSERT', false),
+        ('authenticated', 'roles', 'description', 'UPDATE', false),
+        ('authenticated', 'roles', 'name', 'INSERT', false),
+        ('authenticated', 'roles', 'name', 'UPDATE', false),
+        ('authenticated', 'roles', 'slug', 'INSERT', false),
+        ('authenticated', 'roles', 'team_id', 'INSERT', false),
+        ('authenticated', 'invitations', 'accepted_at', 'SELECT', false),
+        ('authenticated', 'invitations', 'accepted_by_user_id', 'SELECT', false),
+        ('authenticated', 'invitations', 'created_at', 'SELECT', false),
+        ('authenticated', 'invitations', 'email', 'SELECT', false),
+        ('authenticated', 'invitations', 'expires_at', 'SELECT', false),
+        ('authenticated', 'invitations', 'id', 'SELECT', false),
+        ('authenticated', 'invitations', 'inviter_user_id', 'SELECT', false),
+        ('authenticated', 'invitations', 'role_id', 'SELECT', false),
+        ('authenticated', 'invitations', 'status', 'SELECT', false),
+        ('authenticated', 'invitations', 'team_id', 'SELECT', false),
+        ('authenticated', 'invitations', 'updated_at', 'SELECT', false),
+        ('authenticated', 'team_settings', 'settings', 'UPDATE', false)
+    ),
+    actual as (
+      select
+        case
+          when acl.grantee = 0 then 'PUBLIC'
+          else grantee.rolname
+        end as grantee_name,
+        c.relname as table_name,
+        a.attname as column_name,
+        acl.privilege_type,
+        acl.is_grantable
+      from pg_catalog.pg_attribute as a
+      join pg_catalog.pg_class as c on c.oid = a.attrelid
+      join pg_catalog.pg_namespace as n on n.oid = c.relnamespace
+      cross join lateral pg_catalog.aclexplode(a.attacl) as acl
+      left join pg_catalog.pg_roles as grantee on grantee.oid = acl.grantee
+      where n.nspname = 'public'
+        and c.relname = any (array[
+          'invitations',
+          'memberships',
+          'permissions',
+          'profiles',
+          'role_permissions',
+          'roles',
+          'team_settings',
+          'teams'
+        ]::text[])
+        and a.attnum > 0
+        and not a.attisdropped
+        and acl.grantee = any (array[
+          0::oid,
+          'anon'::pg_catalog.regrole::oid,
+          'authenticated'::pg_catalog.regrole::oid,
+          'service_role'::pg_catalog.regrole::oid
+        ])
+    ),
+    differences as (
+      (select * from expected except select * from actual)
+      union all
+      (select * from actual except select * from expected)
+    )
+    select 1 from differences
+  ) then
+    raise exception 'live verification: exact API-role column ACL matrix differs';
+  end if;
+
+  if exists (
+    with
+    roles(role_name) as (
+      values ('anon'), ('authenticated'), ('service_role')
+    ),
+    privileges(privilege_type) as (
+      values ('SELECT'), ('INSERT'), ('UPDATE'), ('REFERENCES')
+    ),
+    matrix as (
+      select
+        roles.role_name,
+        c.table_name,
+        c.column_name,
+        privileges.privilege_type,
+        pg_catalog.has_column_privilege(
+          roles.role_name,
+          pg_catalog.format('public.%I', c.table_name),
+          c.column_name,
+          privileges.privilege_type
+        ) as actual_allowed,
+        case roles.role_name
+          when 'anon' then false
+          when 'service_role' then privileges.privilege_type <> 'REFERENCES'
+          when 'authenticated' then
+            case privileges.privilege_type
+              when 'SELECT' then
+                c.table_name <> 'invitations'
+                or c.column_name <> 'token_hash'
+              when 'INSERT' then
+                (
+                  c.table_name = 'teams'
+                  and c.column_name = any (array['name', 'slug']::text[])
+                )
+                or (
+                  c.table_name = 'roles'
+                  and c.column_name = any (
+                    array['team_id', 'slug', 'name', 'description']::text[]
+                  )
+                )
+                or c.table_name = 'role_permissions'
+              when 'UPDATE' then
+                (
+                  c.table_name = 'profiles'
+                  and c.column_name = any (
+                    array['display_name', 'avatar_url']::text[]
+                  )
+                )
+                or (
+                  c.table_name = 'teams'
+                  and c.column_name = any (array['name', 'slug']::text[])
+                )
+                or (
+                  c.table_name = 'memberships'
+                  and c.column_name = 'role_id'
+                )
+                or (
+                  c.table_name = 'roles'
+                  and c.column_name = any (
+                    array['name', 'description']::text[]
+                  )
+                )
+                or (
+                  c.table_name = 'team_settings'
+                  and c.column_name = 'settings'
+                )
+              else false
+            end
+        end as expected_allowed
+      from information_schema.columns as c
+      cross join roles
+      cross join privileges
+      where c.table_schema = 'public'
+        and c.table_name = any (array[
+          'invitations',
+          'memberships',
+          'permissions',
+          'profiles',
+          'role_permissions',
+          'roles',
+          'team_settings',
+          'teams'
+        ]::text[])
+    )
+    select 1
+    from matrix
+    where actual_allowed is distinct from expected_allowed
+  ) then
+    raise exception 'live verification: effective API-role column privilege matrix differs';
+  end if;
+
+  if pg_catalog.has_table_privilege(
+      'authenticated', 'public.invitations', 'INSERT'
+    )
+    or pg_catalog.has_table_privilege(
+      'authenticated', 'public.invitations', 'UPDATE'
+    )
+    or pg_catalog.has_table_privilege(
+      'authenticated', 'public.invitations', 'DELETE'
+    )
+    or exists (
+      select 1
+      from information_schema.columns as c
+      where c.table_schema = 'public'
+        and c.table_name = 'invitations'
+        and (
+          pg_catalog.has_column_privilege(
+            'authenticated', 'public.invitations', c.column_name, 'INSERT'
+          )
+          or pg_catalog.has_column_privilege(
+            'authenticated', 'public.invitations', c.column_name, 'UPDATE'
+          )
+        )
+    ) then
+    raise exception 'live verification: authenticated can mutate invitations directly';
+  end if;
+
+  -- Mutation characterization: a comparator must reject a partial safe-column
+  -- grant even though representative COUNT/one-column access would succeed.
+  if not exists (
+    with
+    expected(column_name) as (
+      values
+        ('id'),
+        ('team_id'),
+        ('email'),
+        ('role_id'),
+        ('inviter_user_id'),
+        ('status'),
+        ('expires_at'),
+        ('accepted_at'),
+        ('accepted_by_user_id'),
+        ('created_at'),
+        ('updated_at')
+    ),
+    partial(column_name) as (values ('id')),
+    differences as (
+      (select * from expected except select * from partial)
+      union all
+      (select * from partial except select * from expected)
+    )
+    select 1 from differences
+  ) then
+    raise exception 'live verification: exact ACL comparator accepted a synthetic partial grant';
   end if;
 
   if pg_catalog.has_schema_privilege('anon', 'private', 'USAGE')
@@ -300,30 +596,63 @@ begin
     raise exception 'live verification: expected 6 authenticated policy helper grants, got %', v_count;
   end if;
 
-  if not (
-    pg_catalog.has_column_privilege('authenticated', 'public.profiles', 'display_name', 'UPDATE')
-    and pg_catalog.has_column_privilege('authenticated', 'public.profiles', 'avatar_url', 'UPDATE')
-    and pg_catalog.has_column_privilege('authenticated', 'public.teams', 'name', 'INSERT')
-    and pg_catalog.has_column_privilege('authenticated', 'public.teams', 'slug', 'INSERT')
-    and pg_catalog.has_column_privilege('authenticated', 'public.teams', 'name', 'UPDATE')
-    and pg_catalog.has_column_privilege('authenticated', 'public.teams', 'slug', 'UPDATE')
-    and pg_catalog.has_column_privilege('authenticated', 'public.roles', 'team_id', 'INSERT')
-    and pg_catalog.has_column_privilege('authenticated', 'public.roles', 'name', 'UPDATE')
-    and pg_catalog.has_column_privilege('authenticated', 'public.memberships', 'role_id', 'UPDATE')
-    and pg_catalog.has_column_privilege('authenticated', 'public.team_settings', 'settings', 'UPDATE')
+  -- PostgreSQL's hard-wired function default grants EXECUTE to PUBLIC. This
+  -- characterization proves a missing override must be treated as insecure.
+  if not exists (
+    select 1
+    from pg_catalog.aclexplode(
+      coalesce(
+        null::aclitem[],
+        pg_catalog.acldefault('f', 'postgres'::pg_catalog.regrole)
+      )
+    ) as acl
+    where acl.grantee = 0
+      and acl.privilege_type = 'EXECUTE'
   ) then
-    raise exception 'live verification: required authenticated column grants are missing';
+    raise exception 'live verification: built-in function ACL characterization changed';
   end if;
 
-  if pg_catalog.has_column_privilege('authenticated', 'public.invitations', 'token_hash', 'SELECT')
-    or pg_catalog.has_column_privilege('authenticated', 'public.teams', 'owner_user_id', 'INSERT')
-    or pg_catalog.has_column_privilege('authenticated', 'public.teams', 'owner_user_id', 'UPDATE')
-    or pg_catalog.has_column_privilege('authenticated', 'public.roles', 'is_system', 'INSERT')
-    or pg_catalog.has_column_privilege('authenticated', 'public.roles', 'is_system', 'UPDATE')
-    or pg_catalog.has_column_privilege('authenticated', 'public.memberships', 'user_id', 'INSERT')
-    or pg_catalog.has_column_privilege('authenticated', 'public.invitations', 'status', 'UPDATE')
-    or pg_catalog.has_column_privilege('authenticated', 'public.team_settings', 'updated_at', 'UPDATE') then
-    raise exception 'live verification: a protected column is exposed';
+  if exists (
+    select 1
+    from pg_catalog.aclexplode(
+      coalesce(
+        (
+          select d.defaclacl
+          from pg_catalog.pg_default_acl as d
+          where d.defaclrole = 'postgres'::pg_catalog.regrole
+            and d.defaclobjtype = 'f'
+            and d.defaclnamespace = 0
+        ),
+        pg_catalog.acldefault('f', 'postgres'::pg_catalog.regrole)
+      )
+    ) as acl
+    where acl.grantee = any (array[
+      0::oid,
+      'anon'::pg_catalog.regrole::oid,
+      'authenticated'::pg_catalog.regrole::oid,
+      'service_role'::pg_catalog.regrole::oid
+    ])
+      and acl.privilege_type = 'EXECUTE'
+  ) then
+    raise exception 'live verification: effective global function default grants an API role EXECUTE';
+  end if;
+
+  if exists (
+    select 1
+    from pg_catalog.pg_default_acl as d
+    cross join lateral pg_catalog.aclexplode(d.defaclacl) as acl
+    where d.defaclrole = 'postgres'::pg_catalog.regrole
+      and d.defaclobjtype = 'f'
+      and d.defaclnamespace = 'public'::pg_catalog.regnamespace
+      and acl.grantee = any (array[
+        0::oid,
+        'anon'::pg_catalog.regrole::oid,
+        'authenticated'::pg_catalog.regrole::oid,
+        'service_role'::pg_catalog.regrole::oid
+      ])
+      and acl.privilege_type = 'EXECUTE'
+  ) then
+    raise exception 'live verification: public-schema function defaults grant an API role EXECUTE';
   end if;
 
   if exists (
@@ -348,14 +677,9 @@ begin
           and d.defaclnamespace = 'public'::pg_catalog.regnamespace
           and a.privilege_type = any (array['USAGE', 'SELECT']::text[])
         )
-        or (
-          d.defaclobjtype = 'f'
-          and d.defaclnamespace in (0, 'public'::pg_catalog.regnamespace::oid)
-          and a.privilege_type = 'EXECUTE'
-        )
       )
   ) then
-    raise exception 'live verification: broad postgres default ACL remains';
+    raise exception 'live verification: broad postgres table/sequence default ACL remains';
   end if;
 
   -- Auth fixture insertion exercises the profile trigger. User metadata includes
@@ -964,6 +1288,24 @@ begin
     raise exception 'live verification: admin could not read safe invitation metadata';
   end if;
 
+  perform
+    i.id,
+    i.team_id,
+    i.email,
+    i.role_id,
+    i.inviter_user_id,
+    i.status,
+    i.expires_at,
+    i.accepted_at,
+    i.accepted_by_user_id,
+    i.created_at,
+    i.updated_at
+  from public.invitations as i
+  where i.id = v_invitation_confirmed;
+  if not found then
+    raise exception 'live verification: admin safe invitation column SELECT returned no row';
+  end if;
+
   v_failed := false;
   v_error_state := null;
   begin
@@ -1354,6 +1696,7 @@ rollback;
 
 select
   'ok'::text as status,
+  83::integer as assertions,
   16::integer as coverage_groups,
   'profile/team bootstrap; exact roles/mappings/settings; tenant isolation; owner/admin/member permissions; owner/system immutability; cross-team role rejection; custom team.delete denial; invitation secrecy/confirmed-email/single-use/generic failure; audit redaction; ACLs; functions; RLS/policies/triggers'::text as coverage,
   'rolled back'::text as fixtures;
