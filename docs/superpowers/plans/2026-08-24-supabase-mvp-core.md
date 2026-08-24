@@ -155,7 +155,7 @@
 
 - [ ] Request a fresh code/security review of the full branch diff.
 - [ ] Fix all critical/important findings with focused regression tests.
-- [x] Run the complete verification set from a clean worktree state and capture evidence.
+- [x] Run the complete verification set from a clean tracked worktree state and capture evidence, including the empty pre-gate `git status --short` result.
 - [x] Document schema objects, permission matrix, local environment setup, remote migration name, advisor status, known baseline lint/typecheck issues, and safe next modules.
 - [x] Mark all plan checkboxes accurately; do not mark unverified steps complete.
 - [x] Commit as `docs: add Supabase MVP handoff`.
