@@ -18,7 +18,8 @@ export async function createServerSupabaseClient(): Promise<SupabaseClient> {
             cookieStore.set(name, value, options);
           });
         } catch {
-          // Server Components cannot mutate cookies; middleware refreshes sessions.
+          // Server Components cannot mutate response cookies. Root middleware
+          // owns refresh cookies/cache headers; the auth callback owns its response.
         }
       },
     },

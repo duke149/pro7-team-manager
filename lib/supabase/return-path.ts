@@ -31,7 +31,9 @@ function validatedRelativeReturnPath(value: string): string | null {
   if (url.origin !== LOCAL_ORIGIN) return null;
 
   const decodedPathname = decodeURIComponent(url.pathname);
-  const normalizedPathname = decodedPathname.replace(/\/+$/u, "") || "/";
+  const canonicalPathname = decodedPathname.replace(/\/+/gu, "/");
+  if (canonicalPathname !== decodedPathname) return null;
+  const normalizedPathname = canonicalPathname.replace(/\/+$/u, "") || "/";
   const isReserved = RESERVED_AUTH_PATHS.some(
     (path) =>
       normalizedPathname === path || normalizedPathname.startsWith(`${path}/`),
