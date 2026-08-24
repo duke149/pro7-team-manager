@@ -80,12 +80,12 @@ System role mappings:
 
 - All eight public tables have RLS enabled and use separate command policies.
 - Profiles: users can read their own profile and profiles sharing a team when they have `members.read`; they can update only their own display fields.
-- Teams: permission-gated read/update/delete; authenticated users may create a team owned by themselves.
-- Memberships: a user may see their own row; `members.read` sees the team roster; `members.manage` changes/removes non-owner members.
-- Roles and role permissions: `roles.read` can view; `roles.manage` can mutate custom roles only.
+- Teams: `team.read`, `team.update`, and `team.delete` each provide the row visibility required for their corresponding operation; authenticated users may create a team owned by themselves.
+- Memberships: a user may see their own row; `members.read` sees the team roster; `members.manage` sees the same membership resource so it can change/remove non-owner members.
+- Roles and role permissions: `roles.read` and `roles.manage` can view roles; `roles.manage` can mutate custom roles only.
 - Permissions: authenticated read-only catalog.
 - Invitations: `members.invite` can view safe columns only; no direct browser mutations.
-- Team settings: `settings.read` can read and `settings.update` can update.
+- Team settings: `settings.read` and `settings.update` can view settings; `settings.update` can update them.
 - `anon` has no table or RPC privileges. Default privileges in `public` are revoked before application objects are created.
 - `service_role` receives explicit application-table privileges for trusted backend work and is still never used in client code.
 

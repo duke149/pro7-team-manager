@@ -4,7 +4,8 @@
 
 - Branch/worktree: `feature/supabase-mvp-core` at `/Users/everygolflb/Documents/Codex/2026-08-24/t-i-c-n-x-y/.worktrees/supabase-mvp-core`.
 - Supabase project: `pficsujapinkmqsyvcfw` (`FC Duke`).
-- Applied once: remote migration `20260824170300` / `supabase_mvp_core`, sourced from `supabase/migrations/20260824000000_supabase_mvp_core.sql` (SHA-256 `b0c13b47538e07c02666672fc9e83b13a49167c0590deed782bb50596e7cf363`). Do not rename, reapply, or amend this history migration.
+- Applied once: remote migration `20260824170300` / `supabase_mvp_core`, represented by the matching source file `supabase/migrations/20260824170300_supabase_mvp_core.sql` (SHA-256 `b0c13b47538e07c02666672fc9e83b13a49167c0590deed782bb50596e7cf363`). Do not reapply or amend this history migration.
+- Pending remote authorization: `supabase/migrations/20260824183536_rls_mutation_visibility.sql` is an additive, local-only correction for PostgreSQL's UPDATE/SELECT RLS interaction. It replaces four SELECT policies so `team.update`/`team.delete`, `members.manage`, `roles.manage`, and `settings.update` can see only their corresponding resource rows. It has passed local static and rollback verification but has **not** been applied to Supabase remote; do not describe the remote issue as fixed until that migration is separately approved and verified there.
 - No app deployment, hosting-environment change, Supabase branch/project creation, or additional/ad-hoc remote DDL was performed.
 
 ## Architecture and database surface
@@ -19,7 +20,7 @@ Vinext uses only public Supabase credentials behind typed browser/server factori
 | `private` trusted functions | `set_updated_at`, `handle_new_user`, `is_team_member`, `has_team_permission`, `can_view_profile`, `can_manage_membership`, `role_belongs_to_team`, `can_view_role`, `can_manage_role`, `bootstrap_team`, `audit_row_change` |
 | Triggers | `on_auth_user_created`, `trg_teams_bootstrap`, `trg_profiles_set_updated_at`, `trg_teams_set_updated_at`, `trg_roles_set_updated_at`, `trg_invitations_set_updated_at`, `trg_team_settings_set_updated_at`, `trg_teams_audit`, `trg_memberships_audit`, `trg_roles_audit`, `trg_role_permissions_audit`, `trg_invitations_audit`, `trg_team_settings_audit` |
 
-All eight public tables have RLS enabled with 20 command-specific `authenticated` policies. Helpers are `SECURITY DEFINER`, have `search_path = ''`, fully qualify references, derive identity from `auth.uid()`, and begin with execution revoked from `PUBLIC`.
+All eight public tables have RLS enabled with 20 command-specific `authenticated` policies. The checked-in additive correction preserves that count while replacing only the four affected SELECT policies; remote still has the earlier versions until separately authorized. Helpers are `SECURITY DEFINER`, have `search_path = ''`, fully qualify references, derive identity from `auth.uid()`, and begin with execution revoked from `PUBLIC`.
 
 ### Permissions and safeguards
 
@@ -31,6 +32,7 @@ All eight public tables have RLS enabled with 20 command-specific `authenticated
 
 - Team creation atomically bootstraps owner/admin/member roles, the canonical owner membership, and `{}` settings.
 - Client operations cannot alter the canonical owner membership or any system role. Custom roles cannot receive `team.delete`; clients cannot assign, or accept an invitation for, the owner role. Same-team composite foreign keys reject cross-team role assignment.
+- `members.manage` is effectively administrator-delegation authority: it can assign any eligible non-owner member to any same-team non-owner role, including the system `admin` role. Grant it only to highly trusted roles. The canonical owner membership and owner role remain protected.
 - `anon` has no application-table CRUD or invitation-RPC access. `service_role` has explicit CRUD on the eight public application tables only; it has no private-schema, private-table, private-sequence, or private-helper access.
 - `authenticated` access is explicit and RLS-filtered: profile updates are only `display_name`/`avatar_url`; teams only `name`/`slug`; memberships only `role_id`; roles only custom-role presentation fields; settings only `settings`; permissions are read-only; role-permission mutations remain policy-gated. Invitations expose only 11 safe metadata columns (`id`, `team_id`, `email`, `role_id`, `inviter_user_id`, `status`, `expires_at`, `accepted_at`, `accepted_by_user_id`, `created_at`, `updated_at`) and no browser mutation grant. `token_hash`, ownership, IDs, system flags, statuses, timestamps, and audit rows are not client-writable.
 
@@ -48,10 +50,10 @@ Only a trusted server/Edge Function creates invitations. The table stores a uniq
 ## Local setup and verification state
 
 1. Copy `.env.example` to the gitignored `.env.local`.
-2. Set only `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` from the project dashboard. Do not print, commit, or add a legacy anon, secret, or service-role key.
-3. Run `npm run test:unit`, `npm test`, and `node --test tests/supabase-schema.test.mjs`. The live verifier is a rollback-only SQL script and is not a local credential smoke command.
+2. Set only `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` from the project dashboard. Prefer an `sb_publishable_…` key; a decodable legacy JWT is accepted only when its role is `anon`. Secret keys, `service_role` JWTs, malformed keys, non-HTTPS remote URLs, and URLs with credentials/query/fragment are rejected. HTTP is accepted only for explicit loopback development hosts. Never print or commit a key.
+3. Run `npm run test:unit`, `npm test`, and `node --test tests/supabase-schema.test.mjs tests/supabase-rls-mutation-visibility.test.mjs`. The live verifier is a rollback-only SQL script and is not a local credential smoke command.
 
-The latest local gate began from an empty tracked `git status --short` result, then completed: `npm run test:unit` — exit 0, 29 passed; `npm test` — exit 0, production build completed and 4 render/source tests passed; `node --test tests/supabase-schema.test.mjs` — exit 0, 10 passed. The focused changed-file lint remains baseline-only: seven accessibility errors plus one `<img>` warning (eight total) in `app/pro7-app.tsx`; `git diff --check` exited 0 and the tracked status remained empty. Separately, live verification recorded 84 transactional assertions across 16 coverage groups. Live fixtures were rolled back; post-run fixtures were zero. Controller localhost QA on the exact build covered desktop and mobile, dark OS scheme, safe callback redirects, protected-home redirect, and an empty browser console error/warning log. Light-mode CSS was reviewed but lacks a live media-emulation screenshot.
+The pre-review clean-state gate began from an empty tracked `git status --short` and completed with 29 unit tests, a successful production build plus 4 render/source tests, and 10 core-schema contract tests. The final-fix gate then completed: `npm run test:unit` — exit 0, 35 passed; `npm test` — exit 0, production build completed and 4 render/source tests passed; both SQL contracts — exit 0, 11 passed; focused ESLint for the changed environment parser/tests — exit 0; `git diff --check` — exit 0. A fresh PostgreSQL 17 database accepted the renamed core migration followed by the additive migration; live verification reached explicit `ROLLBACK` with 98 assertions across 17 coverage groups, and post-run counts were zero for auth users, teams, roles, memberships, invitations, and audit events (the 10 permission seeds remained). This is local evidence only. Controller localhost QA on the pre-review build covered desktop and mobile, dark OS scheme, safe callback redirects, protected-home redirect, and an empty browser console error/warning log. Light-mode CSS was reviewed but lacks a live media-emulation screenshot.
 
 ## Advisor record
 
@@ -60,7 +62,7 @@ The latest local gate began from an empty tracked `git status --short` result, t
 - Performance INFO: [Unindexed foreign keys](https://supabase.com/docs/guides/database/database-linter?lint=0001_unindexed_foreign_keys) for `invitations_role_team_fkey` and `memberships_role_team_fkey`. Retained: each has a leading `role_id` index and `roles.id` is globally unique, so adding `team_id` does not improve selectivity.
 - Performance INFO: [Unused Index](https://supabase.com/docs/guides/database/database-linter?lint=0005_unused_index) for `invitations_inviter_user_id_idx` and `invitations_accepted_by_user_id_idx`. Retained: an empty new project has no workload; the reviewed FK/history access paths are still required.
 
-No advisor finding required a Phase 1 correction migration.
+The advisor run itself did not require a Phase 1 correction. A later whole-branch review identified the PostgreSQL UPDATE/SELECT policy interaction and produced the pending additive migration described above; no second remote DDL operation was authorized or performed.
 
 ## Deferred work and safe next modules
 

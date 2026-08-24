@@ -18,9 +18,21 @@ declare
   v_invitee_confirmed constant uuid := '00000000-0000-4000-8000-000000004105';
   v_invitee_unconfirmed constant uuid := '00000000-0000-4000-8000-000000004106';
   v_outsider constant uuid := '00000000-0000-4000-8000-000000004107';
+  v_team_update_only constant uuid := '00000000-0000-4000-8000-000000004108';
+  v_team_delete_only constant uuid := '00000000-0000-4000-8000-000000004109';
+  v_members_manage_only constant uuid := '00000000-0000-4000-8000-000000004110';
+  v_roles_manage_only constant uuid := '00000000-0000-4000-8000-000000004111';
+  v_settings_update_only constant uuid := '00000000-0000-4000-8000-000000004112';
+  v_team_update_role constant uuid := '00000000-0000-4000-8000-000000004201';
+  v_team_delete_role constant uuid := '00000000-0000-4000-8000-000000004202';
+  v_members_manage_role constant uuid := '00000000-0000-4000-8000-000000004203';
+  v_roles_manage_role constant uuid := '00000000-0000-4000-8000-000000004204';
+  v_settings_update_role constant uuid := '00000000-0000-4000-8000-000000004205';
+  v_role_manage_target constant uuid := '00000000-0000-4000-8000-000000004206';
   v_team_a uuid;
   v_team_b uuid;
   v_disposable_team uuid;
+  v_delegated_delete_team uuid;
   v_owner_role_a uuid;
   v_admin_role_a uuid;
   v_member_role_a uuid;
@@ -836,6 +848,51 @@ begin
       '{"display_name":"Live Outsider","role":"owner"}'::jsonb,
       pg_catalog.now(),
       pg_catalog.now()
+    ),
+    (
+      v_team_update_only,
+      'codex-live-verification-team-update-only@example.invalid',
+      pg_catalog.now(),
+      '{"provider":"email","providers":["email"]}'::jsonb,
+      '{"display_name":"Live Team Update Only"}'::jsonb,
+      pg_catalog.now(),
+      pg_catalog.now()
+    ),
+    (
+      v_team_delete_only,
+      'codex-live-verification-team-delete-only@example.invalid',
+      pg_catalog.now(),
+      '{"provider":"email","providers":["email"]}'::jsonb,
+      '{"display_name":"Live Team Delete Only"}'::jsonb,
+      pg_catalog.now(),
+      pg_catalog.now()
+    ),
+    (
+      v_members_manage_only,
+      'codex-live-verification-members-manage-only@example.invalid',
+      pg_catalog.now(),
+      '{"provider":"email","providers":["email"]}'::jsonb,
+      '{"display_name":"Live Members Manage Only"}'::jsonb,
+      pg_catalog.now(),
+      pg_catalog.now()
+    ),
+    (
+      v_roles_manage_only,
+      'codex-live-verification-roles-manage-only@example.invalid',
+      pg_catalog.now(),
+      '{"provider":"email","providers":["email"]}'::jsonb,
+      '{"display_name":"Live Roles Manage Only"}'::jsonb,
+      pg_catalog.now(),
+      pg_catalog.now()
+    ),
+    (
+      v_settings_update_only,
+      'codex-live-verification-settings-update-only@example.invalid',
+      pg_catalog.now(),
+      '{"provider":"email","providers":["email"]}'::jsonb,
+      '{"display_name":"Live Settings Update Only"}'::jsonb,
+      pg_catalog.now(),
+      pg_catalog.now()
     );
 
   select pg_catalog.count(*)
@@ -848,11 +905,16 @@ begin
     v_owner_b,
     v_invitee_confirmed,
     v_invitee_unconfirmed,
-    v_outsider
+    v_outsider,
+    v_team_update_only,
+    v_team_delete_only,
+    v_members_manage_only,
+    v_roles_manage_only,
+    v_settings_update_only
   ]::uuid[]);
 
-  if v_count <> 7 then
-    raise exception 'live verification: profile bootstrap expected 7 rows, got %', v_count;
+  if v_count <> 12 then
+    raise exception 'live verification: profile bootstrap expected 12 rows, got %', v_count;
   end if;
 
   if not exists (
@@ -907,6 +969,16 @@ begin
   select id into strict v_disposable_team
   from public.teams
   where slug = 'codex-live-verification-disposable-20260824';
+
+  insert into public.teams (name, slug)
+  values (
+    'Live Verification Delegated Delete',
+    'codex-live-verification-delegated-delete-20260824'
+  );
+
+  select id into strict v_delegated_delete_team
+  from public.teams
+  where slug = 'codex-live-verification-delegated-delete-20260824';
 
   execute 'reset role';
 
@@ -1048,6 +1120,59 @@ begin
     (v_team_a, v_admin_a, v_admin_role_a),
     (v_team_a, v_member_a, v_member_role_a);
 
+  -- Trusted setup creates write-only custom roles. The team.delete mapping is
+  -- intentionally fixture-only: authenticated clients remain unable to grant
+  -- team.delete to a custom role under role_permissions RLS.
+  insert into public.roles (id, team_id, slug, name, description)
+  values
+    (v_team_update_role, v_team_a, 'team-update-only', 'team update only', 'RLS mutation visibility fixture'),
+    (v_members_manage_role, v_team_a, 'members-manage-only', 'members manage only', 'RLS mutation visibility fixture'),
+    (v_roles_manage_role, v_team_a, 'roles-manage-only', 'roles manage only', 'RLS mutation visibility fixture'),
+    (v_settings_update_role, v_team_a, 'settings-update-only', 'settings update only', 'RLS mutation visibility fixture'),
+    (v_role_manage_target, v_team_a, 'role-manage-target', 'role manage target', 'RLS mutation target'),
+    (v_team_delete_role, v_delegated_delete_team, 'team-delete-only', 'team delete only', 'RLS mutation visibility fixture');
+
+  insert into public.role_permissions (role_id, permission_code)
+  values
+    (v_team_update_role, 'team.update'),
+    (v_team_delete_role, 'team.delete'),
+    (v_members_manage_role, 'members.manage'),
+    (v_roles_manage_role, 'roles.manage'),
+    (v_settings_update_role, 'settings.update');
+
+  insert into public.memberships (team_id, user_id, role_id)
+  values
+    (v_team_a, v_team_update_only, v_team_update_role),
+    (v_team_a, v_members_manage_only, v_members_manage_role),
+    (v_team_a, v_roles_manage_only, v_roles_manage_role),
+    (v_team_a, v_settings_update_only, v_settings_update_role),
+    (v_delegated_delete_team, v_team_delete_only, v_team_delete_role);
+
+  select pg_catalog.array_agg(
+    r.slug || ':' || rp.permission_code
+    order by r.slug, rp.permission_code
+  )
+  into v_actual
+  from public.roles as r
+  join public.role_permissions as rp on rp.role_id = r.id
+  where r.id = any (array[
+    v_team_update_role,
+    v_team_delete_role,
+    v_members_manage_role,
+    v_roles_manage_role,
+    v_settings_update_role
+  ]::uuid[]);
+
+  if v_actual is distinct from array[
+    'members-manage-only:members.manage',
+    'roles-manage-only:roles.manage',
+    'settings-update-only:settings.update',
+    'team-delete-only:team.delete',
+    'team-update-only:team.update'
+  ]::text[] then
+    raise exception 'live verification: mutation-only role mappings differ: %', v_actual;
+  end if;
+
   v_token_confirmed := pg_catalog.encode(extensions.gen_random_bytes(32), 'hex');
   v_token_unconfirmed := pg_catalog.encode(extensions.gen_random_bytes(32), 'hex');
   v_token_mismatch := pg_catalog.encode(extensions.gen_random_bytes(32), 'hex');
@@ -1117,6 +1242,155 @@ begin
       )
   ) then
     raise exception 'live verification: invitation token hash entered the audit log';
+  end if;
+
+  -- A mutation permission must imply SELECT visibility for that same resource,
+  -- because PostgreSQL otherwise turns an authorized UPDATE into a zero-row
+  -- result. Each fixture role has exactly one mutation permission and no read
+  -- permission, as asserted above.
+  perform pg_catalog.set_config('request.jwt.claim.sub', v_team_update_only::text, true);
+  perform pg_catalog.set_config(
+    'request.jwt.claims',
+    pg_catalog.jsonb_build_object('sub', v_team_update_only, 'role', 'authenticated')::text,
+    true
+  );
+  execute 'set local role authenticated';
+
+  select pg_catalog.count(*) into v_count
+  from public.teams
+  where id = v_team_a;
+  if v_count <> 1 then
+    raise exception 'live verification: team.update-only role cannot select its team';
+  end if;
+
+  update public.teams
+  set name = 'Live Verification Alpha Mutation Only Updated'
+  where id = v_team_a;
+  get diagnostics v_rows = row_count;
+  if v_rows <> 1 then
+    raise exception 'live verification: team.update-only role updated % rows', v_rows;
+  end if;
+
+  execute 'reset role';
+
+  perform pg_catalog.set_config('request.jwt.claim.sub', v_members_manage_only::text, true);
+  perform pg_catalog.set_config(
+    'request.jwt.claims',
+    pg_catalog.jsonb_build_object('sub', v_members_manage_only, 'role', 'authenticated')::text,
+    true
+  );
+  execute 'set local role authenticated';
+
+  select pg_catalog.count(*) into v_count
+  from public.memberships
+  where team_id = v_team_a and user_id = v_member_a;
+  if v_count <> 1 then
+    raise exception 'live verification: members.manage-only role cannot select its target membership';
+  end if;
+
+  select pg_catalog.count(*) into v_count
+  from public.invitations
+  where team_id = v_team_a;
+  if v_count <> 0 then
+    raise exception 'live verification: members.manage unexpectedly implies invitation visibility';
+  end if;
+
+  update public.memberships
+  set role_id = v_admin_role_a
+  where team_id = v_team_a and user_id = v_member_a;
+  get diagnostics v_rows = row_count;
+  if v_rows <> 1 then
+    raise exception 'live verification: members.manage-only role delegated admin to % rows', v_rows;
+  end if;
+
+  update public.memberships
+  set role_id = v_member_role_a
+  where team_id = v_team_a and user_id = v_member_a;
+  get diagnostics v_rows = row_count;
+  if v_rows <> 1 then
+    raise exception 'live verification: members.manage-only role restored % rows', v_rows;
+  end if;
+
+  execute 'reset role';
+
+  perform pg_catalog.set_config('request.jwt.claim.sub', v_roles_manage_only::text, true);
+  perform pg_catalog.set_config(
+    'request.jwt.claims',
+    pg_catalog.jsonb_build_object('sub', v_roles_manage_only, 'role', 'authenticated')::text,
+    true
+  );
+  execute 'set local role authenticated';
+
+  select pg_catalog.count(*) into v_count
+  from public.roles
+  where id = v_role_manage_target;
+  if v_count <> 1 then
+    raise exception 'live verification: roles.manage-only role cannot select its custom role';
+  end if;
+
+  update public.roles
+  set name = 'role manage target updated'
+  where id = v_role_manage_target;
+  get diagnostics v_rows = row_count;
+  if v_rows <> 1 then
+    raise exception 'live verification: roles.manage-only role updated % rows', v_rows;
+  end if;
+
+  execute 'reset role';
+
+  perform pg_catalog.set_config('request.jwt.claim.sub', v_settings_update_only::text, true);
+  perform pg_catalog.set_config(
+    'request.jwt.claims',
+    pg_catalog.jsonb_build_object('sub', v_settings_update_only, 'role', 'authenticated')::text,
+    true
+  );
+  execute 'set local role authenticated';
+
+  select pg_catalog.count(*) into v_count
+  from public.team_settings
+  where team_id = v_team_a;
+  if v_count <> 1 then
+    raise exception 'live verification: settings.update-only role cannot select team settings';
+  end if;
+
+  update public.team_settings
+  set settings = '{"mutation_only":true}'::jsonb
+  where team_id = v_team_a;
+  get diagnostics v_rows = row_count;
+  if v_rows <> 1 then
+    raise exception 'live verification: settings.update-only role updated % rows', v_rows;
+  end if;
+
+  execute 'reset role';
+
+  perform pg_catalog.set_config('request.jwt.claim.sub', v_team_delete_only::text, true);
+  perform pg_catalog.set_config(
+    'request.jwt.claims',
+    pg_catalog.jsonb_build_object('sub', v_team_delete_only, 'role', 'authenticated')::text,
+    true
+  );
+  execute 'set local role authenticated';
+
+  select pg_catalog.count(*) into v_count
+  from public.teams
+  where id = v_delegated_delete_team;
+  if v_count <> 1 then
+    raise exception 'live verification: team.delete-only role cannot select its team';
+  end if;
+
+  delete from public.teams
+  where id = v_delegated_delete_team;
+  get diagnostics v_rows = row_count;
+  if v_rows <> 1 then
+    raise exception 'live verification: team.delete-only role deleted % rows', v_rows;
+  end if;
+
+  execute 'reset role';
+
+  if exists (
+    select 1 from public.teams where id = v_delegated_delete_team
+  ) then
+    raise exception 'live verification: delegated team.delete left the team present';
   end if;
 
   -- Tenant B cannot observe any tenant A data, including profiles. Forged
@@ -1476,14 +1750,14 @@ begin
   select pg_catalog.count(*) into v_count
   from public.memberships
   where team_id = v_team_a;
-  if v_count <> 3 then
+  if v_count <> 7 then
     raise exception 'live verification: member lacks members.read';
   end if;
 
   select pg_catalog.count(*) into v_count
   from public.roles
   where team_id = v_team_a;
-  if v_count <> 4 then
+  if v_count <> 9 then
     raise exception 'live verification: member lacks roles.read';
   end if;
 
@@ -1776,7 +2050,7 @@ rollback;
 
 select
   'ok'::text as status,
-  84::integer as assertions,
-  16::integer as coverage_groups,
-  'profile/team bootstrap; exact roles/mappings/settings; tenant isolation; owner/admin/member permissions; owner/system immutability; cross-team role rejection; custom team.delete denial; invitation secrecy/confirmed-email/single-use/generic failure; audit redaction; ACLs; functions; RLS/policies/triggers'::text as coverage,
+  98::integer as assertions,
+  17::integer as coverage_groups,
+  'profile/team bootstrap; exact roles/mappings/settings; mutation-only permission visibility; tenant isolation; owner/admin/member permissions; owner/system immutability; cross-team role rejection; custom team.delete denial; invitation secrecy/confirmed-email/single-use/generic failure; audit redaction; ACLs; functions; RLS/policies/triggers'::text as coverage,
   'rolled back'::text as fixtures;

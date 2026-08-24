@@ -4,7 +4,7 @@
 
 **Goal:** Deliver a secure Supabase foundation for PRO7 with login, profiles, multi-team RBAC, RLS, invitations, settings, and generated database types while preserving the existing dashboard.
 
-**Architecture:** Vinext uses `@supabase/ssr` factories at a narrow client/server boundary. PostgreSQL is the authorization source of truth: public Data API tables use RLS and column grants, while trusted helpers and audit records live in an unexposed `private` schema. A single reviewed migration is applied to the empty Supabase project, then verified with transactional probes and advisors.
+**Architecture:** Vinext uses `@supabase/ssr` factories at a narrow client/server boundary. PostgreSQL is the authorization source of truth: public Data API tables use RLS and column grants, while trusted helpers and audit records live in an unexposed `private` schema. The reviewed core migration is applied to the empty Supabase project, then verified with transactional probes and advisors. Later corrections remain additive migrations and require separate remote authorization.
 
 **Tech Stack:** Vinext 1.0 beta, React 19, TypeScript 5.9, Supabase JS 2.112.4, Supabase SSR 0.12.5, PostgreSQL 17, Node test runner + tsx.
 
@@ -57,7 +57,7 @@
 
 **Files:**
 
-- Create: `supabase/migrations/20260824000000_supabase_mvp_core.sql`
+- Create: `supabase/migrations/20260824170300_supabase_mvp_core.sql`
 - Create: `tests/supabase-schema.test.mjs`
 
 **Interfaces:**
@@ -160,3 +160,11 @@
 - [x] Mark all plan checkboxes accurately; do not mark unverified steps complete.
 - [x] Commit as `docs: add Supabase MVP handoff`.
 - [ ] Use `superpowers:finishing-a-development-branch` to present merge/integration options.
+
+### Whole-branch review remediation
+
+- [x] Make the public environment parser fail closed for keys and project URLs, with negative tests observed RED before implementation.
+- [x] Rename the applied core migration source to match remote history version `20260824170300` without changing its content or remote history.
+- [x] Create additive migration `20260824183536_rls_mutation_visibility.sql` and prove locally that mutation-only custom roles can select and mutate the matching resource without gaining invitation visibility.
+- [x] Document that `members.manage` is administrator-delegation authority for eligible non-owner members.
+- [ ] Obtain separate user authorization before applying the additive migration remotely, then rerun the rollback verifier and advisors. This final-fix wave did not apply remote DDL.
