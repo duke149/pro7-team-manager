@@ -291,6 +291,10 @@ export type Database = {
     }
     Functions: {
       accept_team_invitation: { Args: { token: string }; Returns: string }
+      create_team: {
+        Args: { p_name: string; p_slug: string }
+        Returns: { id: string; name: string; slug: string }[]
+      }
       get_current_team_access_contexts: {
         Args: Record<string, never>
         Returns: {

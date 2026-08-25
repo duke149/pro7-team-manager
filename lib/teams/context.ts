@@ -13,8 +13,12 @@ type TeamSummary = {
   slug: string;
 };
 
+export type UserTeamSummary = TeamSummary & {
+  permissions: readonly PermissionCode[];
+};
+
 export type TeamListLookup =
-  | { ok: true; teams: TeamSummary[] }
+  | { ok: true; teams: UserTeamSummary[] }
   | { ok: false };
 
 type AccessRpcRow = {
@@ -164,7 +168,12 @@ export async function loadUserTeams(
     return {
       ok: true,
       teams: rows
-        .map((row) => ({ id: row.team_id, name: row.team_name, slug: row.team_slug }))
+        .map((row) => ({
+          id: row.team_id,
+          name: row.team_name,
+          slug: row.team_slug,
+          permissions: Object.freeze([...row.permission_codes]),
+        }))
         .sort(
           (left, right) =>
             compareText(left.name, right.name) ||
@@ -181,7 +190,9 @@ export async function listUserTeams(
   dependencies: TeamContextDependencies = {},
 ): Promise<TeamSummary[]> {
   const result = await loadUserTeams(dependencies);
-  return result.ok ? result.teams : [];
+  return result.ok
+    ? result.teams.map(({ id, name, slug }) => ({ id, name, slug }))
+    : [];
 }
 
 export async function requireTeamPermission(

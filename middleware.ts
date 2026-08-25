@@ -2,6 +2,8 @@ import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { type NextRequest, NextResponse } from "next/server";
 
 import { getSupabasePublicEnv } from "./lib/supabase/env";
+import { safeRelativeReturnPath } from "./lib/supabase/return-path";
+import { TEAM_RETURN_PATH_HEADER } from "./lib/teams/return-path";
 
 type CookieToSet = {
   name: string;
@@ -41,7 +43,16 @@ export async function refreshSupabaseSession(
   const { url, publishableKey } = getSupabasePublicEnv();
   const responseCookies = new Map<string, CookieToSet>();
   const responseHeaders = new Headers();
-  let response = NextResponse.next({ request: { headers: request.headers } });
+  const requestUrl = new URL(request.url);
+  const returnPath = safeRelativeReturnPath(
+    `${requestUrl.pathname}${requestUrl.search}`,
+  );
+  const forwardedHeaders = () => {
+    const headers = new Headers(request.headers);
+    headers.set(TEAM_RETURN_PATH_HEADER, returnPath);
+    return headers;
+  };
+  let response = NextResponse.next({ request: { headers: forwardedHeaders() } });
 
   const supabase = createClient(url, publishableKey, {
     cookies: {
@@ -57,7 +68,7 @@ export async function refreshSupabaseSession(
           responseHeaders.set(name, value);
         }
 
-        response = NextResponse.next({ request: { headers: request.headers } });
+        response = NextResponse.next({ request: { headers: forwardedHeaders() } });
         for (const { name, value, options } of responseCookies.values()) {
           response.cookies.set(name, value, options);
         }

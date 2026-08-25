@@ -1,6 +1,11 @@
 import { requireProductUser } from "../../../lib/supabase/auth";
 import { loadTeamAccessContext } from "../../../lib/teams/context";
+import {
+  safeTeamReturnPath,
+  TEAM_RETURN_PATH_HEADER,
+} from "../../../lib/teams/return-path";
 import { ProductShell } from "../../components/product-shell";
+import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 
 export async function renderTeamLayout({
@@ -8,16 +13,21 @@ export async function renderTeamLayout({
   params,
   requireProductUser: requireUser,
   loadTeamAccessContext: loadContext,
+  getReturnPath,
   denied = notFound,
 }: {
   children: React.ReactNode;
   params: Promise<{ slug: string }>;
   requireProductUser: typeof requireProductUser;
   loadTeamAccessContext?: (slug: string) => ReturnType<typeof loadTeamAccessContext>;
+  getReturnPath?: (slug: string) => Promise<string>;
   denied?: () => React.ReactNode;
 }) {
   const { slug } = await params;
-  const productUser = await requireUser(`/teams/${encodeURIComponent(slug)}/overview`);
+  const returnPath = getReturnPath
+    ? await getReturnPath(slug)
+    : safeTeamReturnPath(slug, (await headers()).get(TEAM_RETURN_PATH_HEADER));
+  const productUser = await requireUser(returnPath);
 
   if (!loadContext) return children;
 

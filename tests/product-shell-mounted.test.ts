@@ -172,8 +172,8 @@ function configureBrowser({
   };
 }
 
-function shellElement() {
-  return createElement(ProductShell, shellProps, createElement("p", null, "Nội dung thật"));
+function shellElement(props = shellProps) {
+  return createElement(ProductShell, props, createElement("p", null, "Nội dung thật"));
 }
 
 async function hydrateShell(markup: string) {
@@ -262,6 +262,26 @@ test("mounted ProductShell keeps SSR light, hydrates theme preferences, and pers
   assert.equal(themeButton(system.container).getAttribute("aria-pressed"), "true");
   assert.deepEqual(controls.writes, ["pro7-theme:light", "pro7-theme:dark"]);
   await act(async () => system.root.unmount());
+});
+
+test("ProductShell brand and pathname fallback share the authorized landing resolver", () => {
+  configureBrowser({ client: idleClient() });
+  Object.assign(globalThis, { __productShellPathname: "" });
+  const html = renderToString(
+    shellElement({
+      ...shellProps,
+      permissions: ["finance.read"],
+    }),
+  );
+
+  assert.match(
+    html,
+    /class="product-brand" href="\/teams\/%C4%91%E1%BB%99i%20th%E1%BA%ADt\/funds"/u,
+  );
+  assert.match(
+    html,
+    /href="\/teams\/%C4%91%E1%BB%99i%20th%E1%BA%ADt\/funds" aria-current="page"/u,
+  );
 });
 
 test("mounted AccountMenu applies verified local logout outcomes to the actual button DOM", async () => {

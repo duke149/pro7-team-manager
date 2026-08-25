@@ -173,6 +173,32 @@ test("middleware forwards refreshed cookies to the render and browser with cache
   assert.equal(response.headers.get("pragma"), "no-cache");
 });
 
+test("middleware overwrites the trusted same-origin return path for server layouts", async () => {
+  const middleware = await loadModule<AuthBoundaryModule>(
+    "/middleware.ts",
+    "middleware.ts must expose the Supabase refresh boundary",
+  );
+  const request = new NextRequest(
+    "https://pro7.example/teams/%C4%91%E1%BB%99i%20b%C3%B3ng/funds?tab=open",
+    { headers: { "x-pro7-return-path": "https://attacker.example/steal" } },
+  );
+  const response = await middleware.refreshSupabaseSession(
+    request,
+    () => ({
+      auth: {
+        async getUser() {
+          return { data: { user: null }, error: null };
+        },
+      },
+    }),
+  );
+
+  assert.equal(
+    response.headers.get("x-middleware-request-x-pro7-return-path"),
+    "/teams/%C4%91%E1%BB%99i%20b%C3%B3ng/funds?tab=open",
+  );
+});
+
 function middlewarePathname(rawPathname: string): string {
   return normalizePath(normalizePathnameForRouteMatchStrict(rawPathname));
 }

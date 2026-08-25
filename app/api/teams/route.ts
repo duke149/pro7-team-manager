@@ -8,7 +8,7 @@ type TeamRecord = { id: string; name: string; slug: string };
 
 type TeamApiDependencies = {
   getProductUser: (next: string) => Promise<ProductUser | null>;
-  supabase: Pick<SupabaseClient<Database>, "from">;
+  supabase: Pick<SupabaseClient<Database>, "rpc">;
 };
 
 type TeamInsertPayload = { name: string; slug: string };
@@ -102,6 +102,7 @@ function isTeamRecord(value: unknown): value is TeamRecord {
   return (
     typeof value === "object" &&
     value !== null &&
+    Object.keys(value).length === 3 &&
     "id" in value &&
     "name" in value &&
     "slug" in value &&
@@ -169,21 +170,20 @@ export async function createTeamHandler(
       return failure(422, "validation", "Tên đội hoặc đường dẫn đội không hợp lệ.");
     }
 
-    const { error: insertError } = await dependencies.supabase
-      .from("teams")
-      .insert(payload);
-    if (insertError) {
-      return insertError.code === "23505"
+    const { data, error } = await dependencies.supabase.rpc("create_team", {
+      p_name: payload.name,
+      p_slug: payload.slug,
+    });
+    if (error) {
+      return error.code === "23505"
         ? failure(409, "duplicate", "Đường dẫn đội này đã được sử dụng.")
         : genericServerFailure();
     }
 
-    const { data: team, error: selectError } = await dependencies.supabase
-      .from("teams")
-      .select("id, name, slug")
-      .eq("slug", payload.slug)
-      .maybeSingle();
-    if (selectError || !isTeamRecord(team)) return genericServerFailure();
+    if (!Array.isArray(data) || data.length !== 1 || !isTeamRecord(data[0])) {
+      return genericServerFailure();
+    }
+    const team = data[0];
 
     return Response.json({ team: { id: team.id, name: team.name, slug: team.slug } }, { status: 201 });
   } catch {

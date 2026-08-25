@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { usePathname } from "next/navigation";
 
 import type { TeamAccessContext } from "../../lib/teams/context";
+import { resolveTeamLandingPath } from "../../lib/teams/navigation";
 import type { PermissionCode } from "../../lib/teams/permissions";
 import { AccountMenu } from "./account-menu";
 import { ProductNav } from "./product-nav";
@@ -29,7 +30,8 @@ export function ProductShell({
   permissions: readonly PermissionCode[];
   email?: string;
 }) {
-  const pathname = usePathname() || `/teams/${encodeURIComponent(team.slug)}/overview`;
+  const landingPath = resolveTeamLandingPath(team.slug, permissions) ?? "/";
+  const pathname = usePathname() || landingPath;
   const [theme, setTheme] = useState<Theme>(INITIAL_THEME);
   const currentTheme = useRef<Theme>(INITIAL_THEME);
   const themeResolutionTimer = useRef<number | null>(null);
@@ -64,7 +66,7 @@ export function ProductShell({
   return (
     <div className={`pro7-shell product-shell ${theme}`}>
       <aside className="product-sidebar">
-        <a className="product-brand" href={`/teams/${encodeURIComponent(team.slug)}/overview`}>
+        <a className="product-brand" href={landingPath}>
           <span aria-hidden="true">7</span>
           <strong>PRO7</strong>
         </a>

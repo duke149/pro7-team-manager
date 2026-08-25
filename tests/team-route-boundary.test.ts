@@ -46,16 +46,23 @@ type ApiModule = {
 type ApiDependencies = {
   getProductUser: (next: string) => Promise<ProductUser | null>;
   supabase: {
-    from(table: "teams"): unknown;
+    rpc(name: "create_team", args: { p_name: string; p_slug: string }): Promise<unknown>;
   };
 };
 
 type RootModule = {
+  resolveRootDestination(teams: Array<Team & { permissions: readonly PermissionCode[] }>):
+    | { kind: "setup" }
+    | { kind: "route"; href: string }
+    | { kind: "no-access" };
   redirectFromRoot(dependencies: {
     requireProductUser: (next: string) => Promise<ProductUser>;
-    loadUserTeams: (userId: string) => Promise<{ ok: true; teams: Team[] } | { ok: false }>;
+    loadUserTeams: (userId: string) => Promise<
+      { ok: true; teams: Array<Team & { permissions: readonly PermissionCode[] }> }
+      | { ok: false }
+    >;
     redirect: (url: string) => never;
-  }): Promise<never>;
+  }): Promise<unknown>;
 };
 
 type LayoutModule = {
@@ -64,6 +71,7 @@ type LayoutModule = {
     params: Promise<{ slug: string }>;
     requireProductUser: (next: string) => Promise<ProductUser>;
     loadTeamAccessContext?: (slug: string) => Promise<TeamContext | null>;
+    getReturnPath?: (slug: string) => Promise<string>;
     denied?: () => unknown;
   }): Promise<unknown>;
 };
@@ -83,8 +91,8 @@ let routes: TeamRouteModule;
 let layout: LayoutModule;
 let placeholder: PlaceholderModule;
 
-type DefaultDependencyCalls = { auth: number; server: number; insert: number; select: number };
-const defaultDependencyCalls: DefaultDependencyCalls = { auth: 0, server: 0, insert: 0, select: 0 };
+type DefaultDependencyCalls = { auth: number; server: number; rpc: number };
+const defaultDependencyCalls: DefaultDependencyCalls = { auth: 0, server: 0, rpc: 0 };
 
 test.before(async () => {
   vite = await createServer({
@@ -122,17 +130,9 @@ test.before(async () => {
             return `export async function createServerSupabaseClient() {
               globalThis.__teamRouteDefaultDependencyCalls.server += 1;
               return {
-                from() {
-                  return {
-                    insert: async () => {
-                      globalThis.__teamRouteDefaultDependencyCalls.insert += 1;
-                      return { error: null };
-                    },
-                    select() {
-                      globalThis.__teamRouteDefaultDependencyCalls.select += 1;
-                      return { eq: () => ({ maybeSingle: async () => ({ data: { id: "team-1", name: "Falcons", slug: "falcons" }, error: null }) }) };
-                    },
-                  };
+                async rpc() {
+                  globalThis.__teamRouteDefaultDependencyCalls.rpc += 1;
+                  return { data: [{ id: "team-1", name: "Falcons", slug: "falcons" }], error: null };
                 },
               };
             }`;
@@ -205,36 +205,21 @@ function request(
 
 function apiDependencies({
   productUser = { user: { id: "user-1", email: "owner@example.com" }, requiresPasswordChange: false },
-  insertResult = response(null),
-  selectResult = response({ id: "team-1", name: "Falcons", slug: "falcons" }),
+  rpcResult = response([{ id: "team-1", name: "Falcons", slug: "falcons" }]),
 }: {
   productUser?: ProductUser | null;
-  insertResult?: ReturnType<typeof response>;
-  selectResult?: ReturnType<typeof response>;
+  rpcResult?: ReturnType<typeof response>;
 } = {}) {
   const calls: Array<{ method: string; value?: unknown }> = [];
-  const insert = (value: unknown) => {
-    calls.push({ method: "insert", value });
-    return Promise.resolve(insertResult);
-  };
-  const select = (columns: string) => {
-    calls.push({ method: "select", value: columns });
-    return {
-      eq(field: string, value: string) {
-        calls.push({ method: "eq", value: { field, value } });
-        return { maybeSingle: () => Promise.resolve(selectResult) };
-      },
-    };
-  };
 
   return {
     calls,
     dependencies: {
       getProductUser: async () => productUser,
       supabase: {
-        from(table: "teams") {
-          assert.equal(table, "teams");
-          return { insert, select };
+        async rpc(name: "create_team", args: { p_name: string; p_slug: string }) {
+          calls.push({ method: "rpc", value: { name, args } });
+          return rpcResult;
         },
       },
     } as ApiDependencies,
@@ -337,7 +322,7 @@ test("createTeamHandler permits only a bounded name and optional validated slug"
 
 test("createTeamHandler maps a duplicate slug to a bounded conflict response", async () => {
   const fixture = apiDependencies({
-    insertResult: response(null, { code: "23505", message: "duplicate key value exposes database details" }),
+    rpcResult: response(null, { code: "23505", message: "duplicate key value exposes database details" }),
   });
   const responseValue = await api.createTeamHandler(request({ name: "Falcons" }), fixture.dependencies);
 
@@ -345,9 +330,41 @@ test("createTeamHandler maps a duplicate slug to a bounded conflict response", a
   assert.doesNotMatch(await responseValue.text(), /duplicate key|database details/u);
 });
 
+test("createTeamHandler uses the atomic creation RPC and returns only its fixed row", async () => {
+  const calls: Array<{ name: string; args: unknown }> = [];
+  const responseValue = await api.createTeamHandler(request({ name: "Falcons" }), {
+    getProductUser: async () => ({
+      user: { id: "user-1", email: "owner@example.com" },
+      requiresPasswordChange: false,
+    }),
+    supabase: {
+      async rpc(name: string, args: unknown) {
+        calls.push({ name, args });
+        return response([
+          { id: "team-1", name: "Falcons", slug: "falcons" },
+        ]);
+      },
+      from() {
+        throw new Error("team creation must not cross a second database statement");
+      },
+    },
+  } as never);
+
+  assert.equal(responseValue.status, 201);
+  assert.deepEqual(await responseValue.json(), {
+    team: { id: "team-1", name: "Falcons", slug: "falcons" },
+  });
+  assert.deepEqual(calls, [
+    {
+      name: "create_team",
+      args: { p_name: "Falcons", p_slug: "falcons" },
+    },
+  ]);
+});
+
 test("createTeamHandler keeps unknown insert failures generic", async () => {
   const fixture = apiDependencies({
-    insertResult: response(null, { message: "connection secret and internal detail" }),
+    rpcResult: response(null, { message: "connection secret and internal detail" }),
   });
   const responseValue = await api.createTeamHandler(request({ name: "Falcons" }), fixture.dependencies);
 
@@ -355,37 +372,20 @@ test("createTeamHandler keeps unknown insert failures generic", async () => {
   assert.doesNotMatch(await responseValue.text(), /connection secret|internal detail/u);
 });
 
-test("createTeamHandler converts rejected auth, insert, and select dependencies to generic 500 responses", async () => {
+test("createTeamHandler converts rejected auth and RPC dependencies to generic 500 responses", async () => {
   const rejectedAuth = apiDependencies();
   rejectedAuth.dependencies.getProductUser = async () => Promise.reject(new Error("auth upstream detail"));
   const authResponse = await api.createTeamHandler(request({ name: "Falcons" }), rejectedAuth.dependencies);
   assert.equal(authResponse.status, 500);
   assert.doesNotMatch(await authResponse.text(), /auth upstream detail/u);
 
-  const rejectedInsert = apiDependencies();
-  rejectedInsert.dependencies.supabase = {
-    from() {
-      return { insert: async () => Promise.reject(new Error("insert upstream detail")) };
-    },
+  const rejectedRpc = apiDependencies();
+  rejectedRpc.dependencies.supabase = {
+    rpc: async () => Promise.reject(new Error("rpc upstream detail")),
   };
-  const insertResponse = await api.createTeamHandler(request({ name: "Falcons" }), rejectedInsert.dependencies);
-  assert.equal(insertResponse.status, 500);
-  assert.doesNotMatch(await insertResponse.text(), /insert upstream detail/u);
-
-  const rejectedSelect = apiDependencies();
-  rejectedSelect.dependencies.supabase = {
-    from() {
-      return {
-        insert: async () => response(null),
-        select() {
-          return { eq: () => ({ maybeSingle: async () => Promise.reject(new Error("select upstream detail")) }) };
-        },
-      };
-    },
-  };
-  const selectResponse = await api.createTeamHandler(request({ name: "Falcons" }), rejectedSelect.dependencies);
-  assert.equal(selectResponse.status, 500);
-  assert.doesNotMatch(await selectResponse.text(), /select upstream detail/u);
+  const rpcResponse = await api.createTeamHandler(request({ name: "Falcons" }), rejectedRpc.dependencies);
+  assert.equal(rpcResponse.status, 500);
+  assert.doesNotMatch(await rpcResponse.text(), /rpc upstream detail/u);
 });
 
 test("injected POST adapter returns a generic 500 when dependency initialization rejects", async () => {
@@ -421,25 +421,29 @@ test("injected POST adapter passes resolved server dependencies into the real te
 
   assert.equal(responseValue.status, 201);
   assert.deepEqual(fixture.calls, [
-    { method: "insert", value: { name: "Falcons", slug: "falcons" } },
-    { method: "select", value: "id, name, slug" },
-    { method: "eq", value: { field: "slug", value: "falcons" } },
+    {
+      method: "rpc",
+      value: {
+        name: "create_team",
+        args: { p_name: "Falcons", p_slug: "falcons" },
+      },
+    },
   ]);
 });
 
 test("framework POST accepts Vinext route context and uses the mocked default resolver", async () => {
-  Object.assign(defaultDependencyCalls, { auth: 0, server: 0, insert: 0, select: 0 });
+  Object.assign(defaultDependencyCalls, { auth: 0, server: 0, rpc: 0 });
   const responseValue = await api.POST(
     request({ name: "Falcons" }),
     { params: Promise.resolve({}) },
   );
 
   assert.equal(responseValue.status, 201);
-  assert.deepEqual(defaultDependencyCalls, { auth: 1, server: 1, insert: 1, select: 1 });
+  assert.deepEqual(defaultDependencyCalls, { auth: 1, server: 1, rpc: 1 });
 });
 
 test("framework POST never invokes a function passed as runtime context", async () => {
-  Object.assign(defaultDependencyCalls, { auth: 0, server: 0, insert: 0, select: 0 });
+  Object.assign(defaultDependencyCalls, { auth: 0, server: 0, rpc: 0 });
   let contextCalls = 0;
   const responseValue = await api.POST(
     request({ name: "Falcons" }),
@@ -451,10 +455,10 @@ test("framework POST never invokes a function passed as runtime context", async 
 
   assert.equal(responseValue.status, 201);
   assert.equal(contextCalls, 0);
-  assert.deepEqual(defaultDependencyCalls, { auth: 1, server: 1, insert: 1, select: 1 });
+  assert.deepEqual(defaultDependencyCalls, { auth: 1, server: 1, rpc: 1 });
 });
 
-test("createTeamHandler does a plain insert then independent bootstrap select", async () => {
+test("createTeamHandler rejects untrusted fields and uses one atomic RPC", async () => {
   const fixture = apiDependencies();
   const responseValue = await api.createTeamHandler(
     request({ name: "Falcons", slug: "Falcons", role: "owner", created_at: "attacker" }),
@@ -470,9 +474,13 @@ test("createTeamHandler does a plain insert then independent bootstrap select", 
     team: { id: "team-1", name: "Falcons", slug: "falcons" },
   });
   assert.deepEqual(success.calls, [
-    { method: "insert", value: { name: "Falcons", slug: "falcons" } },
-    { method: "select", value: "id, name, slug" },
-    { method: "eq", value: { field: "slug", value: "falcons" } },
+    {
+      method: "rpc",
+      value: {
+        name: "create_team",
+        args: { p_name: "Falcons", p_slug: "falcons" },
+      },
+    },
   ]);
 });
 
@@ -503,8 +511,8 @@ test("root redirects a verified user to setup without teams and first sorted tea
       loadUserTeams: async () => ({
         ok: true,
         teams: [
-          { id: "team-2", name: "Zebra", slug: "zebra" },
-          { id: "team-1", name: "Alpha", slug: "đội bóng" },
+          { id: "team-2", name: "Zebra", slug: "zebra", permissions: ["finance.read"] },
+          { id: "team-1", name: "Alpha", slug: "đội bóng", permissions: ["team.read"] },
         ],
       }),
       redirect,
@@ -512,6 +520,49 @@ test("root redirects a verified user to setup without teams and first sorted tea
     /redirected/,
   );
   assert.deepEqual(redirects, ["/setup/team", "/teams/%C4%91%E1%BB%99i%20b%C3%B3ng/overview"]);
+});
+
+test("root destination uses effective permissions and distinguishes no access from no membership", () => {
+  assert.deepEqual(
+    root.resolveRootDestination([
+      { id: "team-1", name: "Finance", slug: "đội bóng", permissions: ["finance.read"] },
+    ]),
+    { kind: "route", href: "/teams/%C4%91%E1%BB%99i%20b%C3%B3ng/funds" },
+  );
+  assert.deepEqual(
+    root.resolveRootDestination([
+      { id: "team-1", name: "Settings", slug: "settings", permissions: ["settings.read"] },
+    ]),
+    { kind: "route", href: "/teams/settings/admin/settings" },
+  );
+  assert.deepEqual(
+    root.resolveRootDestination([
+      { id: "team-1", name: "No route", slug: "no-route", permissions: [] },
+    ]),
+    { kind: "no-access" },
+  );
+  assert.deepEqual(root.resolveRootDestination([]), { kind: "setup" });
+});
+
+test("root renders a clear no-access state without redirecting active memberships to setup", async () => {
+  const result = await root.redirectFromRoot({
+    requireProductUser: async () => ({
+      user: { id: "user-1" },
+      requiresPasswordChange: false,
+    }),
+    loadUserTeams: async () => ({
+      ok: true,
+      teams: [
+        { id: "team-1", name: "No route", slug: "no-route", permissions: [] },
+      ],
+    }),
+    redirect: (url): never => {
+      throw new Error(`unexpected redirect: ${url}`);
+    },
+  });
+
+  assert.match(renderToStaticMarkup(result as React.ReactElement), /Chưa có quyền truy cập trang đội/u);
+  assert.doesNotMatch(renderToStaticMarkup(result as React.ReactElement), /setup|404/u);
 });
 
 test("root does not convert a failed team lookup into a setup redirect", async () => {
@@ -537,6 +588,7 @@ test("team layout enforces the product-user guard for its encoded team route", a
     await layout.renderTeamLayout({
       children,
       params: Promise.resolve({ slug: "đội bóng" }),
+      getReturnPath: async () => "/teams/%C4%91%E1%BB%99i%20b%C3%B3ng/overview",
       requireProductUser: async (next) => {
         seen.push(next);
         return { user: { id: "user-1" }, requiresPasswordChange: false };
@@ -545,6 +597,24 @@ test("team layout enforces the product-user guard for its encoded team route", a
     children,
   );
   assert.deepEqual(seen, ["/teams/%C4%91%E1%BB%99i%20b%C3%B3ng/overview"]);
+});
+
+test("team layout preserves a trusted requested deep link through authentication", async () => {
+  const seen: string[] = [];
+  await layout.renderTeamLayout({
+    children: "child",
+    params: Promise.resolve({ slug: "đội bóng" }),
+    getReturnPath: async () =>
+      "/teams/%C4%91%E1%BB%99i%20b%C3%B3ng/matches/match-12?tab=attendance",
+    requireProductUser: async (next) => {
+      seen.push(next);
+      return { user: { id: "user-1" }, requiresPasswordChange: false };
+    },
+  });
+
+  assert.deepEqual(seen, [
+    "/teams/%C4%91%E1%BB%99i%20b%C3%B3ng/matches/match-12?tab=attendance",
+  ]);
 });
 
 test("team layout gives the product shell one verified team context instead of prototype literals", async () => {
@@ -558,6 +628,7 @@ test("team layout gives the product shell one verified team context instead of p
   const result = await layout.renderTeamLayout({
     children: "child content",
     params: Promise.resolve({ slug: "đội thật" }),
+    getReturnPath: async () => "/teams/%C4%91%E1%BB%99i%20th%E1%BA%ADt/overview",
     requireProductUser: async () => ({
       user: { id: "user-1", email: "member@example.com" },
       requiresPasswordChange: false,

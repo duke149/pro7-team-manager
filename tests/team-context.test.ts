@@ -173,6 +173,32 @@ test("loadUserTeams distinguishes an explicit empty membership list from RPC fai
   );
 });
 
+test("loadUserTeams retains immutable effective permissions for landing resolution", async () => {
+  const result = await loadUserTeams(
+    authorizedDependencies([
+      accessRow({
+        team_id: "team-finance",
+        team_name: "Finance Team",
+        team_slug: "finance-team",
+        permission_codes: ["finance.read"],
+      }),
+    ]),
+  );
+
+  assert.deepEqual(result, {
+    ok: true,
+    teams: [
+      {
+        id: "team-finance",
+        name: "Finance Team",
+        slug: "finance-team",
+        permissions: ["finance.read"],
+      },
+    ],
+  });
+  assert.equal(result.ok && Object.isFrozen(result.teams[0]?.permissions), true);
+});
+
 test("requireTeamPermission uses verified identity and denies missing permissions", async () => {
   let identityReads = 0;
   const context = await requireTeamPermission("falcons", "finance.read", {

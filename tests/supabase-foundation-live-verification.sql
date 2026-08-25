@@ -20,6 +20,8 @@ declare
   v_post_member_role uuid;
   v_context_role uuid;
   v_context record;
+  v_created_team record;
+  v_retried_team record;
   v_actual text[];
   v_count integer;
   v_failed boolean;
@@ -113,8 +115,8 @@ begin
   v_failed := false;
   v_error_state := null;
   begin
-    insert into public.teams (name, slug)
-    values ('Overlong Slug Verification', repeat('a', 49));
+    perform *
+    from public.create_team('Overlong Slug Verification', repeat('a', 49));
   exception
     when others then
       v_failed := true;
@@ -128,8 +130,8 @@ begin
     v_failed := false;
     v_error_state := null;
     begin
-      insert into public.teams (name, slug)
-      values ('Reserved Slug Verification', v_slug);
+      perform *
+      from public.create_team('Reserved Slug Verification', v_slug);
     exception
       when others then
         v_failed := true;
@@ -140,14 +142,17 @@ begin
     end if;
   end loop;
 
-  insert into public.teams (name, slug)
-  values ('Maximum Slug Verification', repeat('a', 48));
+  perform *
+  from public.create_team('Maximum Slug Verification', repeat('a', 48));
   if not exists (select 1 from public.teams where slug = repeat('a', 48)) then
     raise exception 'foundation live verification: valid 48-character team slug was not retained';
   end if;
 
-  insert into public.teams (name, slug)
-  values ('Foundation Post Migration', 'foundation-post-verification-20260825');
+  perform *
+  from public.create_team(
+    'Foundation Post Migration',
+    'foundation-post-verification-20260825'
+  );
   execute 'reset role';
 
   select id into strict v_post_team
@@ -204,12 +209,65 @@ begin
   insert into public.memberships (team_id, user_id, role_id)
   values (v_existing_team, v_invalid_user, v_context_role);
 
+  update public.profiles
+  set requires_password_change = true
+  where id = v_invalid_user;
+
   perform pg_catalog.set_config('request.jwt.claim.sub', v_invalid_user::text, true);
   perform pg_catalog.set_config(
     'request.jwt.claims',
     pg_catalog.jsonb_build_object('sub', v_invalid_user, 'role', 'authenticated')::text,
     true
   );
+  execute 'set local role authenticated';
+
+  select pg_catalog.count(*) into v_count
+  from public.profiles
+  where id = v_invalid_user;
+  if v_count <> 1 then
+    raise exception 'foundation live verification: flagged user lost required own-profile visibility';
+  end if;
+
+  if exists (select 1 from public.teams where id = v_existing_team)
+    or exists (select 1 from public.roles where id = v_context_role)
+    or exists (select 1 from public.role_permissions where role_id = v_context_role)
+    or exists (
+      select 1 from public.memberships
+      where team_id = v_existing_team and user_id = v_invalid_user
+    )
+    or exists (select 1 from public.get_current_team_access_contexts()) then
+    raise exception 'foundation live verification: flagged user retained team context or team data';
+  end if;
+
+  v_failed := false;
+  v_error_state := null;
+  begin
+    perform *
+    from public.create_team(
+      'Flagged RPC Must Fail',
+      'flagged-rpc-must-fail-20260825'
+    );
+  exception
+    when others then
+      v_failed := true;
+      v_error_state := sqlstate;
+  end;
+  if not v_failed or v_error_state <> '28000' then
+    raise exception 'foundation live verification: flagged atomic creation was not denied (state=%)', v_error_state;
+  end if;
+
+  execute 'reset role';
+  if private.is_trusted_product_user()
+    or private.is_team_member(v_existing_team)
+    or private.has_team_permission(v_existing_team, 'finance.read')
+    or private.can_view_profile(v_owner)
+    or not private.can_view_profile(v_invalid_user) then
+    raise exception 'foundation live verification: flagged trusted/helper boundary differs';
+  end if;
+
+  update public.profiles
+  set requires_password_change = false
+  where id = v_invalid_user;
   execute 'set local role authenticated';
 
   select * into v_context
@@ -296,6 +354,92 @@ begin
     raise exception 'foundation live verification: finance-only route permission boundary differs';
   end if;
 
+  execute 'set local role authenticated';
+  v_failed := false;
+  v_error_state := null;
+  begin
+    insert into public.teams (name, slug)
+    values ('Direct Insert Must Fail', 'direct-insert-must-fail-20260825');
+  exception
+    when others then
+      v_failed := true;
+      v_error_state := sqlstate;
+  end;
+  if not v_failed or v_error_state <> '42501' then
+    raise exception 'foundation live verification: direct authenticated team insert remained available (state=%)', v_error_state;
+  end if;
+
+  select * into strict v_created_team
+  from public.create_team(
+    'Atomic Team Verification',
+    'atomic-team-verification-20260825'
+  );
+  select * into strict v_retried_team
+  from public.create_team(
+    'Atomic Team Verification',
+    'atomic-team-verification-20260825'
+  );
+  if pg_catalog.to_jsonb(v_created_team) is distinct from pg_catalog.jsonb_build_object(
+      'id', v_created_team.id,
+      'name', 'Atomic Team Verification',
+      'slug', 'atomic-team-verification-20260825'
+    )
+    or v_retried_team.id is distinct from v_created_team.id
+    or v_retried_team.name is distinct from v_created_team.name
+    or v_retried_team.slug is distinct from v_created_team.slug then
+    raise exception 'foundation live verification: atomic creation output or same-owner retry differs';
+  end if;
+
+  v_failed := false;
+  v_error_state := null;
+  begin
+    perform * from public.create_team('Invalid Atomic Team', 'setup');
+  exception
+    when others then
+      v_failed := true;
+      v_error_state := sqlstate;
+  end;
+  if not v_failed or v_error_state <> '23514'
+    or exists (select 1 from public.teams where name = 'Invalid Atomic Team') then
+    raise exception 'foundation live verification: failed atomic creation left a team (state=%)', v_error_state;
+  end if;
+  execute 'reset role';
+
+  perform pg_catalog.set_config('request.jwt.claim.sub', v_member::text, true);
+  perform pg_catalog.set_config(
+    'request.jwt.claims',
+    pg_catalog.jsonb_build_object('sub', v_member, 'role', 'authenticated')::text,
+    true
+  );
+  execute 'set local role authenticated';
+  v_failed := false;
+  v_error_state := null;
+  begin
+    perform *
+    from public.create_team(
+      'Atomic Team Verification',
+      'atomic-team-verification-20260825'
+    );
+  exception
+    when others then
+      v_failed := true;
+      v_error_state := sqlstate;
+  end;
+  execute 'reset role';
+  if not v_failed or v_error_state <> '23505'
+    or (select pg_catalog.count(*) from public.teams where slug = 'atomic-team-verification-20260825') <> 1 then
+    raise exception 'foundation live verification: foreign duplicate was not bounded atomically (state=%)', v_error_state;
+  end if;
+
+  delete from public.teams
+  where id = v_created_team.id;
+  perform pg_catalog.set_config('request.jwt.claim.sub', v_invalid_user::text, true);
+  perform pg_catalog.set_config(
+    'request.jwt.claims',
+    pg_catalog.jsonb_build_object('sub', v_invalid_user, 'role', 'authenticated')::text,
+    true
+  );
+
   update public.memberships
   set status = 'inactive'
   where team_id = v_existing_team and user_id = v_invalid_user;
@@ -323,6 +467,21 @@ begin
     raise exception 'foundation live verification: anon context RPC execution was not denied (state=%)', v_error_state;
   end if;
 
+  v_failed := false;
+  v_error_state := null;
+  begin
+    execute 'set local role anon';
+    perform * from public.create_team('Anon Must Fail', 'anon-must-fail-20260825');
+  exception
+    when others then
+      v_failed := true;
+      v_error_state := sqlstate;
+  end;
+  execute 'reset role';
+  if not v_failed or v_error_state <> '42501' then
+    raise exception 'foundation live verification: anon create-team RPC execution was not denied (state=%)', v_error_state;
+  end if;
+
   execute 'set local role service_role';
   v_failed := false;
   v_error_state := null;
@@ -337,6 +496,22 @@ begin
   if not v_failed or v_error_state <> '42501'
     or pg_catalog.has_function_privilege('public', 'public.get_current_team_access_contexts()', 'execute') then
     raise exception 'foundation live verification: context RPC ACL is broader than authenticated (state=%)', v_error_state;
+  end if;
+
+  v_failed := false;
+  v_error_state := null;
+  begin
+    execute 'set local role service_role';
+    perform * from public.create_team('Service Must Fail', 'service-must-fail-20260825');
+  exception
+    when others then
+      v_failed := true;
+      v_error_state := sqlstate;
+  end;
+  execute 'reset role';
+  if not v_failed or v_error_state <> '42501'
+    or pg_catalog.has_function_privilege('public', 'public.create_team(text, text)', 'execute') then
+    raise exception 'foundation live verification: create-team RPC ACL is broader than authenticated (state=%)', v_error_state;
   end if;
 
   v_failed := false;
@@ -419,7 +594,7 @@ rollback;
 
 select
   'ok'::text as status,
-  35::integer as assertions,
-  12::integer as coverage_groups,
-  'existing remap; custom preservation; bootstrap mappings; password default; route-safe team slugs; lifecycle constraint, ACL, timestamp, audit, active context, and hardened finance-only context RPC'::text as coverage,
+  50::integer as assertions,
+  15::integer as coverage_groups,
+  'existing remap; custom preservation; bootstrap mappings; password default and trusted first-login boundary; route-safe team slugs; atomic team creation/retry/ACL; lifecycle constraint, ACL, timestamp, audit, active context, and hardened finance-only context RPC'::text as coverage,
   'post-migration fixtures rolled back; pre-migration fixtures require cleanup'::text as fixtures;

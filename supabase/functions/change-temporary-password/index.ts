@@ -225,15 +225,24 @@ export function createChangeTemporaryPasswordHandler(
   };
 }
 
-function runtimeDependencies(): ChangeTemporaryPasswordDependencies {
-  const url = Deno.env.get("SUPABASE_URL");
-  const publishableKey = Deno.env.get("SUPABASE_PUBLISHABLE_KEY");
-  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-  if (!url || !publishableKey || !serviceRoleKey) {
+export function createChangeTemporaryPasswordRuntimeDependencies(
+  options: {
+    getEnvironment?: (name: string) => string | undefined;
+    createSupabaseClient?: typeof createClient;
+  } = {},
+): ChangeTemporaryPasswordDependencies {
+  const getEnvironment =
+    options.getEnvironment ?? ((name: string) => Deno.env.get(name));
+  const createSupabaseClient = options.createSupabaseClient ?? createClient;
+  const url = getEnvironment("SUPABASE_URL");
+  const anonKey = getEnvironment("SUPABASE_ANON_KEY");
+  const serviceRoleKey = getEnvironment("SUPABASE_SERVICE_ROLE_KEY");
+  const allowedOriginsValue = getEnvironment("ALLOWED_ORIGINS") ?? "";
+  if (!url || !anonKey || !serviceRoleKey) {
     throw new Error("Missing required Edge Function configuration.");
   }
 
-  const allowedOrigins = (Deno.env.get("ALLOWED_ORIGINS") ?? "")
+  const allowedOrigins = allowedOriginsValue
     .split(",")
     .map((origin) => origin.trim())
     .filter(Boolean);
@@ -241,18 +250,18 @@ function runtimeDependencies(): ChangeTemporaryPasswordDependencies {
   return {
     allowedOrigins,
     createJwtClient(token): JwtClient {
-      return createClient(url, publishableKey, {
+      return createSupabaseClient(url, anonKey, {
         auth: { autoRefreshToken: false, persistSession: false, detectSessionInUrl: false },
         global: { headers: { Authorization: `Bearer ${token}` } },
       });
     },
     createPasswordClient(): PasswordClient {
-      return createClient(url, publishableKey, {
+      return createSupabaseClient(url, anonKey, {
         auth: { autoRefreshToken: false, persistSession: false, detectSessionInUrl: false },
       });
     },
     createServiceClient(): ServiceClient {
-      const service = createClient(url, serviceRoleKey, {
+      const service = createSupabaseClient(url, serviceRoleKey, {
         auth: { autoRefreshToken: false, persistSession: false, detectSessionInUrl: false },
       });
       return {
@@ -292,6 +301,10 @@ function runtimeDependencies(): ChangeTemporaryPasswordDependencies {
   };
 }
 
-if (import.meta.main) {
-  Deno.serve(createChangeTemporaryPasswordHandler(runtimeDependencies()));
+if ((import.meta as ImportMeta).main) {
+  Deno.serve(
+    createChangeTemporaryPasswordHandler(
+      createChangeTemporaryPasswordRuntimeDependencies(),
+    ),
+  );
 }

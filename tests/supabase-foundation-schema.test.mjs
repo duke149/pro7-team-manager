@@ -151,12 +151,80 @@ test("foundation migration keeps base policies restrictive and exposes a hardene
   );
   assert.match(
     sql,
-    /from public\.memberships as m join public\.teams as t on t\.id = m\.team_id join public\.roles as r on r\.id = m\.role_id and r\.team_id = m\.team_id left join public\.role_permissions as rp on rp\.role_id = r\.id where \(select auth\.uid\(\)\) is not null and m\.user_id = \(select auth\.uid\(\)\) and m\.status = 'active'/,
+    /from public\.memberships as m join public\.teams as t on t\.id = m\.team_id join public\.roles as r on r\.id = m\.role_id and r\.team_id = m\.team_id left join public\.role_permissions as rp on rp\.role_id = r\.id where private\.is_trusted_product_user\(\) and m\.user_id = \(select auth\.uid\(\)\) and m\.status = 'active'/,
   );
   assert.match(sql, /pg_catalog\.array_agg\(rp\.permission_code order by rp\.permission_code\)/);
   assert.match(sql, /alter function public\.get_current_team_access_contexts\(\) owner to postgres;/);
   assert.match(sql, /revoke execute on function public\.get_current_team_access_contexts\(\) from public, anon, authenticated, service_role;/);
   assert.match(sql, /grant execute on function public\.get_current_team_access_contexts\(\) to authenticated;/);
+});
+
+test("foundation migration enforces the first-login boundary in PostgreSQL", async () => {
+  const sql = normalizeSql(await readFoundationMigration());
+
+  assert.match(
+    sql,
+    /create or replace function private\.is_trusted_product_user\(\) returns boolean language sql stable security definer set search_path = '' as \$function\$ select \(select auth\.uid\(\)\) is not null and exists \( select 1 from public\.profiles as p where p\.id = \(select auth\.uid\(\)\) and p\.requires_password_change = false \); \$function\$;/,
+  );
+  for (const helper of ["is_team_member", "has_team_permission", "can_view_profile"]) {
+    assert.match(
+      sql,
+      new RegExp(
+        `create or replace function private\\.${helper}[\\s\\S]*?private\\.is_trusted_product_user\\(\\)[\\s\\S]*?\\$function\\$;`,
+      ),
+      `${helper} must compose the trusted product-user boundary`,
+    );
+  }
+  assert.match(
+    sql,
+    /create policy memberships_select_authorized on public\.memberships for select to authenticated using \( \( user_id = \(select auth\.uid\(\)\) and private\.is_trusted_product_user\(\) \) or private\.has_team_permission\(team_id, 'members\.read'\) or private\.has_team_permission\(team_id, 'members\.manage'\) \);/,
+  );
+  assert.match(
+    sql,
+    /create or replace function public\.get_current_team_access_contexts\(\)[\s\S]*?where private\.is_trusted_product_user\(\)[\s\S]*?\$function\$;/,
+  );
+  assert.match(
+    sql,
+    /create or replace function public\.accept_team_invitation\(token text\)[\s\S]*?private\.is_trusted_product_user\(\)[\s\S]*?\$function\$;/,
+  );
+  assert.match(sql, /drop policy if exists teams_insert_own on public\.teams;/);
+  assert.doesNotMatch(sql, /create policy teams_insert_own/);
+  assert.match(sql, /revoke insert on table public\.teams from authenticated;/);
+});
+
+test("foundation migration exposes only the hardened atomic team-creation RPC", async () => {
+  const sql = normalizeSql(await readFoundationMigration());
+
+  assert.match(
+    sql,
+    /create or replace function public\.create_team\(p_name text, p_slug text\) returns table \( id uuid, name text, slug text \) language plpgsql security definer set search_path = ''/,
+  );
+  assert.match(
+    sql,
+    /if v_user_id is null or not private\.is_trusted_product_user\(\) then raise exception/,
+  );
+  assert.match(
+    sql,
+    /insert into public\.teams \(name, slug, owner_user_id\) values \(p_name, p_slug, v_user_id\) returning teams\.id, teams\.name, teams\.slug/,
+  );
+  assert.match(
+    sql,
+    /when unique_violation then return query select t\.id, t\.name, t\.slug from public\.teams as t where t\.slug = p_slug and t\.name = p_name and t\.owner_user_id = v_user_id;/,
+  );
+  const functionSql = sql.match(
+    /create or replace function public\.create_team\(p_name text, p_slug text\)[\s\S]*?\$function\$;/,
+  )?.[0];
+  assert.ok(functionSql, "missing create_team function body");
+  assert.doesNotMatch(functionSql, /\bexecute\b/, "atomic RPC must not use dynamic SQL");
+  assert.match(sql, /alter function public\.create_team\(text, text\) owner to postgres;/);
+  assert.match(
+    sql,
+    /revoke execute on function public\.create_team\(text, text\) from public, anon, authenticated, service_role;/,
+  );
+  assert.match(
+    sql,
+    /grant execute on function public\.create_team\(text, text\) to authenticated;/,
+  );
 });
 
 test("foundation live harness preserves pre-migration fixtures through the additive migration", async () => {
