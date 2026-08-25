@@ -7,8 +7,10 @@ RBAC slice.  No Supabase remote DDL, Edge deployment, secret change, type
 generation, advisor run, or browser QA was performed.  The remote project is
 therefore **not** foundation-complete.
 
-The linked worktree is `feature/supabase-mvp-core`; the local Task 6 gate began
-at `c769baa` with an empty tracked `git status --short`.
+The linked worktree is `feature/supabase-mvp-core`. The whole-plan final-fix
+wave began at `ba802fc` and is implemented locally in `ea07ac5`. The five
+Important review findings are addressed in code and local verification, but
+browser QA and the scoped whole-plan re-review remain pending.
 
 ## Commits in this slice
 
@@ -29,6 +31,9 @@ at `c769baa` with an empty tracked `git status --short`.
 | `c359412` | `fix: harden product shell controls` |
 | `49e96a2` | `test: mount product shell interactions` |
 | `c769baa` | `fix: hydrate product shell safely` |
+| `31e15f3` | `docs: hand off PRO7 foundation slice` |
+| `ba802fc` | `docs: correct foundation handoff checkpoint` |
+| `ea07ac5` | `fix: close foundation review findings` |
 
 ## Migration inventory and order
 
@@ -39,7 +44,7 @@ remain local-only pending explicit remote authorization.
 | --- | --- | --- | --- |
 | 1 | `20260824170300_supabase_mvp_core.sql` | `b0c13b47538e07c02666672fc9e83b13a49167c0590deed782bb50596e7cf363` | Applied once; do not reapply/amend |
 | 2 | `20260824183536_rls_mutation_visibility.sql` | `2c2b1ca30529b1ddc0d0dc66a899384d118ec763ef94f7222ba669b39fbe605b` | Pending remote authorization |
-| 3 | `20260825013307_pro7_foundation_permissions.sql` | `2e0c112cc4b06e13c6fd43ec258221d82aee05018387381cf22ca14bc5cceb32` | Pending remote authorization |
+| 3 | `20260825013307_pro7_foundation_permissions.sql` | `a319ee4e03bc94973063bb5568e542a98b9eaa4afae4b26cf38431f416d9ca83` | Pending remote authorization |
 
 ## Fresh local evidence
 
@@ -48,19 +53,24 @@ with no output before documentation changes.
 
 | Gate | Result |
 | --- | --- |
-| `npm run test:unit` | Exit 0: 134 passed, 0 failed |
+| `npm run test:unit` | Exit 0: 147 passed, 0 failed |
 | `npm test` | Exit 0: production build completed; 6 rendered/source tests passed |
-| All three static SQL contracts | Exit 0: 18 passed, 0 failed |
-| `deno check --config supabase/functions/change-temporary-password/deno.json supabase/functions/change-temporary-password/index.ts` | Exit 0 |
-| Focused ESLint over Task 1–5 application/library/test files | Exit 0, no diagnostics |
+| Core, pending-RLS, foundation, and pre-apply static SQL contracts | Exit 0: 21 passed, 0 failed |
+| `deno check supabase/functions/change-temporary-password/index.ts` | Exit 0 |
+| Focused ESLint over all final-fix application/library/test files | Exit 0, no diagnostics |
 | `npm ci --ignore-scripts --dry-run` | Exit 0 |
 | `git diff --check` | Exit 0, no output |
 
 A disposable PostgreSQL 17.10 cluster, with only local Supabase role/auth
-stubs, applied the three migrations in the inventory order.  The core verifier
-reported `ok`, explicit `ROLLBACK`, 98 assertions, and 17 coverage groups.  The
-foundation verifier reported `ok`, explicit `ROLLBACK`, 35 assertions, and 12
-coverage groups.  Its committed-fixture cleanup reported exactly:
+stubs, applied the immutable core migration first. Before either pending file,
+`tests/supabase-foundation-pre-apply.sql` ran in a read-only transaction and
+reported the three expected migration states, the 10-code pre-foundation
+catalog, and zero slug, auth/profile, system-role, custom-role,
+prospective-column, or prospective-function conflicts. The pending RLS file
+then applied; the core verifier reported `ok`, explicit `ROLLBACK`, 98
+assertions, and 17 coverage groups. The foundation harness applied the local
+foundation file and reported `ok`, explicit `ROLLBACK`, 50 assertions, and 15
+coverage groups. Its committed-fixture cleanup reported exactly:
 
 ```text
 fixture_auth_users=0 fixture_profiles=0 fixture_teams=0 fixture_roles=0
@@ -71,19 +81,16 @@ This was local disposable-database evidence only; no SQL reached Supabase.
 
 ## Known baseline findings — not green gates
 
-- Full repository ESLint is not a passing gate.  Excluding test-generated
-  `work/` bundles, it reports 8 errors and 1 warning: seven existing
-  accessibility errors plus one image warning in `app/pro7-app.tsx`, and the
-  previously accepted Edge-specific unused `ImportMeta` diagnostic.  The
-  unscoped `npm run lint` also traverses generated `work/` test bundles and
-  consequently reports 480 errors and 1 warning; that result is not a source
-  regression signal.
+- Full repository ESLint is not a source gate because it traverses generated
+  test bundles and retains unrelated prototype-page accessibility debt. It was
+  not rerun for this final-fix wave; the complete changed surface was linted
+  successfully.
 - `npx tsc --noEmit` reproduces 21 known, non-gating root TypeScript
   configuration/boundary diagnostics.  Fifteen are emitted from this slice's
   Deno, mounted-shell-test, and team-route-test files; six are from pre-existing
-  configuration/runtime files.  This root check is not green and must not be
-  described as entirely pre-existing.  Native Deno checking and focused/scoped
-  checks remain green as recorded above.
+  configuration/runtime files. This is the same total recorded at `ba802fc`;
+  it includes the existing root-config `.ts`-extension diagnostic for the Edge
+  file while native Deno checking is green.
 - The test/build runs emit non-failing Node `DEP0205`, Vinext
   middleware-to-proxy, route-classification, and occasional Vite HMR-port
   notices.
@@ -98,29 +105,42 @@ until the approved remote migration/deployment checkpoint is complete.
 
 ## Required remote checkpoint, in order
 
-1. Obtain explicit authorization; review and apply
-   `20260824183536_rls_mutation_visibility.sql` once.
-2. Apply `20260825013307_pro7_foundation_permissions.sql` once, after the RLS
+1. Obtain explicit authorization to run only the separately reviewable,
+   read-only `tests/supabase-foundation-pre-apply.sql` against the populated
+   project. This is evidence collection, not migration authorization.
+2. Inspect every result set. Stop before DDL and explicitly remediate/review any
+   migration-state mismatch, incompatible slug, auth/profile gap, permission or
+   role invariant conflict, or prospective object/column conflict.
+3. Only after a clean pre-apply checkpoint and separate explicit DDL
+   authorization, apply `20260824183536_rls_mutation_visibility.sql` once.
+4. Apply `20260825013307_pro7_foundation_permissions.sql` once, after the RLS
    correction.
-3. Regenerate remote `Database` types and reconcile the checked-in provisional
+5. Regenerate remote `Database` types and reconcile the checked-in provisional
    `profiles.requires_password_change` and `memberships.status/updated_at`
-   metadata.
-4. Set Edge Function secrets by name only: `SUPABASE_URL`,
-   `SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, and
-   `ALLOWED_ORIGINS`.  No values are recorded here.
-5. Deploy `change-temporary-password`; deployment has not occurred.
-6. Before any remote validation run, design and review a separate,
+   metadata, including the provisional `create_team` RPC result.
+6. Set only the custom Edge Function configuration `ALLOWED_ORIGINS`. The
+   pinned runtime automatically injects `SUPABASE_URL`, `SUPABASE_ANON_KEY`,
+   and `SUPABASE_SERVICE_ROLE_KEY`; do not try to create or override these
+   reserved names and do not require singular `SUPABASE_PUBLISHABLE_KEY`.
+7. Deploy `change-temporary-password`; deployment has not occurred.
+8. Before any remote validation run, design and review a separate,
    non-destructive post-apply validator for the populated project: read-only
    catalog/ACL/policy/permission-matrix checks, plus transaction-scoped,
    uniquely named fixtures only if mutations are explicitly approved.  It must
    make no global-empty-audit or fixture assumptions.
-7. Run that separately approved validator, then security/performance advisors.
-8. Perform the pending desktop/mobile browser QA.
+9. Run that separately approved validator, then security/performance advisors.
+10. Perform the pending desktop/mobile browser QA, including finance-only and
+    settings-only custom roles on desktop and mobile.
 
 Never run `tests/supabase-foundation-live-harness.sql` against the remote
 project.  It is local/disposable-only: it re-includes the apply-once foundation
 migration, creates committed pre-migration fixtures, and assumes empty audit
 fixtures during cleanup.
+
+The atomic team-creation retry is deliberately narrow: it returns an existing
+team only for the same authenticated owner, exact name, and exact slug. A retry
+after the team name has been changed will return a duplicate conflict and
+requires manual recovery rather than guessing which team the caller intended.
 
 ## Mandatory security warning
 

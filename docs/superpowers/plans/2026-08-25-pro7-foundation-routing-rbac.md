@@ -34,7 +34,7 @@
 
 **Interfaces:**
 - Consumes: core tables/RLS/system roles and the pending mutation-visibility migration.
-- Produces: `profiles.requires_password_change`; membership `active/inactive` lifecycle and update timestamp; 11 new permission codes; exact Owner/Admin/Member mappings; provisional local `Database` metadata.
+- Produces: `profiles.requires_password_change`; a hardened PostgreSQL trusted-product-user boundary; membership `active/inactive` lifecycle and update timestamp; 11 new permission codes; exact Owner/Admin/Member mappings; the authenticated-only atomic `create_team` RPC; provisional local `Database` metadata.
 
 - [x] **Step 1: Create the migration through the pinned CLI**
 
@@ -139,7 +139,7 @@ git commit -m "feat: add PRO7 foundation permissions"
 
 **Interfaces:**
 - Consumes: `createServerSupabaseClient()`, verified users, and typed reads of teams/memberships/roles/role permissions.
-- Produces: `PermissionCode`, `TeamAccessContext`, `hasPermission`, `loadTeamAccessContext`, `listUserTeams`, and `requireTeamPermission`.
+- Produces: `PermissionCode`, `TeamAccessContext`, `hasPermission`, `loadTeamAccessContext`, permission-retaining `loadUserTeams`, compatibility `listUserTeams`, and `requireTeamPermission`.
 
 - [x] **Step 1: Write and run failing permission tests**
 
@@ -223,7 +223,7 @@ git commit -m "feat: add typed team access guards"
 - Modify: `tests/rendered-html.test.mjs`
 
 **Interfaces:**
-- Consumes: verified user, profile flag, public browser credentials, and Edge runtime-only URL/publishable/service credentials.
+- Consumes: verified user, profile flag, public browser credentials, the automatically injected Edge values `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, and only the custom `ALLOWED_ORIGINS` configuration.
 - Produces: `validateNewPassword`, `getProductUser`, `requireProductUser`, the change-password page, and local-only `change-temporary-password` Edge Function.
 
 - [x] **Step 1: Write and run failing password-policy tests**
@@ -280,7 +280,7 @@ Expected: FAIL because the function is absent.
 
 - [x] **Step 6: Implement the local-only Edge Function and run GREEN**
 
-Pin dependencies in `deno.json`. Export `createChangeTemporaryPasswordHandler(deps)` and call `Deno.serve()` only under `import.meta.main`. The request carries `currentTemporaryPassword` and `newPassword` over HTTPS. Verify the Bearer caller with a JWT-scoped client and `auth.getUser()`, verify the current password with a separate non-persisting `signInWithPassword({ email: user.email, password: currentTemporaryPassword })` client, reject equality, validate the new password, use a service client only to call `auth.admin.updateUserById(user.id, { password: newPassword })`, then clear only that profile flag. Never return/log upstream errors, credentials, sessions, or password values. Use `ALLOWED_ORIGINS` and generic Vietnamese codes. Rerun Step 5; expect PASS.
+Pin dependencies in `deno.json`. Export `createChangeTemporaryPasswordHandler(deps)` and the tested runtime constructor, then call `Deno.serve()` only under `import.meta.main`. The runtime constructor must read exactly the automatically injected `SUPABASE_URL`, `SUPABASE_ANON_KEY`, and `SUPABASE_SERVICE_ROLE_KEY`; it must not require singular `SUPABASE_PUBLISHABLE_KEY`. The request carries `currentTemporaryPassword` and `newPassword` over HTTPS. Verify the Bearer caller with a JWT-scoped client and `auth.getUser()`, verify the current password with a separate non-persisting `signInWithPassword({ email: user.email, password: currentTemporaryPassword })` client, reject equality, validate the new password, use a service client only to call `auth.admin.updateUserById(user.id, { password: newPassword })`, then clear only that profile flag. Never return/log upstream errors, credentials, sessions, or password values. Use only custom `ALLOWED_ORIGINS` plus generic Vietnamese codes. Rerun Step 5 and the native Deno check; expect PASS.
 
 - [x] **Step 7: Build the accessible page/form and extend render contracts**
 
@@ -304,6 +304,8 @@ git commit -m "feat: require temporary password replacement"
 
 **Files:**
 - Create: `lib/teams/slug.ts`
+- Create: `lib/teams/navigation.ts`
+- Create: `lib/teams/return-path.ts`
 - Create: `app/setup/team/page.tsx`
 - Create: `app/setup/team/team-setup-form.tsx`
 - Create: `app/api/teams/route.ts`
@@ -317,10 +319,11 @@ git commit -m "feat: require temporary password replacement"
 - Create: `tests/team-slug.test.ts`
 - Create: `tests/team-route-boundary.test.ts`
 - Modify: `app/page.tsx`
+- Modify: `middleware.ts`
 
 **Interfaces:**
-- Consumes: product-user guard, team list/access guard, existing bootstrap trigger, and the reviewed plain-insert-then-select workaround.
-- Produces: normalized slug helpers, authenticated team-create API, setup flow, root team redirect, and permission-protected route skeletons.
+- Consumes: product-user guard, permission-retaining team lookup/access guard, existing bootstrap trigger, and the hardened atomic `create_team` RPC.
+- Produces: normalized slug helpers, one permission-aware landing resolver, authenticated team-create API, setup flow, trusted deep-link return contract, root team redirect/no-access state, and permission-protected route skeletons.
 
 - [x] **Step 1: Write and run failing slug tests**
 
@@ -339,7 +342,7 @@ Expected: FAIL because the helper is absent. Implement `normalizeTeamSlug`/`vali
 
 - [x] **Step 2: Write and run failing API behavior tests**
 
-Test exported `createTeamHandler(request, deps)` with complete doubles: unauthenticated 401, password-change 403, invalid name/slug 422, duplicate 409, insert failure generic 500, success 201. The success double must reject `.insert().select()`/`RETURNING`; allow plain insert followed by an independent select after bootstrap.
+Test exported `createTeamHandler(request, deps)` with complete doubles: unauthenticated 401, password-change 403, invalid name/slug 422, duplicate 409, atomic RPC failure generic 500, malformed RPC output generic 500, and success 201. The success double must expose only one `create_team` RPC returning the fixed `{id,name,slug}` row and reject any direct table insert/select path.
 
 ```bash
 npm run test:unit -- tests/team-route-boundary.test.ts
@@ -349,11 +352,11 @@ Expected: FAIL because the route is absent.
 
 - [x] **Step 3: Implement authenticated team creation and run GREEN**
 
-Accept only `{ name, slug? }`; derive/validate slug; get verified product user; plain-insert only `name` and `slug`; select by slug after bootstrap. Never accept owner, role, permissions, IDs, or timestamps. Return only `{ team: { id, name, slug } }` with bounded Vietnamese errors. Rerun Step 2; expect PASS.
+Accept only `{ name, slug? }`; derive/validate slug; get verified product user; call only `create_team(p_name,p_slug)`. The definer RPC supplies the verified `auth.uid()` owner, creates the team plus bootstrap rows in one transaction, returns only `{id,name,slug}`, retries only an identical same-owner/name/slug request, and rethrows a foreign duplicate. Revoke authenticated direct team INSERT so neither API validation nor the password boundary can be bypassed. Never accept owner, role, permissions, IDs, or timestamps. Return only `{ team: { id, name, slug } }` with bounded Vietnamese errors. Rerun Step 2; expect PASS.
 
 - [x] **Step 4: Add setup UI and root entry behavior**
 
-`app/page.tsx` calls `requireProductUser("/")`, then `listUserTeams(user.id)`, redirects no-team users to `/setup/team`, otherwise redirects to the encoded first team slug overview. Setup form posts to `/api/teams`, handles duplicate/validation errors, and redirects on 201.
+`app/page.tsx` calls `requireProductUser("/")`, then `loadUserTeams()`. It redirects only an explicit empty membership list to `/setup/team`; otherwise it sorts deterministically and uses the shared landing resolver across `overview`, `squad`, `matches`, `funds`, and `admin/settings`. An active membership without any routable permission renders a clear no-access state. The shell brand/fallback use the same resolver. Middleware overwrites an internal request header with the actual same-origin path/query, and team layout preserves only a safe path for the same decoded team slug through authentication. Setup form posts to `/api/teams`, handles duplicate/validation errors, and redirects on 201.
 
 - [x] **Step 5: Add permission-protected server route skeletons**
 
@@ -395,8 +398,8 @@ git commit -m "feat: add team-scoped product routes"
 - Modify: `app/globals.css`
 
 **Interfaces:**
-- Consumes: serialized `TeamAccessContext`, `hasPermission`, real team/role values, and existing Supabase logout.
-- Produces: `ProductShell`, desktop/mobile `ProductNav`, authorized route links, theme toggle, account/profile/logout controls, and a reusable layout for later slices.
+- Consumes: serialized `TeamAccessContext`, `hasPermission`, the shared permission-aware landing resolver, real team/role values, and existing Supabase logout.
+- Produces: `ProductShell`, desktop/mobile `ProductNav`, authorized route links, permission-safe brand/fallback paths, theme toggle, account/profile/logout controls, and a reusable layout for later slices.
 
 - [x] **Step 1: Write and run failing navigation tests**
 
@@ -430,7 +433,7 @@ type ProductNavProps = {
 };
 ```
 
-Use real links and construct Funds/Admin items only when authorized. Preserve accessible labels, responsive black/white/red light/dark styles, and verified logout. Rerun Step 1; expect PASS.
+Use real links and construct Funds/Admin items only when authorized. Resolve the brand target and `usePathname()` fallback through the same shared route priority as root so finance-only/settings-only roles never land on Overview. Preserve accessible labels, responsive black/white/red light/dark styles, and verified logout. Rerun Step 1; expect PASS.
 
 - [x] **Step 3: Wire the shared team layout**
 
@@ -466,7 +469,7 @@ Record an empty `git status --short`, then run:
 ```bash
 npm run test:unit
 npm test
-node --test tests/supabase-schema.test.mjs tests/supabase-rls-mutation-visibility.test.mjs tests/supabase-foundation-schema.test.mjs
+node --test tests/supabase-schema.test.mjs tests/supabase-rls-mutation-visibility.test.mjs tests/supabase-foundation-schema.test.mjs tests/supabase-foundation-pre-apply.test.mjs
 git diff --check
 ```
 
@@ -474,7 +477,7 @@ Record exact pass/failure counts and keep unrelated baseline lint/typecheck find
 
 - [x] **Step 2: Re-run PostgreSQL 17 verification**
 
-Apply core, pending RLS, and foundation migrations to a fresh temporary database; run both rollback verifiers; record assertion counts, explicit `ROLLBACK`, and zero fixtures. Do not run remote SQL.
+Apply core to a fresh temporary database, run the read-only populated-project pre-apply checkpoint before pending DDL, inspect every result for expected migration state and zero conflicts, then apply pending RLS and run the core verifier before the foundation harness. Record assertion counts, explicit `ROLLBACK`, and zero fixtures. Do not run remote SQL.
 
 - [ ] **Step 3: Run localhost browser QA**
 
@@ -482,7 +485,7 @@ Check desktop and 390x844 mobile, light/dark, root no-team redirect, setup valid
 
 - [x] **Step 4: Document the checkpoint**
 
-`docs/pro7-foundation-handoff.md` must list exact commits/migration filenames/hashes; local DB/test/build/browser evidence; pending remote operations (RLS correction, foundation migration, remote type regeneration, Edge deployment/secrets); required secret names without values; and the next squad/account-provisioning plan. It must not claim remote behavior changed.
+`docs/pro7-foundation-handoff.md` must list exact commits/migration filenames/hashes; local DB/test/build/browser evidence; the separately reviewable read-only pre-apply checkpoint before either pending migration; pending remote operations (RLS correction, foundation migration, remote type regeneration, only custom `ALLOWED_ORIGINS`, Edge deployment); and the next squad/account-provisioning plan. It must not claim remote behavior changed.
 
 - [x] **Step 5: Mark checkboxes accurately and commit**
 
