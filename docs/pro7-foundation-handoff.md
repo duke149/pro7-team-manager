@@ -3,14 +3,16 @@
 ## Scope and state
 
 This handoff records local-only evidence for the PRO7 foundation routing and
-RBAC slice.  No Supabase remote DDL, Edge deployment, secret change, type
-generation, advisor run, or browser QA was performed.  The remote project is
-therefore **not** foundation-complete.
+RBAC slice. No Supabase remote DDL, Edge deployment, secret change, type
+generation, advisor run, real-credential login, or authenticated product-route
+browser QA was completed. The remote project is therefore **not**
+foundation-complete.
 
 The linked worktree is `feature/supabase-mvp-core`. The whole-plan final-fix
 wave began at `ba802fc` and is implemented locally in `ea07ac5`. The five
-Important review findings are addressed in code and local verification, but
-browser QA and the scoped whole-plan re-review remain pending.
+Important review findings are addressed in code and local verification. The
+scoped whole-plan re-review now passes; authenticated product-route browser QA
+and all remote operations remain pending.
 
 ## Commits in this slice
 
@@ -61,6 +63,11 @@ with no output before documentation changes.
 | `npm ci --ignore-scripts --dry-run` | Exit 0 |
 | `git diff --check` | Exit 0, no output |
 
+For the scoped re-review closeout, the controller freshly reran
+`npm run test:unit` (147/147) and `npm test` (production build succeeded; 6/6
+rendered/source tests). These confirm the reviewed local head without changing
+the remote state.
+
 A disposable PostgreSQL 17.10 cluster, with only local Supabase role/auth
 stubs, applied the immutable core migration first. Before either pending file,
 `tests/supabase-foundation-pre-apply.sql` ran in a read-only transaction and
@@ -97,13 +104,47 @@ This was local disposable-database evidence only; no SQL reached Supabase.
 
 ## Browser QA ruling
 
-Browser QA is pending.  The controller ruling is that localhost uses the
-remote project, which does not yet have the pending RLS or foundation
-migrations; exercising the new profile/status-dependent routes would not test
-this slice.  Do not add a compatibility shim or claim browser runtime behavior
-until the approved remote migration/deployment checkpoint is complete.
+Browser QA is partially evidenced but remains incomplete and unchecked.
+
+- The login page passed direct IAB visual checks at desktop 1440x900 and mobile
+  390x844. It used the approved black/white/red palette with no neon or
+  horizontal overflow. Native empty-submit validation and a bounded
+  fake-invalid-credential error behaved correctly, with zero console errors or
+  warnings. No real credentials were typed.
+- In the IAB's stale authenticated session, `/`,
+  `/account/change-password`, `/setup/team`, and `/teams/demo/overview`
+  returned HTTP 500 because the configured remote project lacks the pending
+  RLS and foundation migrations. This is not evidence that the protected
+  foundation routes work after migration.
+- Separate unauthenticated local fetches to all foundation routes returned the
+  correct 307 `/login?next=...` redirects.
+
+Do not add a compatibility shim or mark protected-route browser QA complete.
+Authenticated first-login, setup, authorized custom-role destinations,
+denials, shell/logout, and desktop/mobile product behavior must be rerun only
+after the separately authorized remote checkpoint.
+
+## Scoped whole-plan re-review
+
+The final scoped review result is Spec `PASS` and Quality/Security `APPROVED`,
+with no Critical or Important findings. Two Minors remain disclosed:
+
+1. The read-only pre-apply validator would benefit from stronger
+   self-classification so its multiple evidence result sets are harder to
+   misinterpret; the current checkpoint still requires explicit human
+   inspection and stop-on-mismatch handling.
+2. Root `npx tsc --noEmit` retains the known non-gating 21 diagnostics recorded
+   above.
+
+These Minors do not broaden authorization or make the remote project ready for
+DDL. Whole-plan review is complete; protected-route browser QA and remote
+completion are not.
 
 ## Required remote checkpoint, in order
+
+The current next action is only to request separate authorization for Step 1,
+the read-only populated-project pre-apply validator. Do not bundle that request
+with DDL, deployment, or secret authorization.
 
 1. Obtain explicit authorization to run only the separately reviewable,
    read-only `tests/supabase-foundation-pre-apply.sql` against the populated

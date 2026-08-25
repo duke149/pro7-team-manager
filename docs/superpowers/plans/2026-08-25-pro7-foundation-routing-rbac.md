@@ -483,6 +483,8 @@ Apply core to a fresh temporary database, run the read-only populated-project pr
 
 Check desktop and 390x844 mobile, light/dark, root no-team redirect, setup validation, authorized overview after a controlled local fixture, Member denial of funds/settings, logout, first-login redirect, console errors/warnings, and horizontal overflow.
 
+Partial evidence only: the login page visually passed direct IAB checks at desktop 1440x900 and mobile 390x844 with the approved black/white/red palette, no neon, no horizontal overflow, native empty-submit validation, a bounded fake-invalid-credential error, and zero console errors/warnings. No real credentials were typed. Authenticated product-route QA remains incomplete: the IAB's stale authenticated session received HTTP 500 on `/`, `/account/change-password`, `/setup/team`, and `/teams/demo/overview` because the configured remote project does not yet contain the two pending migrations. Separate unauthenticated local fetches to those routes returned the expected 307 `/login?next=...` redirects. Do not check this step until the authorized remote checkpoint enables the protected-route cases.
+
 - [x] **Step 4: Document the checkpoint**
 
 `docs/pro7-foundation-handoff.md` must list exact commits/migration filenames/hashes; local DB/test/build/browser evidence; the separately reviewable read-only pre-apply checkpoint before either pending migration; pending remote operations (RLS correction, foundation migration, remote type regeneration, only custom `ALLOWED_ORIGINS`, Edge deployment); and the next squad/account-provisioning plan. It must not claim remote behavior changed.
@@ -494,6 +496,8 @@ git add docs/pro7-foundation-handoff.md docs/superpowers/plans/2026-08-25-pro7-f
 git commit -m "docs: hand off PRO7 foundation slice"
 ```
 
-- [ ] **Step 6: Complete SDD review gates**
+- [x] **Step 6: Complete SDD review gates**
 
 Run per-task reviews throughout, then generate the whole-plan review package. Resolve Critical/Important findings through the single final-fix wave and one scoped re-review. Keep all remote operations pending even when local review is clean.
+
+Scoped whole-plan re-review result: Spec `PASS`; Quality/Security `APPROVED`; no Critical or Important findings. Two Minors remain accepted and disclosed: harden the read-only pre-apply validator's self-classification in a future docs/test pass, and retire the known non-gating root TypeScript boundary of 21 diagnostics. The controller's fresh closeout gates passed unit 147/147 and `npm test` with a successful production build plus 6/6 rendered/source tests. This review completion does not complete Step 3 or authorize any remote action.
