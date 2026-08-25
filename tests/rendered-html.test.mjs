@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import { resolve } from "node:path";
 import test from "node:test";
+
+import { build } from "vite";
 
 async function render(pathname = "/") {
   const workerUrl = new URL("../dist/server/index.js", import.meta.url);
@@ -62,4 +65,40 @@ test("wires verified Supabase auth without changing Sites auth routes", async ()
   assert.match(chatgptAuth, /const SIGN_IN_PATH = "\/signin-with-chatgpt"/);
   assert.match(chatgptAuth, /const CALLBACK_PATH = "\/callback"/);
   assert.doesNotMatch(chatgptAuth, /Supabase|\/auth\/callback/);
+});
+
+test("browser password replacement bundle contains no service credential", async () => {
+  const result = await build({
+    configFile: false,
+    define: {
+      "process.env.NEXT_PUBLIC_SUPABASE_URL": JSON.stringify(
+        "https://bundle-test.supabase.co",
+      ),
+      "process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY": JSON.stringify(
+        "sb_publishable_bundle_test_key",
+      ),
+      "process.env.SUPABASE_SERVICE_ROLE_KEY": JSON.stringify(
+        "service-value-that-must-never-reach-the-browser",
+      ),
+    },
+    build: {
+      lib: {
+        entry: resolve("app/account/change-password/change-password-form.tsx"),
+        formats: ["es"],
+        fileName: "change-password-form",
+      },
+      write: false,
+    },
+  });
+  const bundledCode = (Array.isArray(result) ? result : [result])
+    .flatMap((bundle) => bundle.output)
+    .filter((output) => output.type === "chunk")
+    .map((output) => output.code)
+    .join("\n");
+
+  assert.match(bundledCode, /change-temporary-password/);
+  assert.doesNotMatch(
+    bundledCode,
+    /SUPABASE_SERVICE_ROLE_KEY|service-value-that-must-never-reach-the-browser/u,
+  );
 });
