@@ -78,19 +78,25 @@ export type Database = {
         Row: {
           joined_at: string
           role_id: string
+          status: string
           team_id: string
+          updated_at: string
           user_id: string
         }
         Insert: {
           joined_at?: string
           role_id: string
+          status?: string
           team_id: string
+          updated_at?: string
           user_id: string
         }
         Update: {
           joined_at?: string
           role_id?: string
+          status?: string
           team_id?: string
+          updated_at?: string
           user_id?: string
         }
         Relationships: [
@@ -131,6 +137,7 @@ export type Database = {
           created_at: string
           display_name: string | null
           id: string
+          requires_password_change: boolean
           updated_at: string
         }
         Insert: {
@@ -138,6 +145,7 @@ export type Database = {
           created_at?: string
           display_name?: string | null
           id: string
+          requires_password_change?: boolean
           updated_at?: string
         }
         Update: {
@@ -145,6 +153,7 @@ export type Database = {
           created_at?: string
           display_name?: string | null
           id?: string
+          requires_password_change?: boolean
           updated_at?: string
         }
         Relationships: []
