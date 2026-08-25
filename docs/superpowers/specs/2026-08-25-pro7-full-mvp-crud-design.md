@@ -9,6 +9,8 @@ This design extends the reviewed Supabase MVP core. It does not amend migration 
 ## Approved product decisions
 
 - Implement end-to-end vertical slices rather than table-by-table UI or a second mock-only frontend pass.
+- The hosted PRO7 frontend at `https://pro7-team-manager.duke149-work.chatgpt.site` and the checked-in `app/pro7-app.tsx`/`app/globals.css` prototype are the visual and interaction source of truth. Backend, database, routing, authentication, and authorization work must preserve that shell, layout, responsive behavior, labels, buttons, and black/white/red styling. The simplified foundation `ProductShell` and route placeholders are temporary infrastructure, not an approved redesign.
+- Replace mock values behind the existing UI one vertical slice at a time. Existing controls keep their placement and intent; permission checks may hide or disable an unauthorized control, and honest loading/empty/error states may replace mock content, but no slice may substitute a visually unrelated page.
 - Admin creates member accounts directly; team-membership invitations are deferred.
 - A trusted Supabase Edge Function creates the Auth user, confirms the email, assigns membership and returns a generated temporary password exactly once.
 - A newly provisioned member must change the temporary password before accessing team routes.
@@ -248,7 +250,9 @@ Push UI explicitly distinguishes unsupported browser, permission not requested, 
 
 ## UI composition
 
-Refactor the single `app/pro7-app.tsx` prototype into route-aware server pages and focused client islands. Shared navigation, cards, forms, empty/loading/error states, permission helpers, and validated action results live in small modules with explicit contracts. Existing black/white/red tokens and responsive layout remain; neon colors are not introduced.
+Refactor the single `app/pro7-app.tsx` prototype into route-aware server pages and focused client islands without visually redesigning it. The hosted screens and checked-in prototype remain the parity baseline: preserve the left rail, team picker, season/account blocks, page header actions, cards, forms, typography hierarchy, spacing, labels, buttons, modal interaction, responsive navigation, and exact black/white/red visual language. Shared navigation, cards, forms, empty/loading/error states, permission helpers, and validated action results live in small modules with explicit contracts, but component extraction must not change the rendered UX. Neon colors are not introduced.
+
+Each vertical slice gets a visual parity contract before its data work: compare the route against the hosted reference at desktop and mobile widths in light and dark modes; test the presence and order of its existing controls; and treat large layout, styling, label, or interaction drift as a blocking regression. Backend state may change the content and allowed actions, not the product identity.
 
 Server reads compose typed Supabase queries. Mutations use validated Server Actions or narrow Edge Functions/RPCs according to privilege needs. UI components never import raw environment variables, service credentials, or authorization metadata.
 
