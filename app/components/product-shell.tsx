@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { usePathname } from "next/navigation";
 
 import type { TeamAccessContext } from "../../lib/teams/context";
@@ -31,21 +31,34 @@ export function ProductShell({
 }) {
   const pathname = usePathname() || `/teams/${encodeURIComponent(team.slug)}/overview`;
   const [theme, setTheme] = useState<Theme>(INITIAL_THEME);
+  const currentTheme = useRef<Theme>(INITIAL_THEME);
+  const themeResolutionTimer = useRef<number | null>(null);
 
   useEffect(() => {
     const resolvedTheme = resolveBrowserTheme();
     if (resolvedTheme === INITIAL_THEME) return;
 
-    const timer = window.setTimeout(() => setTheme(resolvedTheme), 0);
-    return () => window.clearTimeout(timer);
+    const timer = window.setTimeout(() => {
+      themeResolutionTimer.current = null;
+      currentTheme.current = resolvedTheme;
+      setTheme(resolvedTheme);
+    }, 0);
+    themeResolutionTimer.current = timer;
+    return () => {
+      window.clearTimeout(timer);
+      if (themeResolutionTimer.current === timer) themeResolutionTimer.current = null;
+    };
   }, []);
 
   function toggleTheme() {
-    setTheme((currentTheme) => {
-      const next = nextTheme(currentTheme);
-      persistBrowserTheme(next);
-      return next;
-    });
+    if (themeResolutionTimer.current !== null) {
+      window.clearTimeout(themeResolutionTimer.current);
+      themeResolutionTimer.current = null;
+    }
+    const next = nextTheme(currentTheme.current);
+    currentTheme.current = next;
+    setTheme(next);
+    persistBrowserTheme(next);
   }
 
   return (

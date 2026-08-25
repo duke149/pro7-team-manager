@@ -19,12 +19,16 @@ type BrowserClient = {
   };
 };
 
-type Root = { render: (node: React.ReactNode) => void; unmount: () => void };
+type Root = { unmount: () => void };
 
 let ProductShell: (props: ProductShellProps) => React.ReactNode;
 let act: (callback: () => void | Promise<void>) => Promise<void>;
 let createElement: typeof import("react").createElement;
-let createRoot: (container: Element) => Root;
+let hydrateRoot: (
+  container: Element,
+  initialChildren: React.ReactNode,
+  options: { onRecoverableError: (error: Error) => void },
+) => Root;
 let renderToString: (node: React.ReactNode) => string;
 let browserWindow: Window & typeof globalThis;
 const initialHandles = new Set(process._getActiveHandles());
@@ -85,11 +89,11 @@ test.before(async () => {
   assert.ok(bundledCode, "the browser test bundle should contain an executable chunk");
   const bundleModule = { exports: {} as Record<string, unknown> };
   new Function("module", "exports", bundledCode)(bundleModule, bundleModule.exports);
-  ({ ProductShell, act, createElement, createRoot, renderToString } = bundleModule.exports as {
+  ({ ProductShell, act, createElement, hydrateRoot, renderToString } = bundleModule.exports as {
     ProductShell: typeof ProductShell;
     act: typeof act;
     createElement: typeof createElement;
-    createRoot: typeof createRoot;
+    hydrateRoot: typeof hydrateRoot;
     renderToString: typeof renderToString;
   });
 });
@@ -119,6 +123,8 @@ function configureBrowser({
   if (storedTheme !== null) values.set("pro7-theme", storedTheme);
   const writes: string[] = [];
   const replacements: string[] = [];
+  let nextTimerId = 1;
+  const timers = new Map<number, () => void>();
   Object.defineProperty(browserWindow, "localStorage", {
     configurable: true,
     value: {
@@ -133,6 +139,19 @@ function configureBrowser({
     configurable: true,
     value: () => ({ matches: prefersDark }),
   });
+  Object.defineProperty(browserWindow, "setTimeout", {
+    configurable: true,
+    value: (callback: () => void) => {
+      const timerId = nextTimerId;
+      nextTimerId += 1;
+      timers.set(timerId, callback);
+      return timerId;
+    },
+  });
+  Object.defineProperty(browserWindow, "clearTimeout", {
+    configurable: true,
+    value: (timerId: number) => timers.delete(timerId),
+  });
   browserWindow.location.replace = (href: string) => {
     replacements.push(href);
     eventLog?.push(`replace:${href}`);
@@ -141,29 +160,45 @@ function configureBrowser({
     __productShellPathname: "/teams/%C4%91%E1%BB%99i%20th%E1%BA%ADt/matches",
     __productShellBrowserClient: client,
   });
-  return { writes, replacements };
+  return {
+    writes,
+    replacements,
+    flushThemeResolution() {
+      assert.equal(timers.size, 1, "hydration should schedule exactly one theme resolution");
+      const pendingTimers = [...timers.values()];
+      timers.clear();
+      for (const timer of pendingTimers) timer();
+    },
+  };
 }
 
 function shellElement() {
   return createElement(ProductShell, shellProps, createElement("p", null, "Nội dung thật"));
 }
 
-async function mountShell() {
-  browserWindow.document.body.innerHTML = '<div id="root"></div>';
+async function hydrateShell(markup: string) {
+  browserWindow.document.body.innerHTML = `<div id="root">${markup}</div>`;
   const container = browserWindow.document.getElementById("root");
   assert.ok(container);
-  const root = createRoot(container);
+  const recoverableErrors: Error[] = [];
+  const consoleErrors: unknown[][] = [];
+  const originalConsoleError = console.error;
+  console.error = (...args: unknown[]) => consoleErrors.push(args);
+  let root: Root | undefined;
   await act(async () => {
-    root.render(shellElement());
+    root = hydrateRoot(container, shellElement(), {
+      onRecoverableError: (error) => recoverableErrors.push(error),
+    });
     await Promise.resolve();
   });
-  return { container, root };
-}
-
-async function flushThemeEffect() {
-  await act(async () => {
-    await new Promise<void>((resolve) => setTimeout(resolve, 10));
-  });
+  console.error = originalConsoleError;
+  assert.ok(root);
+  assert.deepEqual(recoverableErrors, [], "hydration must not recover from mismatched markup");
+  assert.deepEqual(consoleErrors, [], "hydration must not emit a warning");
+  return {
+    container,
+    root,
+  };
 }
 
 function idleClient(): BrowserClient {
@@ -192,7 +227,7 @@ function click(button: HTMLButtonElement) {
 }
 
 test("mounted ProductShell keeps SSR light, hydrates theme preferences, and persists queued toggles", async () => {
-  configureBrowser({ storedTheme: "dark", client: idleClient() });
+  const storedBrowser = configureBrowser({ storedTheme: "dark", client: idleClient() });
   assert.equal(window, browserWindow);
   assert.equal(window.localStorage.getItem("pro7-theme"), "dark");
   const ssr = renderToString(shellElement());
@@ -200,17 +235,22 @@ test("mounted ProductShell keeps SSR light, hydrates theme preferences, and pers
   assert.match(ssr, /aria-pressed="false"/u);
   assert.match(ssr, /aria-label="Bật giao diện tối"/u);
 
-  const first = await mountShell();
-  assert.match(first.container.innerHTML, /pro7-shell product-shell light/u);
-  await flushThemeEffect();
+  const first = await hydrateShell(ssr);
+  await act(async () => {
+    storedBrowser.flushThemeResolution();
+  });
   assert.match(first.container.innerHTML, /pro7-shell product-shell dark/u);
   assert.equal(themeButton(first.container).getAttribute("aria-pressed"), "true");
   assert.equal(themeButton(first.container).getAttribute("aria-label"), "Bật giao diện sáng");
   await act(async () => first.root.unmount());
 
-  configureBrowser({ prefersDark: true, client: idleClient() });
-  const system = await mountShell();
-  await flushThemeEffect();
+  const systemBrowser = configureBrowser({ prefersDark: true, client: idleClient() });
+  const systemSsr = renderToString(shellElement());
+  assert.match(systemSsr, /pro7-shell product-shell light/u);
+  const system = await hydrateShell(systemSsr);
+  await act(async () => {
+    systemBrowser.flushThemeResolution();
+  });
   assert.match(system.container.innerHTML, /pro7-shell product-shell dark/u);
 
   const controls = configureBrowser({ storedTheme: "dark", client: idleClient() });
@@ -299,7 +339,8 @@ test("mounted AccountMenu applies verified local logout outcomes to the actual b
       },
     };
     const browser = configureBrowser({ client, eventLog: calls });
-    const mounted = await mountShell();
+    const ssr = renderToString(shellElement());
+    const mounted = await hydrateShell(ssr);
     await act(async () => {
       click(logoutButton(mounted.container));
       await Promise.resolve();
@@ -334,7 +375,8 @@ test("mounted AccountMenu disables during a successful local sign-out and safely
     },
   };
   const browser = configureBrowser({ client, eventLog: calls });
-  const mounted = await mountShell();
+  const ssr = renderToString(shellElement());
+  const mounted = await hydrateShell(ssr);
   await act(async () => {
     click(logoutButton(mounted.container));
     await Promise.resolve();
