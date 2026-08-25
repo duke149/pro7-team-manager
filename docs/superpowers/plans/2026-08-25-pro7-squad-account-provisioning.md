@@ -171,13 +171,14 @@ git commit -m "fix: restore hosted PRO7 route interface"
 **Files:**
 - Create with CLI: `supabase/migrations/*_pro7_squad_profiles.sql`
 - Create: `tests/supabase-squad-schema.test.mjs`
+- Create: `tests/avatar-policy.test.mjs`
 - Create: `tests/supabase-squad-live-verification.sql`
 - Create: `tests/supabase-squad-live-harness.sql`
 - Modify: `lib/supabase/database.types.ts`
 
 **Interfaces:**
 - Consumes: applied core, RLS visibility, and foundation migrations; `private.has_team_permission`; system roles; membership lifecycle; audit infrastructure.
-- Produces: personal columns, `team_player_profiles`, explicit grants/RLS, safe admin-detail/manage RPCs, and service-role account attachment RPC.
+- Produces: personal columns, `team_player_profiles`, private `player-avatars` bucket/policies, explicit grants/RLS, safe admin-detail/manage RPCs, and service-role account attachment RPC.
 
 - [ ] **Step 1: Create the additive migration with the pinned CLI**
 
@@ -189,7 +190,7 @@ Record the exact generated path. Do not rename it.
 
 - [ ] **Step 2: Write the static contract and observe RED**
 
-Assert exact columns, checks, composite foreign key, partial unique shirt-number index, `(team_id, player_status, official_position)` list index, update trigger, RLS enablement, explicit revokes/grants, policies, fixed-search-path functions, public-execute revocations, permission checks, owner/cross-team rejection, and audit redaction.
+Assert exact columns, checks, composite foreign key, partial unique shirt-number index, `(team_id, player_status, official_position)` list index, update trigger, RLS enablement, explicit revokes/grants, policies, fixed-search-path functions, public-execute revocations, permission checks, owner/cross-team rejection, audit redaction, and private avatar bucket policies.
 
 ```bash
 node --test tests/supabase-squad-schema.test.mjs
@@ -199,7 +200,7 @@ Expected: FAIL because the new migration is empty.
 
 - [ ] **Step 3: Implement the minimal schema and safe read boundary**
 
-Add the exact domain contract above. `authenticated` receives:
+Add the exact domain contract above. Create the private `player-avatars` bucket idempotently with a 3 MiB limit and only JPEG/PNG/WebP MIME types. Storage policies grant authenticated users SELECT/INSERT/UPDATE/DELETE only when the first object-name segment equals `auth.uid()`; upsert therefore has SELECT+INSERT+UPDATE, while cross-user listing/reads remain denied. `authenticated` receives:
 
 - `SELECT` on explicit safe `profiles` columns;
 - `UPDATE` only on allowed personal columns;
@@ -215,7 +216,7 @@ Use fully qualified relations, `SECURITY DEFINER`, `set search_path = ''`, owner
 
 - [ ] **Step 5: Run static GREEN and PostgreSQL 17 rollback verification**
 
-The transactional verifier must cover Owner/Admin/Member/unrelated users, safe-column reads, no `admin_notes` leakage, own-profile updates, cross-user denial, valid/invalid physical and position data, duplicate shirt numbers, Admin edit/deactivate, Member mutation denial, Owner target denial, same-team role enforcement, inactive-user visibility semantics, service attachment authorization, explicit `ROLLBACK`, and zero fixture counts.
+The transactional verifier must cover Owner/Admin/Member/unrelated users, safe-column reads, no `admin_notes` leakage, own-profile updates, cross-user denial, valid/invalid physical and position data, duplicate shirt numbers, Admin edit/deactivate, Member mutation denial, Owner target denial, same-team role enforcement, inactive-user visibility semantics, service attachment authorization, avatar owner-path/cross-user denial where locally testable, explicit `ROLLBACK`, and zero fixture counts.
 
 ```bash
 node --test tests/supabase-schema.test.mjs tests/supabase-foundation-schema.test.mjs tests/supabase-squad-schema.test.mjs
@@ -229,9 +230,13 @@ Add exact `profiles` and `team_player_profiles` Row/Insert/Update metadata and R
 npm run test:unit -- tests/supabase-squad-schema.test.mjs
 npx eslint lib/supabase/database.types.ts tests/supabase-squad-schema.test.mjs
 git diff --check
-git add supabase/migrations tests/supabase-squad-* lib/supabase/database.types.ts
+git add supabase/migrations tests/supabase-squad-* tests/avatar-policy.test.mjs lib/supabase/database.types.ts
 git commit -m "feat: add squad and player profile schema"
 ```
+
+- [ ] **Step 7: Prepare the reviewed remote migration checkpoint and pause**
+
+Report the exact migration filename/hash, static/live rollback evidence, object/grant/RLS inventory, preapply read-only conflicts, and the precise remote apply command/tool payload. Because remote DDL is security-sensitive and outside the worktree, stop for explicit user authorization before applying it. After authorization, apply exactly once, regenerate types, run post-apply rollback/cleanup/advisor checks, and only then continue to Task 3 so localhost CRUD exercises the real schema rather than a mock adapter.
 
 ---
 
@@ -391,14 +396,13 @@ git commit -m "feat: add trusted member provisioning"
 - Create: `lib/account/profile.ts`
 - Create: `lib/account/avatar.ts`
 - Create: `tests/profile-actions.test.ts`
-- Create: `tests/avatar-policy.test.mjs`
 - Create: `tests/profile-page.test.ts`
 - Modify: `app/components/account-menu.tsx`
 - Modify: `app/globals.css`
 - Modify: `tests/rendered-html.test.mjs`
 
 **Interfaces:**
-- Consumes: Task 2 own-profile grants/RLS and private `player-avatars` bucket policies declared in the slice migration.
+- Consumes: Task 2 own-profile grants/RLS and already-reviewed private `player-avatars` bucket policies declared in the slice migration.
 - Produces: `/account/profile`, own-profile update API, authenticated avatar upload/replace/remove, and profile navigation.
 
 - [ ] **Step 1: Write profile and avatar validation tests and observe RED**
@@ -409,9 +413,9 @@ Cover exact personal fields, display-name/phone bounds, dates, numeric ranges, u
 
 The API verifies identity, same-origin JSON request, strict keys, and updates only allowed columns for `auth.uid()`. Clearing nullable fields is explicit. It never accepts a target user ID.
 
-- [ ] **Step 3: Complete migration Storage contract and observe RED/GREEN**
+- [ ] **Step 3: Verify the existing Storage contract RED/GREEN at the client boundary**
 
-The Task 2 migration creates a private `player-avatars` bucket idempotently with 3 MiB and allowed MIME types. Storage policies grant authenticated users SELECT/INSERT/UPDATE/DELETE only within their first path segment equal to `auth.uid()`. Upsert has SELECT+INSERT+UPDATE. Bucket listing across users remains denied. Static tests assert the actual policy effects contract, and PostgreSQL rollback verification covers path denial where locally testable.
+Reuse Task 2's schema/policy tests and add client-boundary behavior tests proving the canonical path and operation set cannot target another user. Do not amend a migration after it has been remotely applied. Bucket listing across users remains denied.
 
 - [ ] **Step 4: Implement profile page and upload client island**
 
@@ -425,7 +429,7 @@ node --test tests/avatar-policy.test.mjs tests/rendered-html.test.mjs
 npx eslint app/account/profile app/api/account/profile lib/account tests/profile-*.test.ts
 npm run build
 git diff --check
-git add app/account app/api/account app/components/account-menu.tsx lib/account app/globals.css tests supabase/migrations
+git add app/account app/api/account app/components/account-menu.tsx lib/account app/globals.css tests
 git commit -m "feat: add member profile and private avatars"
 ```
 
