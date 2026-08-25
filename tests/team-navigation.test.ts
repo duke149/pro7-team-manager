@@ -24,7 +24,10 @@ test("landing resolver uses one deterministic priority across real team routes",
   );
 });
 
-test("landing resolver returns no route for an active membership without routable permissions", () => {
+test("landing resolver gives a tactics-only member the stable tactics landing", () => {
   assert.equal(resolveTeamLandingPath(slug, []), null);
-  assert.equal(resolveTeamLandingPath(slug, ["tactics.read"]), null);
+  assert.equal(
+    resolveTeamLandingPath(slug, ["tactics.read"]),
+    "/teams/%C4%91%E1%BB%99i%20b%C3%B3ng/tactics",
+  );
 });

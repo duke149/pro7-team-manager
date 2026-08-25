@@ -34,7 +34,7 @@ test("redirects an unauthenticated dashboard request to the Supabase login", asy
 });
 
 test("includes the production shell surfaces and social metadata", async () => {
-  const [navigation, routeNavigation, routeHeader, routeShell, squadSkeleton, overview, squad, matches, funds, settings, teamLayout, layout] = await Promise.all([
+  const [navigation, routeNavigation, routeHeader, routeShell, squadSkeleton, overview, squad, tactics, matches, funds, settings, teamLayout, layout, styles] = await Promise.all([
     readFile(new URL("../app/components/product-nav.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/components/pro7-route-navigation.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/components/pro7-route-header.tsx", import.meta.url), "utf8"),
@@ -42,11 +42,13 @@ test("includes the production shell surfaces and social metadata", async () => {
     readFile(new URL("../app/components/pro7-squad-skeleton.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/teams/[slug]/overview/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/teams/[slug]/squad/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/teams/[slug]/tactics/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/teams/[slug]/matches/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/teams/[slug]/funds/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/teams/[slug]/admin/settings/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/teams/[slug]/layout.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/layout.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
   ]);
   for (const label of ["Tổng quan", "Đội hình", "Trận đấu", "Quỹ đội", "Cài đặt đội"]) {
     assert.match(navigation, new RegExp(label));
@@ -71,8 +73,12 @@ test("includes the production shell surfaces and social metadata", async () => {
   assert.match(squadSkeleton, /add-player-card/);
   assert.match(squad, /Pro7SquadSkeleton/);
   assert.doesNotMatch(squad, /TeamPlaceholder/);
+  assert.match(tactics, /tactics\.read/);
+  assert.match(tactics, /Chưa có trận đấu để lập chiến thuật/);
   assert.match(teamLayout, /Pro7RouteShell/);
   assert.doesNotMatch(teamLayout, /ProductShell/);
+  assert.match(styles, /\.main-nav a\.active\{[^}]*color:\s*(?:#fff|white)/u);
+  assert.doesNotMatch(styles, /\.main-nav a\.active\{[^}]*color:\s*var\(--navy\)/u);
   assert.match(layout, /openGraph/);
   assert.match(layout, /twitter/);
   assert.doesNotMatch(layout, /og\.png/);

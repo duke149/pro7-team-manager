@@ -4,6 +4,7 @@ const TEAM_LANDING_CANDIDATES = [
   { path: "overview", permission: "team.read" },
   { path: "squad", permission: "players.read" },
   { path: "matches", permission: "matches.read" },
+  { path: "tactics", permission: "tactics.read" },
   { path: "funds", permission: "finance.read" },
   { path: "admin/settings", permission: "settings.read" },
 ] as const satisfies readonly {

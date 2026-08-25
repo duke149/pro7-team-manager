@@ -125,7 +125,7 @@ test("hosted route navigation preserves the five-slot Squad order with route lin
     }),
   );
 
-  assert.deepEqual(destinations(html).slice(0, 8), [
+  assert.deepEqual(destinations(html).slice(0, 7), [
     "/teams/%C4%91%E1%BB%99i%20b%C3%B3ng/overview",
     "/teams/%C4%91%E1%BB%99i%20b%C3%B3ng/overview",
     "/teams/%C4%91%E1%BB%99i%20b%C3%B3ng/overview",
@@ -133,10 +133,10 @@ test("hosted route navigation preserves the five-slot Squad order with route lin
     "/teams/%C4%91%E1%BB%99i%20b%C3%B3ng/matches",
     "/teams/%C4%91%E1%BB%99i%20b%C3%B3ng/tactics",
     "/teams/%C4%91%E1%BB%99i%20b%C3%B3ng/funds",
-    "/account/profile",
   ]);
   assert.match(html, /TEAM MANAGER/u);
   assert.match(html, /href="\/teams\/%C4%91%E1%BB%99i%20b%C3%B3ng\/squad" class="active"/u);
+  assert.doesNotMatch(html, /href="\/account\/profile"/u);
 });
 
 test("hosted route navigation hides only unauthorized Funds without changing the mobile link order", () => {

@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
 import { resolve } from "node:path";
 import test from "node:test";
+import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { createServer, type ViteDevServer } from "vite";
 
+import { Pro7RouteHeader } from "../app/components/pro7-route-header";
 import type { TeamAccessContext } from "../lib/teams/context";
 
 type SquadRouteModule = {
@@ -102,4 +104,19 @@ test("member Squad route hides every add-player control", async () => {
 
   assert.doesNotMatch(html, /Thêm cầu thủ|Đăng ký thành viên mới/u);
   assert.match(html, /class="[^"]*player-grid/u);
+});
+
+test("member route header omits the add-player CTA as well as the Squad grid card", () => {
+  const html = renderToStaticMarkup(createElement(Pro7RouteHeader, {
+    team: adminContext.team,
+    permissions: ["team.read", "players.read", "matches.read", "tactics.read"],
+    email: "member@example.com",
+    pathname: "/teams/fc-spartans/squad",
+    theme: "light",
+    onThemeChange: () => {},
+    onOpenMenu: () => {},
+  }));
+
+  assert.doesNotMatch(html, /header-cta|Thêm cầu thủ/u);
+  assert.match(html, /Thông báo/u);
 });

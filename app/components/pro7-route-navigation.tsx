@@ -110,10 +110,10 @@ export function Pro7RouteNavigation({
           })}
         </nav>
         <div className="season-card"><Trophy size={17} /><div><b>Premier 7s</b><span>Hạng 2 • Vòng 8/18</span></div><strong>#2</strong></div>
-        <a className="coach" href="/account/profile">
+        <div className="coach">
           <div className="initial-avatar lime-avatar">{initials(email)}</div>
           <div><b>{email ?? "Tài khoản đã xác minh"}</b><span>{roleName}</span></div><MoreHorizontal size={19} />
-        </a>
+        </div>
       </aside>
     </>
   );
