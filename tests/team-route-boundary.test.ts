@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { resolve } from "node:path";
 import test from "node:test";
+import { renderToStaticMarkup } from "react-dom/server";
 import { createServer, type ViteDevServer } from "vite";
 
 import type { PermissionCode } from "../lib/teams/permissions";
@@ -34,6 +35,7 @@ type RouteArgs = {
 
 type ApiModule = {
   createTeamHandler(request: Request, dependencies: ApiDependencies): Promise<Response>;
+  POST(request: Request, resolveDependencies?: () => Promise<ApiDependencies>): Promise<Response>;
 };
 
 type ApiDependencies = {
@@ -46,15 +48,33 @@ type ApiDependencies = {
 type RootModule = {
   redirectFromRoot(dependencies: {
     requireProductUser: (next: string) => Promise<ProductUser>;
-    listUserTeams: (userId: string) => Promise<Team[]>;
+    loadUserTeams: (userId: string) => Promise<{ ok: true; teams: Team[] } | { ok: false }>;
     redirect: (url: string) => never;
   }): Promise<never>;
+};
+
+type LayoutModule = {
+  renderTeamLayout(args: {
+    children: unknown;
+    params: Promise<{ slug: string }>;
+    requireProductUser: (next: string) => Promise<ProductUser>;
+  }): Promise<unknown>;
+};
+
+type PlaceholderModule = {
+  TeamPlaceholder(args: {
+    context: TeamContext;
+    title: string;
+    pendingSlice: string;
+  }): React.ReactElement;
 };
 
 let vite: ViteDevServer;
 let api: ApiModule;
 let root: RootModule;
 let routes: TeamRouteModule;
+let layout: LayoutModule;
+let placeholder: PlaceholderModule;
 
 test.before(async () => {
   vite = await createServer({
@@ -69,7 +89,7 @@ test.before(async () => {
     server: { middlewareMode: true },
   });
 
-  const [apiModule, rootModule, overview, squad, matches, funds, settings] = await Promise.all([
+  const [apiModule, rootModule, overview, squad, matches, funds, settings, layoutModule, placeholderModule] = await Promise.all([
     vite.ssrLoadModule("/app/api/teams/route.ts"),
     vite.ssrLoadModule("/app/page.tsx"),
     vite.ssrLoadModule("/app/teams/[slug]/overview/page.tsx"),
@@ -77,12 +97,16 @@ test.before(async () => {
     vite.ssrLoadModule("/app/teams/[slug]/matches/page.tsx"),
     vite.ssrLoadModule("/app/teams/[slug]/funds/page.tsx"),
     vite.ssrLoadModule("/app/teams/[slug]/admin/settings/page.tsx"),
+    vite.ssrLoadModule("/app/teams/[slug]/layout.tsx"),
+    vite.ssrLoadModule("/app/components/team-placeholder.tsx"),
   ]).catch(() => []);
   assert.ok(apiModule, "team API must expose an injected createTeamHandler");
   assert.ok(rootModule, "root must expose an injected redirect behavior");
   assert.ok(overview && squad && matches && funds && settings, "team route skeletons must exist");
   api = apiModule as ApiModule;
   root = rootModule as RootModule;
+  layout = layoutModule as LayoutModule;
+  placeholder = placeholderModule as PlaceholderModule;
   routes = {
     renderOverviewPage: overview.renderOverviewPage,
     renderSquadPage: squad.renderSquadPage,
@@ -100,10 +124,18 @@ function response<T>(data: T, error: { code?: string; message: string } | null =
   return { data, error, count: null, status: error ? 500 : 200, statusText: error ? "Failure" : "OK" };
 }
 
-function request(body: unknown): Request {
+function request(
+  body: unknown,
+  headers: Record<string, string> = {},
+): Request {
   return new Request("https://pro7.example/api/teams", {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: {
+      "content-type": "application/json",
+      origin: "https://pro7.example",
+      "sec-fetch-site": "same-origin",
+      ...headers,
+    },
     body: JSON.stringify(body),
   });
 }
@@ -158,6 +190,76 @@ test("createTeamHandler rejects unauthenticated and password-change callers", as
   assert.deepEqual(passwordChange.calls, []);
 });
 
+test("createTeamHandler rejects cross-origin mutations before body, auth, or database work", async () => {
+  const fixture = apiDependencies();
+  const responseValue = await api.createTeamHandler(
+    request({ name: "Falcons" }, { origin: "https://attacker.example" }),
+    fixture.dependencies,
+  );
+
+  assert.equal(responseValue.status, 403);
+  assert.deepEqual(fixture.calls, []);
+});
+
+test("createTeamHandler requires application/json before auth or database work", async () => {
+  const fixture = apiDependencies();
+  const responseValue = await api.createTeamHandler(
+    request({ name: "Falcons" }, { "content-type": "text/plain" }),
+    fixture.dependencies,
+  );
+
+  assert.equal(responseValue.status, 415);
+  assert.deepEqual(fixture.calls, []);
+});
+
+test("createTeamHandler differentiates oversized and malformed JSON bodies", async () => {
+  const fixture = apiDependencies();
+  const oversized = await api.createTeamHandler(
+    request({ name: "Falcons" }, { "content-length": "8193" }),
+    fixture.dependencies,
+  );
+  assert.equal(oversized.status, 413);
+  assert.deepEqual(fixture.calls, []);
+
+  const streamFixture = apiDependencies();
+  const stream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(new TextEncoder().encode(JSON.stringify("x".repeat(8_193))));
+      controller.close();
+    },
+  });
+  const streamedOversized = await api.createTeamHandler(
+    new Request("https://pro7.example/api/teams", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        origin: "https://pro7.example",
+        "sec-fetch-site": "same-origin",
+      },
+      body: stream,
+      duplex: "half",
+    }),
+    streamFixture.dependencies,
+  );
+  assert.equal(streamedOversized.status, 413);
+  assert.deepEqual(streamFixture.calls, []);
+
+  const malformed = await api.createTeamHandler(
+    new Request("https://pro7.example/api/teams", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json; charset=utf-8",
+        origin: "https://pro7.example",
+        "sec-fetch-site": "same-origin",
+      },
+      body: "{not-json",
+    }),
+    fixture.dependencies,
+  );
+  assert.equal(malformed.status, 400);
+  assert.deepEqual(fixture.calls, []);
+});
+
 test("createTeamHandler permits only a bounded name and optional validated slug", async () => {
   for (const body of [
     { name: "", slug: "falcons" },
@@ -188,6 +290,78 @@ test("createTeamHandler keeps unknown insert failures generic", async () => {
 
   assert.equal(responseValue.status, 500);
   assert.doesNotMatch(await responseValue.text(), /connection secret|internal detail/u);
+});
+
+test("createTeamHandler converts rejected auth, insert, and select dependencies to generic 500 responses", async () => {
+  const rejectedAuth = apiDependencies();
+  rejectedAuth.dependencies.getProductUser = async () => Promise.reject(new Error("auth upstream detail"));
+  const authResponse = await api.createTeamHandler(request({ name: "Falcons" }), rejectedAuth.dependencies);
+  assert.equal(authResponse.status, 500);
+  assert.doesNotMatch(await authResponse.text(), /auth upstream detail/u);
+
+  const rejectedInsert = apiDependencies();
+  rejectedInsert.dependencies.supabase = {
+    from() {
+      return { insert: async () => Promise.reject(new Error("insert upstream detail")) };
+    },
+  };
+  const insertResponse = await api.createTeamHandler(request({ name: "Falcons" }), rejectedInsert.dependencies);
+  assert.equal(insertResponse.status, 500);
+  assert.doesNotMatch(await insertResponse.text(), /insert upstream detail/u);
+
+  const rejectedSelect = apiDependencies();
+  rejectedSelect.dependencies.supabase = {
+    from() {
+      return {
+        insert: async () => response(null),
+        select() {
+          return { eq: () => ({ maybeSingle: async () => Promise.reject(new Error("select upstream detail")) }) };
+        },
+      };
+    },
+  };
+  const selectResponse = await api.createTeamHandler(request({ name: "Falcons" }), rejectedSelect.dependencies);
+  assert.equal(selectResponse.status, 500);
+  assert.doesNotMatch(await selectResponse.text(), /select upstream detail/u);
+});
+
+test("exported POST adapter returns a generic 500 when dependency initialization rejects", async () => {
+  const responseValue = await api.POST(
+    request({ name: "Falcons" }),
+    async () => Promise.reject(new Error("environment initialization detail")),
+  );
+
+  assert.equal(responseValue.status, 500);
+  assert.doesNotMatch(await responseValue.text(), /environment initialization detail/u);
+});
+
+test("exported POST adapter rejects a foreign origin before dependency initialization", async () => {
+  let dependencyInitialization = 0;
+  const responseValue = await api.POST(
+    request({ name: "Falcons" }, { origin: "https://attacker.example" }),
+    async () => {
+      dependencyInitialization += 1;
+      throw new Error("must not initialize");
+    },
+  );
+
+  assert.equal(responseValue.status, 403);
+  assert.equal(dependencyInitialization, 0);
+});
+
+test("exported POST adapter passes resolved server dependencies into the real team handler", async () => {
+  const fixture = apiDependencies();
+  const responseValue = await api.POST(
+    request({ name: "Falcons" }),
+    async () => fixture.dependencies,
+  );
+
+  assert.equal(responseValue.status, 201);
+  assert.deepEqual(fixture.calls, [
+    { method: "insert", value: { name: "Falcons", slug: "falcons" } },
+    { method: "select", value: "id, name, slug" },
+    { method: "eq", value: { field: "slug", value: "falcons" } },
+  ]);
 });
 
 test("createTeamHandler does a plain insert then independent bootstrap select", async () => {
@@ -222,9 +396,9 @@ test("root redirects a verified user to setup without teams and first sorted tea
   await assert.rejects(
     root.redirectFromRoot({
       requireProductUser: async () => ({ user: { id: "user-1" }, requiresPasswordChange: false }),
-      listUserTeams: async (userId) => {
+      loadUserTeams: async (userId) => {
         receivedUserId = userId;
-        return [];
+        return { ok: true, teams: [] };
       },
       redirect,
     }),
@@ -236,15 +410,69 @@ test("root redirects a verified user to setup without teams and first sorted tea
   await assert.rejects(
     root.redirectFromRoot({
       requireProductUser: async () => ({ user: { id: "user-1" }, requiresPasswordChange: false }),
-      listUserTeams: async () => [
-        { id: "team-2", name: "Zebra", slug: "zebra" },
-        { id: "team-1", name: "Alpha", slug: "đội bóng" },
-      ],
+      loadUserTeams: async () => ({
+        ok: true,
+        teams: [
+          { id: "team-2", name: "Zebra", slug: "zebra" },
+          { id: "team-1", name: "Alpha", slug: "đội bóng" },
+        ],
+      }),
       redirect,
     }),
     /redirected/,
   );
   assert.deepEqual(redirects, ["/setup/team", "/teams/%C4%91%E1%BB%99i%20b%C3%B3ng/overview"]);
+});
+
+test("root does not convert a failed team lookup into a setup redirect", async () => {
+  const redirects: string[] = [];
+  await assert.rejects(
+    root.redirectFromRoot({
+      requireProductUser: async () => ({ user: { id: "user-1" }, requiresPasswordChange: false }),
+      loadUserTeams: async () => ({ ok: false }),
+      redirect: (url): never => {
+        redirects.push(url);
+        throw new Error("redirected");
+      },
+    }),
+    /Không thể tải danh sách đội/,
+  );
+  assert.deepEqual(redirects, []);
+});
+
+test("team layout enforces the product-user guard for its encoded team route", async () => {
+  const seen: string[] = [];
+  const children = { content: "child" };
+  assert.equal(
+    await layout.renderTeamLayout({
+      children,
+      params: Promise.resolve({ slug: "đội bóng" }),
+      requireProductUser: async (next) => {
+        seen.push(next);
+        return { user: { id: "user-1" }, requiresPasswordChange: false };
+      },
+    }),
+    children,
+  );
+  assert.deepEqual(seen, ["/teams/%C4%91%E1%BB%99i%20b%C3%B3ng/overview"]);
+});
+
+test("TeamPlaceholder renders the real team, role, and pending vertical-slice state", () => {
+  const html = renderToStaticMarkup(
+    placeholder.TeamPlaceholder({
+      context: {
+        team: { id: "team-1", name: "Đội Thật", slug: "doi-that" },
+        userId: "user-1",
+        membership: { roleId: "role-1", roleSlug: "member", roleName: "Thành viên" },
+        permissions: ["team.read"],
+      },
+      title: "Tổng quan",
+      pendingSlice: "Dữ liệu tổng quan",
+    }),
+  );
+  assert.match(html, /Đội Thật/u);
+  assert.match(html, /Vai trò hiện tại: Thành viên/u);
+  assert.match(html, /Dữ liệu tổng quan sẽ được xây dựng ở lát cắt tiếp theo/u);
 });
 
 test("team route skeletons request the exact permission and withhold member-only protected output", async () => {

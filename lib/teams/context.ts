@@ -13,6 +13,10 @@ type TeamSummary = {
   slug: string;
 };
 
+export type TeamListLookup =
+  | { ok: true; teams: TeamSummary[] }
+  | { ok: false };
+
 type AccessRpcRow = {
   team_id: string;
   team_name: string;
@@ -145,29 +149,39 @@ export async function loadTeamAccessContext(
   }
 }
 
-export async function listUserTeams(
+export async function loadUserTeams(
   dependencies: TeamContextDependencies = {},
-): Promise<TeamSummary[]> {
+): Promise<TeamListLookup> {
   try {
     const user = await resolveCurrentUser(dependencies.getCurrentUser);
-    if (!user) return [];
+    if (!user) return { ok: false };
 
     const rows = await loadAccessRows(
       await resolveSupabaseClient(dependencies.supabase),
     );
-    if (!rows) return [];
+    if (!rows) return { ok: false };
 
-    return rows
-      .map((row) => ({ id: row.team_id, name: row.team_name, slug: row.team_slug }))
-      .sort(
-        (left, right) =>
-          compareText(left.name, right.name) ||
-          compareText(left.slug, right.slug) ||
-          compareText(left.id, right.id),
-      );
+    return {
+      ok: true,
+      teams: rows
+        .map((row) => ({ id: row.team_id, name: row.team_name, slug: row.team_slug }))
+        .sort(
+          (left, right) =>
+            compareText(left.name, right.name) ||
+            compareText(left.slug, right.slug) ||
+            compareText(left.id, right.id),
+        ),
+    };
   } catch {
-    return [];
+    return { ok: false };
   }
+}
+
+export async function listUserTeams(
+  dependencies: TeamContextDependencies = {},
+): Promise<TeamSummary[]> {
+  const result = await loadUserTeams(dependencies);
+  return result.ok ? result.teams : [];
 }
 
 export async function requireTeamPermission(

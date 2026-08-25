@@ -1,6 +1,6 @@
 import { requireProductUser } from "../lib/supabase/auth";
 import { redirect } from "next/navigation";
-import { listUserTeams } from "../lib/teams/context";
+import { loadUserTeams, type TeamListLookup } from "../lib/teams/context";
 
 type TeamSummary = { id: string; name: string; slug: string };
 
@@ -13,24 +13,25 @@ function compareTeams(left: TeamSummary, right: TeamSummary): number {
 
 export async function redirectFromRoot({
   requireProductUser: requireUser,
-  listUserTeams: listTeams,
+  loadUserTeams: loadTeams,
   redirect: redirectTo,
 }: {
   requireProductUser: typeof requireProductUser;
-  listUserTeams: (userId: string) => Promise<TeamSummary[]>;
+  loadUserTeams: (userId: string) => Promise<TeamListLookup>;
   redirect: (url: string) => never;
 }): Promise<never> {
   const productUser = await requireUser("/");
-  return redirectVerifiedUserFromRoot(productUser, listTeams, redirectTo);
+  return redirectVerifiedUserFromRoot(productUser, loadTeams, redirectTo);
 }
 
 async function redirectVerifiedUserFromRoot(
   productUser: Awaited<ReturnType<typeof requireProductUser>>,
-  listTeams: (userId: string) => Promise<TeamSummary[]>,
+  loadTeams: (userId: string) => Promise<TeamListLookup>,
   redirectTo: (url: string) => never,
 ): Promise<never> {
-  const teams = await listTeams(productUser.user.id);
-  const firstTeam = [...teams].sort(compareTeams)[0];
+  const lookup = await loadTeams(productUser.user.id);
+  if (!lookup.ok) throw new Error("Không thể tải danh sách đội.");
+  const firstTeam = [...lookup.teams].sort(compareTeams)[0];
   return redirectTo(
     firstTeam
       ? `/teams/${encodeURIComponent(firstTeam.slug)}/overview`
@@ -40,5 +41,5 @@ async function redirectVerifiedUserFromRoot(
 
 export default async function Home() {
   const productUser = await requireProductUser("/");
-  return redirectVerifiedUserFromRoot(productUser, () => listUserTeams(), redirect);
+  return redirectVerifiedUserFromRoot(productUser, () => loadUserTeams(), redirect);
 }

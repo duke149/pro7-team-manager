@@ -13,8 +13,89 @@ type TeamApiDependencies = {
 
 type TeamInsertPayload = { name: string; slug: string };
 
+const MAX_TEAM_REQUEST_BYTES = 8 * 1024;
+
 function failure(status: number, code: string, error: string): Response {
   return Response.json({ code, error }, { status });
+}
+
+function genericServerFailure(): Response {
+  return failure(500, "server", "Không thể tạo đội. Vui lòng thử lại.");
+}
+
+function isSameOriginMutation(request: Request): boolean {
+  const origin = request.headers.get("origin");
+  if (origin) {
+    try {
+      return origin === new URL(request.url).origin;
+    } catch {
+      return false;
+    }
+  }
+
+  return request.headers.get("sec-fetch-site") === "same-origin";
+}
+
+function hasJsonContentType(request: Request): boolean {
+  return (
+    request.headers
+      .get("content-type")
+      ?.split(";", 1)[0]
+      ?.trim()
+      .toLowerCase() === "application/json"
+  );
+}
+
+function preflightFailure(request: Request): Response | null {
+  if (!isSameOriginMutation(request)) {
+    return failure(403, "forbidden", "Yêu cầu không được phép.");
+  }
+  if (!hasJsonContentType(request)) {
+    return failure(415, "content_type", "Định dạng yêu cầu không được hỗ trợ.");
+  }
+  return null;
+}
+
+type JsonReadResult =
+  | { ok: true; value: unknown }
+  | { ok: false; status: 400 | 413 };
+
+async function readJsonBody(request: Request): Promise<JsonReadResult> {
+  const declaredLength = request.headers.get("content-length")?.trim();
+  if (declaredLength && /^\d+$/u.test(declaredLength)) {
+    const bytes = Number(declaredLength);
+    if (Number.isSafeInteger(bytes) && bytes > MAX_TEAM_REQUEST_BYTES) {
+      return { ok: false, status: 413 };
+    }
+  }
+
+  if (!request.body) return { ok: false, status: 400 };
+
+  try {
+    const reader = request.body.getReader();
+    const chunks: Uint8Array[] = [];
+    let byteLength = 0;
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      byteLength += value.byteLength;
+      if (byteLength > MAX_TEAM_REQUEST_BYTES) {
+        await reader.cancel().catch(() => undefined);
+        return { ok: false, status: 413 };
+      }
+      chunks.push(value);
+    }
+
+    const bytes = new Uint8Array(byteLength);
+    let offset = 0;
+    for (const chunk of chunks) {
+      bytes.set(chunk, offset);
+      offset += chunk.byteLength;
+    }
+    return { ok: true, value: JSON.parse(new TextDecoder().decode(bytes)) };
+  } catch {
+    return { ok: false, status: 400 };
+  }
 }
 
 function isTeamRecord(value: unknown): value is TeamRecord {
@@ -66,39 +147,60 @@ export async function createTeamHandler(
   request: Request,
   dependencies: TeamApiDependencies,
 ): Promise<Response> {
-  const productUser = await dependencies.getProductUser("/setup/team");
-  if (!productUser) return failure(401, "unauthorized", "Bạn cần đăng nhập để tạo đội.");
-  if (productUser.requiresPasswordChange) {
-    return failure(403, "password_change_required", "Hãy đổi mật khẩu trước khi tiếp tục.");
+  const rejectedRequest = preflightFailure(request);
+  if (rejectedRequest) return rejectedRequest;
+
+  const body = await readJsonBody(request);
+  if (!body.ok) {
+    return body.status === 413
+      ? failure(413, "too_large", "Yêu cầu quá lớn.")
+      : failure(400, "malformed", "Dữ liệu yêu cầu không hợp lệ.");
   }
 
-  const body = await request.json().catch(() => null);
-  const payload = parsePayload(body);
-  if (!payload) {
-    return failure(422, "validation", "Tên đội hoặc đường dẫn đội không hợp lệ.");
-  }
+  try {
+    const productUser = await dependencies.getProductUser("/setup/team");
+    if (!productUser) return failure(401, "unauthorized", "Bạn cần đăng nhập để tạo đội.");
+    if (productUser.requiresPasswordChange) {
+      return failure(403, "password_change_required", "Hãy đổi mật khẩu trước khi tiếp tục.");
+    }
 
-  const { error: insertError } = await dependencies.supabase
-    .from("teams")
-    .insert(payload);
-  if (insertError) {
-    return insertError.code === "23505"
-      ? failure(409, "duplicate", "Đường dẫn đội này đã được sử dụng.")
-      : failure(500, "server", "Không thể tạo đội. Vui lòng thử lại.");
-  }
+    const payload = parsePayload(body.value);
+    if (!payload) {
+      return failure(422, "validation", "Tên đội hoặc đường dẫn đội không hợp lệ.");
+    }
 
-  const { data: team, error: selectError } = await dependencies.supabase
-    .from("teams")
-    .select("id, name, slug")
-    .eq("slug", payload.slug)
-    .maybeSingle();
-  if (selectError || !isTeamRecord(team)) {
-    return failure(500, "server", "Không thể tạo đội. Vui lòng thử lại.");
-  }
+    const { error: insertError } = await dependencies.supabase
+      .from("teams")
+      .insert(payload);
+    if (insertError) {
+      return insertError.code === "23505"
+        ? failure(409, "duplicate", "Đường dẫn đội này đã được sử dụng.")
+        : genericServerFailure();
+    }
 
-  return Response.json({ team: { id: team.id, name: team.name, slug: team.slug } }, { status: 201 });
+    const { data: team, error: selectError } = await dependencies.supabase
+      .from("teams")
+      .select("id, name, slug")
+      .eq("slug", payload.slug)
+      .maybeSingle();
+    if (selectError || !isTeamRecord(team)) return genericServerFailure();
+
+    return Response.json({ team: { id: team.id, name: team.name, slug: team.slug } }, { status: 201 });
+  } catch {
+    return genericServerFailure();
+  }
 }
 
-export async function POST(request: Request): Promise<Response> {
-  return createTeamHandler(request, await defaultDependencies());
+export async function POST(
+  request: Request,
+  resolveDependencies: () => Promise<TeamApiDependencies> = defaultDependencies,
+): Promise<Response> {
+  const rejectedRequest = preflightFailure(request);
+  if (rejectedRequest) return rejectedRequest;
+
+  try {
+    return await createTeamHandler(request, await resolveDependencies());
+  } catch {
+    return genericServerFailure();
+  }
 }

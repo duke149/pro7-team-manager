@@ -73,6 +73,19 @@ test("foundation migration defines first-login and membership lifecycle columns"
   assert.doesNotMatch(sql, /grant update[^;]*\bstatus\b/);
 });
 
+test("foundation migration narrows team slugs to product route-safe values", async () => {
+  const sql = normalizeSql(await readFoundationMigration());
+
+  assert.match(
+    sql,
+    /alter table public\.teams drop constraint if exists teams_slug_check;/,
+  );
+  assert.match(
+    sql,
+    /alter table public\.teams add constraint teams_slug_check check \( slug = lower\(slug\) and char_length\(slug\) between 1 and 48 and slug ~ '\^\[a-z0-9\]\+\(\?:-\[a-z0-9\]\+\)\*\$' and slug <> all \(array\['setup', 'account', 'api', 'login', 'auth'\]::text\[\]\) \);/,
+  );
+});
+
 test("foundation migration seeds the eleven permission codes conflict-safely", async () => {
   const sql = normalizeSql(await readFoundationMigration());
 

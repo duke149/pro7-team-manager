@@ -24,6 +24,7 @@ declare
   v_count integer;
   v_failed boolean;
   v_error_state text;
+  v_slug text;
   v_old_updated_at constant timestamptz := '2000-01-01 00:00:00+00';
 begin
   if (select pg_catalog.count(*) from public.permissions) <> 21 then
@@ -108,6 +109,43 @@ begin
     true
   );
   execute 'set local role authenticated';
+
+  v_failed := false;
+  v_error_state := null;
+  begin
+    insert into public.teams (name, slug)
+    values ('Overlong Slug Verification', repeat('a', 49));
+  exception
+    when others then
+      v_failed := true;
+      v_error_state := sqlstate;
+  end;
+  if not v_failed or v_error_state <> '23514' then
+    raise exception 'foundation live verification: 49-character team slug was not rejected (state=%)', v_error_state;
+  end if;
+
+  foreach v_slug in array array['setup', 'account', 'api', 'login', 'auth']::text[] loop
+    v_failed := false;
+    v_error_state := null;
+    begin
+      insert into public.teams (name, slug)
+      values ('Reserved Slug Verification', v_slug);
+    exception
+      when others then
+        v_failed := true;
+        v_error_state := sqlstate;
+    end;
+    if not v_failed or v_error_state <> '23514' then
+      raise exception 'foundation live verification: reserved team slug % was not rejected (state=%)', v_slug, v_error_state;
+    end if;
+  end loop;
+
+  insert into public.teams (name, slug)
+  values ('Maximum Slug Verification', repeat('a', 48));
+  if not exists (select 1 from public.teams where slug = repeat('a', 48)) then
+    raise exception 'foundation live verification: valid 48-character team slug was not retained';
+  end if;
+
   insert into public.teams (name, slug)
   values ('Foundation Post Migration', 'foundation-post-verification-20260825');
   execute 'reset role';
@@ -381,7 +419,7 @@ rollback;
 
 select
   'ok'::text as status,
-  28::integer as assertions,
-  11::integer as coverage_groups,
-  'existing remap; custom preservation; bootstrap mappings; password default; lifecycle constraint, ACL, timestamp, audit, active context, and hardened finance-only context RPC'::text as coverage,
+  35::integer as assertions,
+  12::integer as coverage_groups,
+  'existing remap; custom preservation; bootstrap mappings; password default; route-safe team slugs; lifecycle constraint, ACL, timestamp, audit, active context, and hardened finance-only context RPC'::text as coverage,
   'post-migration fixtures rolled back; pre-migration fixtures require cleanup'::text as fixtures;

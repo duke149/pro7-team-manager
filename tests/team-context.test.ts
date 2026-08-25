@@ -3,6 +3,7 @@ import test from "node:test";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import {
+  loadUserTeams,
   listUserTeams,
   loadTeamAccessContext,
   requireTeamPermission,
@@ -149,6 +150,27 @@ test("listUserTeams uses code-point ordering for case and non-ASCII names", asyn
     { id: "team-2", name: "alpha", slug: "alpha" },
     { id: "team-4", name: "Đội", slug: "doi" },
   ]);
+});
+
+test("loadUserTeams distinguishes an explicit empty membership list from RPC failures", async () => {
+  assert.deepEqual(await loadUserTeams(authorizedDependencies([])), {
+    ok: true,
+    teams: [],
+  });
+  assert.deepEqual(
+    await loadUserTeams({
+      supabase: createSupabaseDouble(errorResponse("database unavailable")),
+      getCurrentUser: async () => ({ id: "user-1" }),
+    }),
+    { ok: false },
+  );
+  assert.deepEqual(
+    await loadUserTeams({
+      supabase: createSupabaseDouble(response([{ malformed: true }])),
+      getCurrentUser: async () => ({ id: "user-1" }),
+    }),
+    { ok: false },
+  );
 });
 
 test("requireTeamPermission uses verified identity and denies missing permissions", async () => {

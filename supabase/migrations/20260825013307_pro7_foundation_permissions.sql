@@ -1,6 +1,18 @@
 alter table public.profiles
   add column if not exists requires_password_change boolean not null default false;
 
+alter table public.teams
+  drop constraint if exists teams_slug_check;
+
+alter table public.teams
+  add constraint teams_slug_check
+  check (
+    slug = lower(slug)
+    and char_length(slug) between 1 and 48
+    and slug ~ '^[a-z0-9]+(?:-[a-z0-9]+)*$'
+    and slug <> all (array['setup', 'account', 'api', 'login', 'auth']::text[])
+  );
+
 alter table public.memberships
   add column if not exists status text not null default 'active',
   add column if not exists updated_at timestamptz not null default now();
