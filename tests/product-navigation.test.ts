@@ -4,6 +4,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import { ProductNav } from "../app/components/product-nav";
+import { Pro7RouteNavigation } from "../app/components/pro7-route-navigation";
 import { AccountMenu } from "../app/components/account-menu";
 import type { TeamAccessContext } from "../lib/teams/context";
 
@@ -111,4 +112,58 @@ test("account menu renders the signed-in address and an accessible logout contro
   assert.match(html, /member@example\.com/u);
   assert.match(html, /aria-label="Đăng xuất"/u);
   assert.match(html, /Đăng xuất/u);
+});
+
+test("hosted route navigation preserves the five-slot Squad order with route links", () => {
+  const html = renderToStaticMarkup(
+    createElement(Pro7RouteNavigation, {
+      team: admin.team,
+      roleName: admin.membership.roleName,
+      email: "admin@example.com",
+      permissions: [...admin.permissions, "players.manage", "tactics.read"],
+      currentPath: "/teams/%C4%91%E1%BB%99i%20b%C3%B3ng/squad",
+    }),
+  );
+
+  assert.deepEqual(destinations(html).slice(0, 8), [
+    "/teams/%C4%91%E1%BB%99i%20b%C3%B3ng/overview",
+    "/teams/%C4%91%E1%BB%99i%20b%C3%B3ng/overview",
+    "/teams/%C4%91%E1%BB%99i%20b%C3%B3ng/overview",
+    "/teams/%C4%91%E1%BB%99i%20b%C3%B3ng/squad",
+    "/teams/%C4%91%E1%BB%99i%20b%C3%B3ng/matches",
+    "/teams/%C4%91%E1%BB%99i%20b%C3%B3ng/tactics",
+    "/teams/%C4%91%E1%BB%99i%20b%C3%B3ng/funds",
+    "/account/profile",
+  ]);
+  assert.match(html, /TEAM MANAGER/u);
+  assert.match(html, /href="\/teams\/%C4%91%E1%BB%99i%20b%C3%B3ng\/squad" class="active"/u);
+});
+
+test("hosted route navigation hides only unauthorized Funds without changing the mobile link order", () => {
+  const permissions = ["team.read", "players.read", "matches.read", "tactics.read"] as const;
+  const desktop = renderToStaticMarkup(
+    createElement(Pro7RouteNavigation, {
+      team: member.team,
+      roleName: member.membership.roleName,
+      permissions,
+      currentPath: "/teams/%C4%91%E1%BB%99i%20b%C3%B3ng/squad",
+    }),
+  );
+  const mobile = renderToStaticMarkup(
+    createElement(Pro7RouteNavigation, {
+      team: member.team,
+      roleName: member.membership.roleName,
+      permissions,
+      currentPath: "/teams/%C4%91%E1%BB%99i%20b%C3%B3ng/squad",
+      mobile: true,
+    }),
+  );
+
+  assert.doesNotMatch(desktop, /Quỹ đội/u);
+  assert.deepEqual(destinations(mobile), [
+    "/teams/%C4%91%E1%BB%99i%20b%C3%B3ng/overview",
+    "/teams/%C4%91%E1%BB%99i%20b%C3%B3ng/squad",
+    "/teams/%C4%91%E1%BB%99i%20b%C3%B3ng/matches",
+    "/teams/%C4%91%E1%BB%99i%20b%C3%B3ng/tactics",
+  ]);
 });

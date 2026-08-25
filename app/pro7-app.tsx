@@ -14,6 +14,12 @@ import { createBrowserSupabaseClient } from "../lib/supabase/client";
 type View = "dashboard" | "squad" | "matches" | "tactics" | "funds";
 type ModalType = "player" | "expense" | "payment" | null;
 
+export const HOSTED_SQUAD_COPY = {
+  title: "Đội hình chính",
+  description: "Theo dõi nhân sự, phong độ và vai trò thi đấu.",
+  searchPlaceholder: "Tìm theo tên cầu thủ...",
+} as const;
+
 const NAV: { id: View; label: string; short: string; icon: typeof Grid2X2 }[] = [
   { id: "dashboard", label: "Tổng quan", short: "Tổng quan", icon: LayoutDashboard },
   { id: "squad", label: "Đội hình", short: "Đội hình", icon: Users },
@@ -39,7 +45,7 @@ const basePlayers = [
 
 const viewMeta: Record<View, { eyebrow: string; title: string; description: string }> = {
   dashboard: { eyebrow: "THỨ BẢY, 12 THÁNG 10", title: "Chào buổi sáng, Coach.", description: "Mọi thứ bạn cần để điều hành FC Spartans hôm nay." },
-  squad: { eyebrow: "FC SPARTANS • 15 CẦU THỦ", title: "Đội hình chính", description: "Theo dõi nhân sự, phong độ và vai trò thi đấu." },
+  squad: { eyebrow: "FC SPARTANS • 15 CẦU THỦ", title: HOSTED_SQUAD_COPY.title, description: HOSTED_SQUAD_COPY.description },
   matches: { eyebrow: "MÙA GIẢI 2024/25", title: "Trung tâm trận đấu", description: "Lịch thi đấu, tình trạng tham gia và phân tích sau trận." },
   tactics: { eyebrow: "TRẬN TIẾP THEO • 14/10", title: "Chiến thuật thi đấu", description: "Sắp xếp đội hình 7 người và giao nhiệm vụ." },
   funds: { eyebrow: "THÁNG 10 • 2024", title: "Quỹ đội bóng", description: "Thu chi minh bạch, nhắc phí đúng hạn." },
@@ -174,7 +180,7 @@ function Squad({ onAdd }: { onAdd: () => void }) {
   const [filter, setFilter] = useState("ALL");
   const players = useMemo(() => basePlayers.filter(p => (filter === "ALL" || p.pos === filter) && p.name.toLowerCase().includes(query.toLowerCase())), [query, filter]);
   return <div className="view-stack">
-    <section className="squad-toolbar card"><div className="search-box"><Search size={19} /><input value={query} onChange={e => setQuery(e.target.value)} placeholder="Tìm theo tên cầu thủ..." /></div><div className="filter-row">{["ALL", "GK", "DEF", "MID", "ATT"].map(item => <button className={filter === item ? "active" : ""} onClick={() => setFilter(item)} key={item}>{item === "ALL" ? "Tất cả" : item}</button>)}</div><button className="filter-button"><SlidersHorizontal size={17} /> Bộ lọc</button></section>
+    <section className="squad-toolbar card"><div className="search-box"><Search size={19} /><input value={query} onChange={e => setQuery(e.target.value)} placeholder={HOSTED_SQUAD_COPY.searchPlaceholder} /></div><div className="filter-row">{["ALL", "GK", "DEF", "MID", "ATT"].map(item => <button className={filter === item ? "active" : ""} onClick={() => setFilter(item)} key={item}>{item === "ALL" ? "Tất cả" : item}</button>)}</div><button className="filter-button"><SlidersHorizontal size={17} /> Bộ lọc</button></section>
     <section className="squad-summary"><div><Users /><span>Quân số<strong>15</strong></span></div><div><ShieldCheck /><span>Sẵn sàng<strong>13</strong></span></div><div><HeartPulse /><span>Chấn thương<strong className="red-text">2</strong></span></div><div><Shirt /><span>Tuổi TB<strong>26.4</strong></span></div></section>
     <section className="player-grid">{players.map(player => <PlayerCard key={player.name} player={player} />)}<button className="add-player-card" onClick={onAdd}><span><UserPlus /></span><b>Thêm cầu thủ</b><small>Đăng ký thành viên mới</small></button></section>
   </div>;

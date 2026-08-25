@@ -34,13 +34,18 @@ test("redirects an unauthenticated dashboard request to the Supabase login", asy
 });
 
 test("includes the production shell surfaces and social metadata", async () => {
-  const [navigation, overview, squad, matches, funds, settings, layout] = await Promise.all([
+  const [navigation, routeNavigation, routeHeader, routeShell, squadSkeleton, overview, squad, matches, funds, settings, teamLayout, layout] = await Promise.all([
     readFile(new URL("../app/components/product-nav.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/components/pro7-route-navigation.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/components/pro7-route-header.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/components/pro7-route-shell.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/components/pro7-squad-skeleton.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/teams/[slug]/overview/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/teams/[slug]/squad/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/teams/[slug]/matches/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/teams/[slug]/funds/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/teams/[slug]/admin/settings/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/teams/[slug]/layout.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/layout.tsx", import.meta.url), "utf8"),
   ]);
   for (const label of ["Tổng quan", "Đội hình", "Trận đấu", "Quỹ đội", "Cài đặt đội"]) {
@@ -52,6 +57,22 @@ test("includes the production shell surfaces and social metadata", async () => {
   assert.match(matches, /matches\.read/);
   assert.match(funds, /finance\.read/);
   assert.match(settings, /settings\.read/);
+  assert.match(routeNavigation, /TEAM MANAGER/);
+  assert.match(routeNavigation, /Tổng quan[\s\S]*Đội hình[\s\S]*Trận đấu[\s\S]*Chiến thuật[\s\S]*Quỹ đội/);
+  assert.match(routeNavigation, /href=\{href\}/);
+  assert.match(routeHeader, /Đội hình chính/);
+  assert.match(routeHeader, /Theo dõi nhân sự, phong độ và vai trò thi đấu\./);
+  assert.match(routeHeader, /players\.manage/);
+  assert.match(routeShell, /<Pro7RouteNavigation/);
+  assert.match(routeShell, /<Pro7RouteHeader/);
+  assert.match(squadSkeleton, /squad-toolbar/);
+  assert.match(squadSkeleton, /squad-summary/);
+  assert.match(squadSkeleton, /player-grid/);
+  assert.match(squadSkeleton, /add-player-card/);
+  assert.match(squad, /Pro7SquadSkeleton/);
+  assert.doesNotMatch(squad, /TeamPlaceholder/);
+  assert.match(teamLayout, /Pro7RouteShell/);
+  assert.doesNotMatch(teamLayout, /ProductShell/);
   assert.match(layout, /openGraph/);
   assert.match(layout, /twitter/);
   assert.doesNotMatch(layout, /og\.png/);

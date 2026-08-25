@@ -4,7 +4,7 @@ import {
   safeTeamReturnPath,
   TEAM_RETURN_PATH_HEADER,
 } from "../../../lib/teams/return-path";
-import { ProductShell } from "../../components/product-shell";
+import { Pro7RouteShell } from "../../components/pro7-route-shell";
 import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 
@@ -35,14 +35,14 @@ export async function renderTeamLayout({
   if (!context) return denied();
 
   return (
-    <ProductShell
+    <Pro7RouteShell
       team={context.team}
       roleName={context.membership.roleName}
       permissions={context.permissions}
       email={productUser.user.email}
     >
       {children}
-    </ProductShell>
+    </Pro7RouteShell>
   );
 }
 
