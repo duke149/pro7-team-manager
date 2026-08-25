@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { resolve } from "node:path";
 import test from "node:test";
+import { isValidElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { createServer, type ViteDevServer } from "vite";
 
@@ -62,6 +63,8 @@ type LayoutModule = {
     children: unknown;
     params: Promise<{ slug: string }>;
     requireProductUser: (next: string) => Promise<ProductUser>;
+    loadTeamAccessContext?: (slug: string) => Promise<TeamContext | null>;
+    denied?: () => unknown;
   }): Promise<unknown>;
 };
 
@@ -542,6 +545,36 @@ test("team layout enforces the product-user guard for its encoded team route", a
     children,
   );
   assert.deepEqual(seen, ["/teams/%C4%91%E1%BB%99i%20b%C3%B3ng/overview"]);
+});
+
+test("team layout gives the product shell one verified team context instead of prototype literals", async () => {
+  const context: TeamContext = {
+    team: { id: "team-1", name: "Đội Thật", slug: "đội thật" },
+    userId: "user-1",
+    membership: { roleId: "role-1", roleSlug: "member", roleName: "Thành viên" },
+    permissions: ["team.read", "players.read", "matches.read"],
+  };
+  const seen: string[] = [];
+  const result = await layout.renderTeamLayout({
+    children: "child content",
+    params: Promise.resolve({ slug: "đội thật" }),
+    requireProductUser: async () => ({
+      user: { id: "user-1", email: "member@example.com" },
+      requiresPasswordChange: false,
+    }),
+    loadTeamAccessContext: async (slug) => {
+      seen.push(slug);
+      return context;
+    },
+    denied: () => "SAFE_DENIAL",
+  });
+
+  assert.equal(isValidElement(result), true);
+  assert.deepEqual(seen, ["đội thật"]);
+  assert.deepEqual((result as React.ReactElement).props.team, context.team);
+  assert.equal((result as React.ReactElement).props.roleName, "Thành viên");
+  assert.deepEqual((result as React.ReactElement).props.permissions, context.permissions);
+  assert.equal((result as React.ReactElement).props.email, "member@example.com");
 });
 
 test("TeamPlaceholder renders the real team, role, and pending vertical-slice state", () => {

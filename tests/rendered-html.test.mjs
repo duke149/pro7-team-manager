@@ -47,11 +47,12 @@ test("includes the five core surfaces and social metadata", async () => {
 });
 
 test("wires verified Supabase auth without changing Sites auth routes", async () => {
-  const [auth, callback, home, dashboard, chatgptAuth] = await Promise.all([
+  const [auth, callback, home, accountMenu, productShell, chatgptAuth] = await Promise.all([
     readFile(new URL("../lib/supabase/auth.ts", import.meta.url), "utf8").catch(() => ""),
     readFile(new URL("../app/auth/callback/route.ts", import.meta.url), "utf8").catch(() => ""),
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
-    readFile(new URL("../app/pro7-app.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/components/account-menu.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/components/product-shell.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/chatgpt-auth.ts", import.meta.url), "utf8"),
   ]);
 
@@ -64,8 +65,10 @@ test("wires verified Supabase auth without changing Sites auth routes", async ()
     /await requireProductUser\("\/"\)/,
     "the dashboard must enforce the temporary-password boundary",
   );
-  assert.match(dashboard, /auth\.signOut\(\)/, "the dashboard must expose Supabase logout");
-  assert.match(dashboard, /Đăng xuất/, "logout must have an accessible Vietnamese label");
+  assert.match(accountMenu, /auth\.signOut\(\)/, "the product shell must expose Supabase logout");
+  assert.match(accountMenu, /Đăng xuất/, "logout must have an accessible Vietnamese label");
+  assert.match(productShell, /<ProductNav/, "the product shell must render route-aware navigation");
+  assert.doesNotMatch(productShell, /FC Spartans|Coach Miller/u);
   assert.match(chatgptAuth, /const SIGN_IN_PATH = "\/signin-with-chatgpt"/);
   assert.match(chatgptAuth, /const CALLBACK_PATH = "\/callback"/);
   assert.doesNotMatch(chatgptAuth, /Supabase|\/auth\/callback/);
