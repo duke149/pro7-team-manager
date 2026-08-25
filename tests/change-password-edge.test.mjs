@@ -50,6 +50,10 @@ async function loadHandler(options = {}) {
           admin: {
             async updateUserById(_id, { password }) {
               state.events.push(`admin:${password}`);
+              if (options.rejectAdminAfterCommit && password === newPassword) {
+                state.passwordUpdates.push(password);
+                throw new Error("admin acknowledgement unavailable");
+              }
               if (
                 (options.adminUpdateFailure && password === newPassword) ||
                 (options.compensationFailure && password === currentTemporaryPassword) ||
@@ -78,6 +82,10 @@ async function loadHandler(options = {}) {
                     async select(columns) {
                       assert.equal(columns, "id");
                       state.events.push("profile");
+                      if (options.rejectProfileAfterCommit) {
+                        state.flagCleared = true;
+                        throw new Error("profile acknowledgement unavailable");
+                      }
                       if (options.rejectProfile) throw new Error("database unavailable");
                       if (options.profileClearFailure) {
                         return { data: null, error: { message: "database failure" } };
@@ -259,13 +267,8 @@ test("Edge handler returns manual recovery guidance when compensation fails", as
   assert.deepEqual(state.events, [`admin:${newPassword}`, "profile", `admin:${currentTemporaryPassword}`]);
 });
 
-test("Edge handler sanitizes rejected dependency promises", async () => {
-  for (const options of [
-    { rejectGetUser: true },
-    { rejectSignIn: true },
-    { rejectAdmin: true },
-    { rejectProfile: true },
-  ]) {
+test("Edge handler sanitizes rejected read and sign-in dependency promises", async () => {
+  for (const options of [{ rejectGetUser: true }, { rejectSignIn: true }]) {
     const { handler } = await loadHandler(options);
     const response = await handler(request());
 
@@ -273,6 +276,54 @@ test("Edge handler sanitizes rejected dependency promises", async () => {
     assert.deepEqual(
       await responseBody(response),
       { error: "Không thể đổi mật khẩu." },
+      JSON.stringify(options),
+    );
+    assertAllowedCors(response);
+  }
+});
+
+test("Edge handler treats an Admin write rejection as commit-ambiguous", async () => {
+  const { handler, state } = await loadHandler({ rejectAdminAfterCommit: true });
+  const response = await handler(request());
+
+  assert.equal(response.status, 500);
+  assert.deepEqual(await responseBody(response), {
+    error: "Không thể hoàn tất đổi mật khẩu. Vui lòng liên hệ quản trị viên.",
+    code: "manual_recovery_required",
+  });
+  assert.deepEqual(state.passwordUpdates, [newPassword]);
+  assert.deepEqual(state.events, [`admin:${newPassword}`]);
+  assert.equal(state.flagCleared, false);
+  assertAllowedCors(response);
+});
+
+test("Edge handler treats a profile clear rejection as commit-ambiguous", async () => {
+  const { handler, state } = await loadHandler({ rejectProfileAfterCommit: true });
+  const response = await handler(request());
+
+  assert.equal(response.status, 500);
+  assert.deepEqual(await responseBody(response), {
+    error: "Không thể hoàn tất đổi mật khẩu. Vui lòng liên hệ quản trị viên.",
+    code: "manual_recovery_required",
+  });
+  assert.deepEqual(state.passwordUpdates, [newPassword]);
+  assert.deepEqual(state.events, [`admin:${newPassword}`, "profile"]);
+  assert.equal(state.flagCleared, true);
+  assertAllowedCors(response);
+});
+
+test("Edge handler treats rejected Admin and profile writes as manual recovery", async () => {
+  for (const options of [{ rejectAdmin: true }, { rejectProfile: true }]) {
+    const { handler } = await loadHandler(options);
+    const response = await handler(request());
+
+    assert.equal(response.status, 500, JSON.stringify(options));
+    assert.deepEqual(
+      await responseBody(response),
+      {
+        error: "Không thể hoàn tất đổi mật khẩu. Vui lòng liên hệ quản trị viên.",
+        code: "manual_recovery_required",
+      },
       JSON.stringify(options),
     );
     assertAllowedCors(response);

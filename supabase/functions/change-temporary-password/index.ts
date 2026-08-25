@@ -111,6 +111,14 @@ function isPasswordChangeRequest(
   );
 }
 
+function manualRecoveryResponse(origin: string): Response {
+  return json(
+    { error: MANUAL_RECOVERY_ERROR, code: "manual_recovery_required" },
+    500,
+    origin,
+  );
+}
+
 async function compensatePasswordChange(
   service: ServiceClient,
   userId: string,
@@ -126,11 +134,7 @@ async function compensatePasswordChange(
     // A response intentionally never exposes the upstream compensation error.
   }
 
-  return json(
-    { error: MANUAL_RECOVERY_ERROR, code: "manual_recovery_required" },
-    500,
-    origin,
-  );
+  return manualRecoveryResponse(origin);
 }
 
 export function createChangeTemporaryPasswordHandler(
@@ -189,9 +193,15 @@ export function createChangeTemporaryPasswordHandler(
       }
 
       const service = dependencies.createServiceClient();
-      const { error: updateError } = await service.auth.admin.updateUserById(user.id, {
-        password: newPassword,
-      });
+      let updateResult: UpdateResult;
+      try {
+        updateResult = await service.auth.admin.updateUserById(user.id, {
+          password: newPassword,
+        });
+      } catch {
+        return manualRecoveryResponse(origin);
+      }
+      const { error: updateError } = updateResult;
       if (updateError) return json({ error: CHANGE_ERROR }, 500, origin);
 
       let profileResult: ProfileClearResult;
@@ -202,7 +212,7 @@ export function createChangeTemporaryPasswordHandler(
           .eq("id", user.id)
           .select("id");
       } catch {
-        return compensatePasswordChange(service, user.id, currentTemporaryPassword, origin);
+        return manualRecoveryResponse(origin);
       }
       if (profileResult.error || profileResult.data?.length !== 1) {
         return compensatePasswordChange(service, user.id, currentTemporaryPassword, origin);
