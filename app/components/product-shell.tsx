@@ -41,9 +41,11 @@ export function ProductShell({
   }, []);
 
   function toggleTheme() {
-    const next = nextTheme(theme);
-    setTheme(next);
-    persistBrowserTheme(next);
+    setTheme((currentTheme) => {
+      const next = nextTheme(currentTheme);
+      persistBrowserTheme(next);
+      return next;
+    });
   }
 
   return (
