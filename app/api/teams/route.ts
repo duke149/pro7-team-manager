@@ -191,7 +191,7 @@ export async function createTeamHandler(
   }
 }
 
-export async function POST(
+export async function createTeamPostAdapter(
   request: Request,
   resolveDependencies: () => Promise<TeamApiDependencies> = defaultDependencies,
 ): Promise<Response> {
@@ -203,4 +203,12 @@ export async function POST(
   } catch {
     return genericServerFailure();
   }
+}
+
+export async function POST(
+  request: Request,
+  context?: { params?: Promise<Record<string, string>> },
+): Promise<Response> {
+  void context;
+  return createTeamPostAdapter(request);
 }

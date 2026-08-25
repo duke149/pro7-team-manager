@@ -35,7 +35,11 @@ type RouteArgs = {
 
 type ApiModule = {
   createTeamHandler(request: Request, dependencies: ApiDependencies): Promise<Response>;
-  POST(request: Request, resolveDependencies?: () => Promise<ApiDependencies>): Promise<Response>;
+  createTeamPostAdapter(
+    request: Request,
+    resolveDependencies?: () => Promise<ApiDependencies>,
+  ): Promise<Response>;
+  POST(request: Request, context?: { params?: Promise<Record<string, string>> }): Promise<Response>;
 };
 
 type ApiDependencies = {
@@ -76,10 +80,64 @@ let routes: TeamRouteModule;
 let layout: LayoutModule;
 let placeholder: PlaceholderModule;
 
+type DefaultDependencyCalls = { auth: number; server: number; insert: number; select: number };
+const defaultDependencyCalls: DefaultDependencyCalls = { auth: 0, server: 0, insert: 0, select: 0 };
+
 test.before(async () => {
   vite = await createServer({
     appType: "custom",
     configFile: false,
+    plugins: [
+      {
+        name: "mock-team-route-default-dependencies",
+        enforce: "pre",
+        resolveId(id) {
+          if (
+            id === "../../../lib/supabase/auth" ||
+            id.endsWith("/lib/supabase/auth") ||
+            id.endsWith("/lib/supabase/auth.ts")
+          ) {
+            return "\0team-route-auth";
+          }
+          if (
+            id === "../../../lib/supabase/server" ||
+            id.endsWith("/lib/supabase/server") ||
+            id.endsWith("/lib/supabase/server.ts")
+          ) {
+            return "\0team-route-server";
+          }
+          return null;
+        },
+        load(id) {
+          if (id === "\0team-route-auth") {
+            return `export async function getProductUser() {
+              globalThis.__teamRouteDefaultDependencyCalls.auth += 1;
+              return { user: { id: "user-1" }, requiresPasswordChange: false };
+            }`;
+          }
+          if (id === "\0team-route-server") {
+            return `export async function createServerSupabaseClient() {
+              globalThis.__teamRouteDefaultDependencyCalls.server += 1;
+              return {
+                from() {
+                  return {
+                    insert: async () => {
+                      globalThis.__teamRouteDefaultDependencyCalls.insert += 1;
+                      return { error: null };
+                    },
+                    select() {
+                      globalThis.__teamRouteDefaultDependencyCalls.select += 1;
+                      return { eq: () => ({ maybeSingle: async () => ({ data: { id: "team-1", name: "Falcons", slug: "falcons" }, error: null }) }) };
+                    },
+                  };
+                },
+              };
+            }`;
+          }
+          return null;
+        },
+      },
+    ],
     resolve: {
       alias: {
         "next/headers": resolve("node_modules/vinext/dist/shims/headers.js"),
@@ -88,6 +146,8 @@ test.before(async () => {
     },
     server: { middlewareMode: true },
   });
+
+  Object.assign(globalThis, { __teamRouteDefaultDependencyCalls: defaultDependencyCalls });
 
   const [apiModule, rootModule, overview, squad, matches, funds, settings, layoutModule, placeholderModule] = await Promise.all([
     vite.ssrLoadModule("/app/api/teams/route.ts"),
@@ -325,8 +385,8 @@ test("createTeamHandler converts rejected auth, insert, and select dependencies 
   assert.doesNotMatch(await selectResponse.text(), /select upstream detail/u);
 });
 
-test("exported POST adapter returns a generic 500 when dependency initialization rejects", async () => {
-  const responseValue = await api.POST(
+test("injected POST adapter returns a generic 500 when dependency initialization rejects", async () => {
+  const responseValue = await api.createTeamPostAdapter(
     request({ name: "Falcons" }),
     async () => Promise.reject(new Error("environment initialization detail")),
   );
@@ -335,9 +395,9 @@ test("exported POST adapter returns a generic 500 when dependency initialization
   assert.doesNotMatch(await responseValue.text(), /environment initialization detail/u);
 });
 
-test("exported POST adapter rejects a foreign origin before dependency initialization", async () => {
+test("injected POST adapter rejects a foreign origin before dependency initialization", async () => {
   let dependencyInitialization = 0;
-  const responseValue = await api.POST(
+  const responseValue = await api.createTeamPostAdapter(
     request({ name: "Falcons" }, { origin: "https://attacker.example" }),
     async () => {
       dependencyInitialization += 1;
@@ -349,9 +409,9 @@ test("exported POST adapter rejects a foreign origin before dependency initializ
   assert.equal(dependencyInitialization, 0);
 });
 
-test("exported POST adapter passes resolved server dependencies into the real team handler", async () => {
+test("injected POST adapter passes resolved server dependencies into the real team handler", async () => {
   const fixture = apiDependencies();
-  const responseValue = await api.POST(
+  const responseValue = await api.createTeamPostAdapter(
     request({ name: "Falcons" }),
     async () => fixture.dependencies,
   );
@@ -362,6 +422,33 @@ test("exported POST adapter passes resolved server dependencies into the real te
     { method: "select", value: "id, name, slug" },
     { method: "eq", value: { field: "slug", value: "falcons" } },
   ]);
+});
+
+test("framework POST accepts Vinext route context and uses the mocked default resolver", async () => {
+  Object.assign(defaultDependencyCalls, { auth: 0, server: 0, insert: 0, select: 0 });
+  const responseValue = await api.POST(
+    request({ name: "Falcons" }),
+    { params: Promise.resolve({}) },
+  );
+
+  assert.equal(responseValue.status, 201);
+  assert.deepEqual(defaultDependencyCalls, { auth: 1, server: 1, insert: 1, select: 1 });
+});
+
+test("framework POST never invokes a function passed as runtime context", async () => {
+  Object.assign(defaultDependencyCalls, { auth: 0, server: 0, insert: 0, select: 0 });
+  let contextCalls = 0;
+  const responseValue = await api.POST(
+    request({ name: "Falcons" }),
+    (() => {
+      contextCalls += 1;
+      throw new Error("route context must not resolve dependencies");
+    }) as never,
+  );
+
+  assert.equal(responseValue.status, 201);
+  assert.equal(contextCalls, 0);
+  assert.deepEqual(defaultDependencyCalls, { auth: 1, server: 1, insert: 1, select: 1 });
 });
 
 test("createTeamHandler does a plain insert then independent bootstrap select", async () => {
