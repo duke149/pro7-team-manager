@@ -116,21 +116,34 @@ test("foundation migration excludes inactive memberships from permission context
   assert.match(sql, /create or replace function private\.can_view_profile\(p_profile_user_id uuid\)[\s\S]*viewer\.status = 'active'/);
 });
 
-test("foundation migration exposes only active assigned context metadata without broad permissions", async () => {
+test("foundation migration keeps base policies restrictive and exposes a hardened context RPC", async () => {
   const sql = normalizeSql(await readFoundationMigration());
 
   assert.match(
     sql,
-    /create policy teams_select_authorized[\s\S]*private\.has_team_permission\(id, 'team\.read'\)[\s\S]*or exists \(\s*select 1 from public\.memberships as context_membership where context_membership\.team_id = id and context_membership\.user_id = \(select auth\.uid\(\)\) and context_membership\.status = 'active'\s*\)/,
+    /create policy teams_select_authorized on public\.teams for select to authenticated using \( private\.has_team_permission\(id, 'team\.read'\) or private\.has_team_permission\(id, 'team\.update'\) or private\.has_team_permission\(id, 'team\.delete'\) \);/,
   );
   assert.match(
     sql,
-    /create policy roles_select_authorized[\s\S]*private\.has_team_permission\(team_id, 'roles\.read'\)[\s\S]*or exists \(\s*select 1 from public\.memberships as context_membership where context_membership\.role_id = id and context_membership\.user_id = \(select auth\.uid\(\)\) and context_membership\.status = 'active'\s*\)/,
+    /create policy roles_select_authorized on public\.roles for select to authenticated using \( private\.has_team_permission\(team_id, 'roles\.read'\) or private\.has_team_permission\(team_id, 'roles\.manage'\) \);/,
   );
   assert.match(
     sql,
-    /create policy role_permissions_select_authorized[\s\S]*private\.can_view_role\(role_id\)[\s\S]*or exists \(\s*select 1 from public\.memberships as context_membership where context_membership\.role_id = public\.role_permissions\.role_id and context_membership\.user_id = \(select auth\.uid\(\)\) and context_membership\.status = 'active'\s*\)/,
+    /create policy role_permissions_select_authorized on public\.role_permissions for select to authenticated using \( private\.can_view_role\(role_id\) \);/,
   );
+  assert.doesNotMatch(sql, /grant usage on schema private to authenticated/);
+  assert.match(
+    sql,
+    /create or replace function public\.get_current_team_access_contexts\(\) returns table \( team_id uuid, team_name text, team_slug text, role_id uuid, role_slug text, role_name text, permission_codes text\[\] \) language sql stable security definer set search_path = ''/,
+  );
+  assert.match(
+    sql,
+    /from public\.memberships as m join public\.teams as t on t\.id = m\.team_id join public\.roles as r on r\.id = m\.role_id and r\.team_id = m\.team_id left join public\.role_permissions as rp on rp\.role_id = r\.id where \(select auth\.uid\(\)\) is not null and m\.user_id = \(select auth\.uid\(\)\) and m\.status = 'active'/,
+  );
+  assert.match(sql, /pg_catalog\.array_agg\(rp\.permission_code order by rp\.permission_code\)/);
+  assert.match(sql, /alter function public\.get_current_team_access_contexts\(\) owner to postgres;/);
+  assert.match(sql, /revoke execute on function public\.get_current_team_access_contexts\(\) from public, anon, authenticated, service_role;/);
+  assert.match(sql, /grant execute on function public\.get_current_team_access_contexts\(\) to authenticated;/);
 });
 
 test("foundation live harness preserves pre-migration fixtures through the additive migration", async () => {

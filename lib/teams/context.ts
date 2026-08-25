@@ -13,6 +13,20 @@ type TeamSummary = {
   slug: string;
 };
 
+type AccessRpcRow = {
+  team_id: string;
+  team_name: string;
+  team_slug: string;
+  role_id: string;
+  role_slug: string;
+  role_name: string;
+  permission_codes: readonly string[];
+};
+
+type ValidatedAccessRpcRow = Omit<AccessRpcRow, "permission_codes"> & {
+  permission_codes: readonly PermissionCode[];
+};
+
 export type TeamAccessContext = {
   team: TeamSummary;
   userId: string;
@@ -25,41 +39,32 @@ type TeamContextDependencies = {
   getCurrentUser?: () => Promise<{ id: string } | null>;
 };
 
-function isTeamSummary(value: unknown): value is TeamSummary {
+const ACCESS_RPC_KEYS = [
+  "team_id",
+  "team_name",
+  "team_slug",
+  "role_id",
+  "role_slug",
+  "role_name",
+  "permission_codes",
+] as const;
+
+function isAccessRpcRow(value: unknown): value is AccessRpcRow {
   if (typeof value !== "object" || value === null) return false;
 
-  const team = value as Record<string, unknown>;
+  const row = value as Record<string, unknown>;
+  const keys = Object.keys(row);
   return (
-    typeof team.id === "string" &&
-    typeof team.name === "string" &&
-    typeof team.slug === "string"
-  );
-}
-
-function isMembership(value: unknown): value is { role_id: string } {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    typeof (value as Record<string, unknown>).role_id === "string"
-  );
-}
-
-function isRole(value: unknown): value is { id: string; slug: string; name: string } {
-  if (typeof value !== "object" || value === null) return false;
-
-  const role = value as Record<string, unknown>;
-  return (
-    typeof role.id === "string" &&
-    typeof role.slug === "string" &&
-    typeof role.name === "string"
-  );
-}
-
-function isPermissionRow(value: unknown): value is { permission_code: string } {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    typeof (value as Record<string, unknown>).permission_code === "string"
+    keys.length === ACCESS_RPC_KEYS.length &&
+    ACCESS_RPC_KEYS.every((key) => keys.includes(key)) &&
+    typeof row.team_id === "string" &&
+    typeof row.team_name === "string" &&
+    typeof row.team_slug === "string" &&
+    typeof row.role_id === "string" &&
+    typeof row.role_slug === "string" &&
+    typeof row.role_name === "string" &&
+    Array.isArray(row.permission_codes) &&
+    row.permission_codes.every((permission) => typeof permission === "string")
   );
 }
 
@@ -86,87 +91,74 @@ async function resolveCurrentUser(
   return getCurrentUser();
 }
 
+async function loadAccessRows(
+  client: SupabaseClient<Database>,
+): Promise<ValidatedAccessRpcRow[] | null> {
+  const result = await client.rpc("get_current_team_access_contexts");
+  if (result.error || !Array.isArray(result.data) || !result.data.every(isAccessRpcRow)) {
+    return null;
+  }
+
+  const rows: ValidatedAccessRpcRow[] = [];
+  for (const row of result.data) {
+    const permissions: PermissionCode[] = [];
+    for (const permission of row.permission_codes) {
+      if (!isPermissionCode(permission)) return null;
+      permissions.push(permission);
+    }
+    rows.push({ ...row, permission_codes: permissions });
+  }
+
+  return rows;
+}
+
+function toAccessContext(row: ValidatedAccessRpcRow, userId: string): TeamAccessContext {
+  return {
+    team: { id: row.team_id, name: row.team_name, slug: row.team_slug },
+    userId,
+    membership: {
+      roleId: row.role_id,
+      roleSlug: row.role_slug,
+      roleName: row.role_name,
+    },
+    permissions: Object.freeze([...row.permission_codes]),
+  };
+}
+
 export async function loadTeamAccessContext(
   slug: string,
-  userId: string,
-  supabase?: SupabaseClient<Database>,
+  dependencies: TeamContextDependencies = {},
 ): Promise<TeamAccessContext | null> {
   try {
-    const client = await resolveSupabaseClient(supabase);
-    const teamResult = await client
-      .from("teams")
-      .select("id, name, slug")
-      .eq("slug", slug)
-      .maybeSingle();
-    if (teamResult.error || !isTeamSummary(teamResult.data)) return null;
+    const user = await resolveCurrentUser(dependencies.getCurrentUser);
+    if (!user) return null;
 
-    const membershipResult = await client
-      .from("memberships")
-      .select("role_id")
-      .eq("team_id", teamResult.data.id)
-      .eq("user_id", userId)
-      .eq("status", "active")
-      .maybeSingle();
-    if (membershipResult.error || !isMembership(membershipResult.data)) return null;
+    const rows = await loadAccessRows(
+      await resolveSupabaseClient(dependencies.supabase),
+    );
+    if (!rows) return null;
 
-    const roleResult = await client
-      .from("roles")
-      .select("id, slug, name")
-      .eq("id", membershipResult.data.role_id)
-      .eq("team_id", teamResult.data.id)
-      .maybeSingle();
-    if (roleResult.error || !isRole(roleResult.data)) return null;
-
-    const permissionsResult = await client
-      .from("role_permissions")
-      .select("permission_code")
-      .eq("role_id", roleResult.data.id);
-    if (permissionsResult.error || !Array.isArray(permissionsResult.data)) return null;
-
-    const permissions: PermissionCode[] = [];
-    for (const permission of permissionsResult.data) {
-      if (!isPermissionRow(permission) || !isPermissionCode(permission.permission_code)) {
-        return null;
-      }
-      permissions.push(permission.permission_code);
-    }
-
-    return {
-      team: teamResult.data,
-      userId,
-      membership: {
-        roleId: roleResult.data.id,
-        roleSlug: roleResult.data.slug,
-        roleName: roleResult.data.name,
-      },
-      permissions: Object.freeze(permissions),
-    };
+    const matchingRows = rows.filter((row) => row.team_slug === slug);
+    return matchingRows.length === 1 ? toAccessContext(matchingRows[0], user.id) : null;
   } catch {
     return null;
   }
 }
 
 export async function listUserTeams(
-  userId: string,
-  supabase?: SupabaseClient<Database>,
+  dependencies: TeamContextDependencies = {},
 ): Promise<TeamSummary[]> {
   try {
-    const client = await resolveSupabaseClient(supabase);
-    const membershipsResult = await client
-      .from("memberships")
-      .select("teams(id, name, slug)")
-      .eq("user_id", userId)
-      .eq("status", "active");
-    if (membershipsResult.error || !Array.isArray(membershipsResult.data)) return [];
+    const user = await resolveCurrentUser(dependencies.getCurrentUser);
+    if (!user) return [];
 
-    return membershipsResult.data
-      .map((membership) => {
-        if (typeof membership !== "object" || membership === null) return null;
-        return isTeamSummary((membership as { teams?: unknown }).teams)
-          ? membership.teams
-          : null;
-      })
-      .filter((team): team is TeamSummary => team !== null)
+    const rows = await loadAccessRows(
+      await resolveSupabaseClient(dependencies.supabase),
+    );
+    if (!rows) return [];
+
+    return rows
+      .map((row) => ({ id: row.team_id, name: row.team_name, slug: row.team_slug }))
       .sort(
         (left, right) =>
           compareText(left.name, right.name) ||
@@ -183,13 +175,6 @@ export async function requireTeamPermission(
   permission: PermissionCode,
   dependencies: TeamContextDependencies = {},
 ): Promise<TeamAccessContext | null> {
-  try {
-    const user = await resolveCurrentUser(dependencies.getCurrentUser);
-    if (!user) return null;
-
-    const context = await loadTeamAccessContext(slug, user.id, dependencies.supabase);
-    return context && hasPermission(context, permission) ? context : null;
-  } catch {
-    return null;
-  }
+  const context = await loadTeamAccessContext(slug, dependencies);
+  return context && hasPermission(context, permission) ? context : null;
 }

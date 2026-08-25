@@ -130,9 +130,6 @@ alter function private.can_view_profile(uuid) owner to postgres;
 revoke execute on function private.can_view_profile(uuid) from public, anon, authenticated, service_role;
 grant execute on function private.can_view_profile(uuid) to authenticated;
 
--- Context loading must precede route authorization. Retain the existing
--- permission-based visibility while allowing an active member to load only
--- its own team summary, assigned role, and assigned role's permissions.
 drop policy if exists teams_select_authorized on public.teams;
 create policy teams_select_authorized
 on public.teams
@@ -142,13 +139,6 @@ using (
   private.has_team_permission(id, 'team.read')
   or private.has_team_permission(id, 'team.update')
   or private.has_team_permission(id, 'team.delete')
-  or exists (
-    select 1
-    from public.memberships as context_membership
-    where context_membership.team_id = id
-      and context_membership.user_id = (select auth.uid())
-      and context_membership.status = 'active'
-  )
 );
 
 drop policy if exists roles_select_authorized on public.roles;
@@ -159,13 +149,6 @@ to authenticated
 using (
   private.has_team_permission(team_id, 'roles.read')
   or private.has_team_permission(team_id, 'roles.manage')
-  or exists (
-    select 1
-    from public.memberships as context_membership
-    where context_membership.role_id = id
-      and context_membership.user_id = (select auth.uid())
-      and context_membership.status = 'active'
-  )
 );
 
 drop policy if exists role_permissions_select_authorized on public.role_permissions;
@@ -175,14 +158,53 @@ for select
 to authenticated
 using (
   private.can_view_role(role_id)
-  or exists (
-    select 1
-    from public.memberships as context_membership
-    where context_membership.role_id = public.role_permissions.role_id
-      and context_membership.user_id = (select auth.uid())
-      and context_membership.status = 'active'
-  )
 );
+
+create or replace function public.get_current_team_access_contexts()
+returns table (
+  team_id uuid,
+  team_name text,
+  team_slug text,
+  role_id uuid,
+  role_slug text,
+  role_name text,
+  permission_codes text[]
+)
+language sql
+stable
+security definer
+set search_path = ''
+as $function$
+  select
+    t.id as team_id,
+    t.name as team_name,
+    t.slug as team_slug,
+    r.id as role_id,
+    r.slug as role_slug,
+    r.name as role_name,
+    coalesce(
+      pg_catalog.array_agg(rp.permission_code order by rp.permission_code)
+        filter (where rp.permission_code is not null),
+      array[]::text[]
+    ) as permission_codes
+  from public.memberships as m
+  join public.teams as t
+    on t.id = m.team_id
+  join public.roles as r
+    on r.id = m.role_id
+   and r.team_id = m.team_id
+  left join public.role_permissions as rp
+    on rp.role_id = r.id
+  where (select auth.uid()) is not null
+    and m.user_id = (select auth.uid())
+    and m.status = 'active'
+  group by t.id, t.name, t.slug, r.id, r.slug, r.name
+  order by t.name, t.slug, t.id;
+$function$;
+
+alter function public.get_current_team_access_contexts() owner to postgres;
+revoke execute on function public.get_current_team_access_contexts() from public, anon, authenticated, service_role;
+grant execute on function public.get_current_team_access_contexts() to authenticated;
 
 create or replace function private.bootstrap_team()
 returns trigger

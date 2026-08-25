@@ -19,6 +19,7 @@ declare
   v_post_admin_role uuid;
   v_post_member_role uuid;
   v_context_role uuid;
+  v_context record;
   v_actual text[];
   v_count integer;
   v_failed boolean;
@@ -173,87 +174,132 @@ begin
   );
   execute 'set local role authenticated';
 
+  select * into v_context
+  from public.get_current_team_access_contexts();
+  if not found
+    or v_context.team_id is distinct from v_existing_team
+    or v_context.team_name is distinct from 'Foundation Existing Verification'
+    or v_context.team_slug is distinct from 'foundation-existing-verification-20260825'
+    or v_context.role_id is distinct from v_context_role
+    or v_context.role_slug is distinct from 'finance-context'
+    or v_context.role_name is distinct from 'Finance context'
+    or v_context.permission_codes is distinct from array['finance.read']::text[] then
+    raise exception 'foundation live verification: context RPC returned unexpected fields';
+  end if;
+
+  select pg_catalog.count(*) into v_count
+  from public.get_current_team_access_contexts();
+  if v_count <> 1 then
+    raise exception 'foundation live verification: context RPC exposed unrelated teams';
+  end if;
+
+  select pronargs into v_count
+  from pg_catalog.pg_proc
+  where oid = 'public.get_current_team_access_contexts()'::regprocedure;
+  if v_count <> 0 then
+    raise exception 'foundation live verification: context RPC accepts unexpected arguments';
+  end if;
+
+  select pg_catalog.count(*) into v_count
+  from public.teams
+  where id = v_existing_team;
+  if v_count <> 0 then
+    raise exception 'foundation live verification: finance-only role can read base team rows';
+  end if;
+
+  select pg_catalog.count(*) into v_count
+  from public.roles
+  where id = v_context_role;
+  if v_count <> 0 then
+    raise exception 'foundation live verification: finance-only role can read base role rows';
+  end if;
+
+  select pg_catalog.count(*) into v_count
+  from public.role_permissions
+  where role_id = v_context_role;
+  if v_count <> 0 then
+    raise exception 'foundation live verification: finance-only role can read base role-permission rows';
+  end if;
+
+  if pg_catalog.has_schema_privilege('authenticated', 'private', 'usage') then
+    raise exception 'foundation live verification: authenticated gained private schema usage';
+  end if;
+
+  v_failed := false;
+  v_error_state := null;
+  begin
+    perform private.has_team_permission(v_existing_team, 'finance.read');
+  exception
+    when others then
+      v_failed := true;
+      v_error_state := sqlstate;
+  end;
+  if not v_failed or v_error_state <> '42501' then
+    raise exception 'foundation live verification: authenticated private helper access was not denied (state=%)', v_error_state;
+  end if;
+
+  v_failed := false;
+  v_error_state := null;
+  begin
+    perform 1 from private.audit_events;
+  exception
+    when others then
+      v_failed := true;
+      v_error_state := sqlstate;
+  end;
+  if not v_failed or v_error_state <> '42501' then
+    raise exception 'foundation live verification: authenticated private table access was not denied (state=%)', v_error_state;
+  end if;
+
   execute 'reset role';
   if not private.has_team_permission(v_existing_team, 'finance.read')
     or private.has_team_permission(v_existing_team, 'team.read')
     or private.has_team_permission(v_existing_team, 'roles.read') then
-    raise exception 'foundation live verification: context-only role permission boundary differs';
-  end if;
-  execute 'set local role authenticated';
-
-  select pg_catalog.count(*) into v_count
-  from public.teams
-  where id = v_existing_team;
-  if v_count <> 1 then
-    raise exception 'foundation live verification: context-only role cannot read its own team summary';
+    raise exception 'foundation live verification: finance-only route permission boundary differs';
   end if;
 
-  select pg_catalog.count(*) into v_count
-  from public.teams
-  where id = v_post_team;
-  if v_count <> 0 then
-    raise exception 'foundation live verification: context-only role can read an unrelated team';
-  end if;
-
-  select pg_catalog.count(*) into v_count
-  from public.roles
-  where id = v_context_role;
-  if v_count <> 1 then
-    raise exception 'foundation live verification: context-only role cannot read its assigned role';
-  end if;
-
-  select pg_catalog.count(*) into v_count
-  from public.roles
-  where id = v_existing_member_role;
-  if v_count <> 0 then
-    raise exception 'foundation live verification: context-only role can read an unrelated role';
-  end if;
-
-  select pg_catalog.array_agg(permission_code order by permission_code) into v_actual
-  from public.role_permissions
-  where role_id = v_context_role;
-  if v_actual is distinct from array['finance.read']::text[] then
-    raise exception 'foundation live verification: context-only role permissions differ: %', v_actual;
-  end if;
-
-  select pg_catalog.count(*) into v_count
-  from public.role_permissions
-  where role_id = v_existing_member_role;
-  if v_count <> 0 then
-    raise exception 'foundation live verification: context-only role can read unrelated permissions';
-  end if;
-
-  execute 'reset role';
   update public.memberships
   set status = 'inactive'
   where team_id = v_existing_team and user_id = v_invalid_user;
 
-  if private.has_team_permission(v_existing_team, 'finance.read') then
-    raise exception 'foundation live verification: inactive context-only role retained route permission';
-  end if;
-
   execute 'set local role authenticated';
   select pg_catalog.count(*) into v_count
-  from public.teams
-  where id = v_existing_team;
+  from public.get_current_team_access_contexts();
   if v_count <> 0 then
-    raise exception 'foundation live verification: inactive context-only role can read team metadata';
-  end if;
-
-  select pg_catalog.count(*) into v_count
-  from public.roles
-  where id = v_context_role;
-  if v_count <> 0 then
-    raise exception 'foundation live verification: inactive context-only role can read role metadata';
-  end if;
-
-  select pg_catalog.count(*) into v_count
-  from public.role_permissions
-  where role_id = v_context_role;
-  if v_count <> 0 then
-    raise exception 'foundation live verification: inactive context-only role can read permission metadata';
+    raise exception 'foundation live verification: inactive finance-only role received RPC context';
   end if;
   execute 'reset role';
+
+  execute 'set local role anon';
+  v_failed := false;
+  v_error_state := null;
+  begin
+    perform public.get_current_team_access_contexts();
+  exception
+    when others then
+      v_failed := true;
+      v_error_state := sqlstate;
+  end;
+  execute 'reset role';
+  if not v_failed or v_error_state <> '42501' then
+    raise exception 'foundation live verification: anon context RPC execution was not denied (state=%)', v_error_state;
+  end if;
+
+  execute 'set local role service_role';
+  v_failed := false;
+  v_error_state := null;
+  begin
+    perform public.get_current_team_access_contexts();
+  exception
+    when others then
+      v_failed := true;
+      v_error_state := sqlstate;
+  end;
+  execute 'reset role';
+  if not v_failed or v_error_state <> '42501'
+    or pg_catalog.has_function_privilege('public', 'public.get_current_team_access_contexts()', 'execute') then
+    raise exception 'foundation live verification: context RPC ACL is broader than authenticated (state=%)', v_error_state;
+  end if;
 
   v_failed := false;
   v_error_state := null;
@@ -335,7 +381,7 @@ rollback;
 
 select
   'ok'::text as status,
-  22::integer as assertions,
-  10::integer as coverage_groups,
-  'existing remap; custom preservation; bootstrap mappings; password default; lifecycle constraint, ACL, timestamp, audit, active context, and narrow custom-role metadata visibility'::text as coverage,
+  28::integer as assertions,
+  11::integer as coverage_groups,
+  'existing remap; custom preservation; bootstrap mappings; password default; lifecycle constraint, ACL, timestamp, audit, active context, and hardened finance-only context RPC'::text as coverage,
   'post-migration fixtures rolled back; pre-migration fixtures require cleanup'::text as fixtures;

@@ -17,59 +17,70 @@ type SupabaseResponse<T> = {
   statusText: string;
 };
 
+type AccessRpcRow = {
+  team_id: string;
+  team_name: string;
+  team_slug: string;
+  role_id: string;
+  role_slug: string;
+  role_name: string;
+  permission_codes: string[];
+};
+
 function response<T>(data: T): SupabaseResponse<T> {
   return { data, error: null, count: null, status: 200, statusText: "OK" };
 }
 
 function errorResponse<T>(message: string): SupabaseResponse<T> {
-  return { data: null as T, error: { message }, count: null, status: 500, statusText: "Internal Server Error" };
+  return {
+    data: null as T,
+    error: { message },
+    count: null,
+    status: 500,
+    statusText: "Internal Server Error",
+  };
 }
 
-function createSupabaseDouble(responses: Record<string, SupabaseResponse<unknown>>) {
-  const filters: Array<{ table: string; column: string; value: unknown }> = [];
+function createSupabaseDouble(result: SupabaseResponse<unknown>) {
+  const rpcCalls: Array<{ name: string; args: unknown }> = [];
   const client = {
-    from(table: string) {
-      const result = responses[table];
-      assert.ok(result, `unexpected ${table} read`);
-
-      const query = {
-        select() {
-          return query;
-        },
-        eq(column: string, value: unknown) {
-          filters.push({ table, column, value });
-          return query;
-        },
-        maybeSingle: async () => result,
-        then: <TResult1 = SupabaseResponse<unknown>, TResult2 = never>(
-          onfulfilled?: ((value: SupabaseResponse<unknown>) => TResult1 | PromiseLike<TResult1>) | null,
-          onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null,
-        ) => Promise.resolve(result).then(onfulfilled, onrejected),
-      };
-
-      return query;
+    rpc(name: string, args?: unknown) {
+      rpcCalls.push({ name, args });
+      return Promise.resolve(result);
+    },
+    from() {
+      throw new Error("team context must use its narrow RPC instead of base tables");
     },
   };
 
-  return Object.assign(client, { filters }) as unknown as SupabaseClient<Database> & {
-    filters: Array<{ table: string; column: string; value: unknown }>;
+  return Object.assign(client, { rpcCalls }) as unknown as SupabaseClient<Database> & {
+    rpcCalls: Array<{ name: string; args: unknown }>;
   };
 }
 
-function authorizedClient() {
-  return createSupabaseDouble({
-    teams: response({ id: "team-1", name: "Falcons", slug: "falcons" }),
-    memberships: response({ role_id: "role-1" }),
-    roles: response({ id: "role-1", slug: "member", name: "Member" }),
-    role_permissions: response([
-      { permission_code: "matches.read" },
-      { permission_code: "team.read" },
-    ]),
-  });
+function accessRow(overrides: Partial<AccessRpcRow> = {}): AccessRpcRow {
+  return {
+    team_id: "team-1",
+    team_name: "Falcons",
+    team_slug: "falcons",
+    role_id: "role-1",
+    role_slug: "member",
+    role_name: "Member",
+    permission_codes: ["matches.read", "team.read"],
+    ...overrides,
+  };
 }
 
-test("loadTeamAccessContext serializes an authorized active membership", async () => {
-  const context = await loadTeamAccessContext("falcons", "user-1", authorizedClient());
+function authorizedDependencies(rows: AccessRpcRow[] = [accessRow()]) {
+  return {
+    supabase: createSupabaseDouble(response(rows)),
+    getCurrentUser: async () => ({ id: "user-1" }),
+  };
+}
+
+test("loadTeamAccessContext serializes only the matching verified RPC row", async () => {
+  const dependencies = authorizedDependencies();
+  const context = await loadTeamAccessContext("falcons", dependencies);
 
   assert.deepEqual(context, {
     team: { id: "team-1", name: "Falcons", slug: "falcons" },
@@ -78,75 +89,61 @@ test("loadTeamAccessContext serializes an authorized active membership", async (
     permissions: ["matches.read", "team.read"],
   });
   assert.equal(Object.isFrozen(context?.permissions), true);
-});
-
-test("loadTeamAccessContext fails closed for a missing or inactive membership", async () => {
-  const client = createSupabaseDouble({
-    teams: response({ id: "team-1", name: "Falcons", slug: "falcons" }),
-    memberships: response(null),
-  });
-
-  assert.equal(await loadTeamAccessContext("falcons", "user-1", client), null);
-  assert.deepEqual(client.filters, [
-    { table: "teams", column: "slug", value: "falcons" },
-    { table: "memberships", column: "team_id", value: "team-1" },
-    { table: "memberships", column: "user_id", value: "user-1" },
-    { table: "memberships", column: "status", value: "active" },
+  assert.deepEqual(dependencies.supabase.rpcCalls, [
+    { name: "get_current_team_access_contexts", args: undefined },
   ]);
 });
 
-test("loadTeamAccessContext fails closed for missing roles, data errors, and unknown permissions", async () => {
-  const missingRole = createSupabaseDouble({
-    teams: response({ id: "team-1", name: "Falcons", slug: "falcons" }),
-    memberships: response({ role_id: "role-1" }),
-    roles: response(null),
-  });
-  const dataError = createSupabaseDouble({
-    teams: errorResponse("database unavailable"),
-  });
-  const unknownPermission = createSupabaseDouble({
-    teams: response({ id: "team-1", name: "Falcons", slug: "falcons" }),
-    memberships: response({ role_id: "role-1" }),
-    roles: response({ id: "role-1", slug: "member", name: "Member" }),
-    role_permissions: response([{ permission_code: "finance.destroy" }]),
-  });
-
-  assert.equal(await loadTeamAccessContext("falcons", "user-1", missingRole), null);
-  assert.equal(await loadTeamAccessContext("falcons", "user-1", dataError), null);
-  assert.equal(await loadTeamAccessContext("falcons", "user-1", unknownPermission), null);
+test("loadTeamAccessContext fails closed for missing or inactive RPC rows", async () => {
+  assert.equal(
+    await loadTeamAccessContext("falcons", authorizedDependencies([])),
+    null,
+  );
 });
 
-test("listUserTeams returns only active teams in deterministic name, slug, and id order", async () => {
-  const client = createSupabaseDouble({
-    memberships: response([
-      { teams: { id: "team-3", name: "Zebra", slug: "zebra" } },
-      { teams: { id: "team-2", name: "Alpha", slug: "zulu" } },
-      { teams: { id: "team-1", name: "Alpha", slug: "alpha" } },
-    ]),
-  });
+test("loadTeamAccessContext fails closed for RPC errors, malformed rows, and unknown permissions", async () => {
+  const errorClient = createSupabaseDouble(errorResponse("database unavailable"));
+  const malformed = authorizedDependencies([
+    { ...accessRow(), role_name: undefined as unknown as string },
+  ]);
+  const unknownPermission = authorizedDependencies([
+    accessRow({ permission_codes: ["finance.destroy"] }),
+  ]);
 
-  assert.deepEqual(await listUserTeams("user-1", client), [
+  assert.equal(
+    await loadTeamAccessContext("falcons", {
+      supabase: errorClient,
+      getCurrentUser: async () => ({ id: "user-1" }),
+    }),
+    null,
+  );
+  assert.equal(await loadTeamAccessContext("falcons", malformed), null);
+  assert.equal(await loadTeamAccessContext("falcons", unknownPermission), null);
+});
+
+test("listUserTeams returns RPC teams in deterministic name, slug, and id order", async () => {
+  const dependencies = authorizedDependencies([
+    accessRow({ team_id: "team-3", team_name: "Zebra", team_slug: "zebra" }),
+    accessRow({ team_id: "team-2", team_name: "Alpha", team_slug: "zulu" }),
+    accessRow({ team_id: "team-1", team_name: "Alpha", team_slug: "alpha" }),
+  ]);
+
+  assert.deepEqual(await listUserTeams(dependencies), [
     { id: "team-1", name: "Alpha", slug: "alpha" },
     { id: "team-2", name: "Alpha", slug: "zulu" },
     { id: "team-3", name: "Zebra", slug: "zebra" },
   ]);
-  assert.deepEqual(client.filters, [
-    { table: "memberships", column: "user_id", value: "user-1" },
-    { table: "memberships", column: "status", value: "active" },
-  ]);
 });
 
 test("listUserTeams uses code-point ordering for case and non-ASCII names", async () => {
-  const client = createSupabaseDouble({
-    memberships: response([
-      { teams: { id: "team-4", name: "Đội", slug: "doi" } },
-      { teams: { id: "team-3", name: "Doi", slug: "doi" } },
-      { teams: { id: "team-2", name: "alpha", slug: "alpha" } },
-      { teams: { id: "team-1", name: "Alpha", slug: "alpha" } },
-    ]),
-  });
+  const dependencies = authorizedDependencies([
+    accessRow({ team_id: "team-4", team_name: "Đội", team_slug: "doi" }),
+    accessRow({ team_id: "team-3", team_name: "Doi", team_slug: "doi" }),
+    accessRow({ team_id: "team-2", team_name: "alpha", team_slug: "alpha" }),
+    accessRow({ team_id: "team-1", team_name: "Alpha", team_slug: "alpha" }),
+  ]);
 
-  assert.deepEqual(await listUserTeams("user-1", client), [
+  assert.deepEqual(await listUserTeams(dependencies), [
     { id: "team-1", name: "Alpha", slug: "alpha" },
     { id: "team-3", name: "Doi", slug: "doi" },
     { id: "team-2", name: "alpha", slug: "alpha" },
@@ -157,7 +154,7 @@ test("listUserTeams uses code-point ordering for case and non-ASCII names", asyn
 test("requireTeamPermission uses verified identity and denies missing permissions", async () => {
   let identityReads = 0;
   const context = await requireTeamPermission("falcons", "finance.read", {
-    supabase: authorizedClient(),
+    ...authorizedDependencies(),
     getCurrentUser: async () => {
       identityReads += 1;
       return { id: "user-1" };

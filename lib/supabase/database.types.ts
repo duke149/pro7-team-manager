@@ -291,6 +291,18 @@ export type Database = {
     }
     Functions: {
       accept_team_invitation: { Args: { token: string }; Returns: string }
+      get_current_team_access_contexts: {
+        Args: Record<string, never>
+        Returns: {
+          permission_codes: string[]
+          role_id: string
+          role_name: string
+          role_slug: string
+          team_id: string
+          team_name: string
+          team_slug: string
+        }[]
+      }
     }
     Enums: {
       [_ in never]: never
