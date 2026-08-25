@@ -6,6 +6,8 @@ export type Json =
   | { [key: string]: Json | undefined }
   | Json[]
 
+// Provisional for the pending PRO7 squad migration. Regenerate from the remote
+// schema only after the reviewed deployment checkpoint is explicitly approved.
 export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
@@ -133,28 +135,46 @@ export type Database = {
       }
       profiles: {
         Row: {
+          avatar_path: string | null
           avatar_url: string | null
           created_at: string
+          date_of_birth: string | null
           display_name: string | null
+          height_cm: number | null
           id: string
+          phone: string | null
+          preferred_positions: string[]
           requires_password_change: boolean
           updated_at: string
+          weight_kg: number | null
         }
         Insert: {
+          avatar_path?: string | null
           avatar_url?: string | null
           created_at?: string
+          date_of_birth?: string | null
           display_name?: string | null
+          height_cm?: number | null
           id: string
+          phone?: string | null
+          preferred_positions?: string[]
           requires_password_change?: boolean
           updated_at?: string
+          weight_kg?: number | null
         }
         Update: {
+          avatar_path?: string | null
           avatar_url?: string | null
           created_at?: string
+          date_of_birth?: string | null
           display_name?: string | null
+          height_cm?: number | null
           id?: string
+          phone?: string | null
+          preferred_positions?: string[]
           requires_password_change?: boolean
           updated_at?: string
+          weight_kg?: number | null
         }
         Relationships: []
       }
@@ -258,6 +278,50 @@ export type Database = {
           },
         ]
       }
+      team_player_profiles: {
+        Row: {
+          admin_notes: string | null
+          created_at: string
+          join_date: string
+          official_position: string | null
+          player_status: string
+          shirt_number: number | null
+          team_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          admin_notes?: string | null
+          created_at?: string
+          join_date?: string
+          official_position?: string | null
+          player_status?: string
+          shirt_number?: number | null
+          team_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          admin_notes?: string | null
+          created_at?: string
+          join_date?: string
+          official_position?: string | null
+          player_status?: string
+          shirt_number?: number | null
+          team_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "team_player_profiles_membership_fkey"
+            columns: ["team_id", "user_id"]
+            isOneToOne: true
+            referencedRelation: "memberships"
+            referencedColumns: ["team_id", "user_id"]
+          },
+        ]
+      }
       teams: {
         Row: {
           created_at: string
@@ -291,6 +355,20 @@ export type Database = {
     }
     Functions: {
       accept_team_invitation: { Args: { token: string }; Returns: string }
+      attach_team_member: {
+        Args: {
+          p_display_name: string | null
+          p_join_date: string
+          p_official_position: string | null
+          p_requires_password_change: boolean
+          p_role_id: string
+          p_shirt_number: number | null
+          p_team_id: string
+          p_user_id: string
+          p_verified_actor_user_id: string
+        }
+        Returns: undefined
+      }
       create_team: {
         Args: { p_name: string; p_slug: string }
         Returns: { id: string; name: string; slug: string }[]
@@ -306,6 +384,24 @@ export type Database = {
           team_name: string
           team_slug: string
         }[]
+      }
+      get_team_player_admin_detail: {
+        Args: { p_team_id: string; p_user_id: string }
+        Returns: { admin_notes: string | null }[]
+      }
+      manage_team_player: {
+        Args: {
+          p_admin_notes: string | null
+          p_deactivate: boolean
+          p_join_date: string
+          p_official_position: string | null
+          p_player_status: string
+          p_role_id: string
+          p_shirt_number: number | null
+          p_team_id: string
+          p_user_id: string
+        }
+        Returns: undefined
       }
     }
     Enums: {
