@@ -136,6 +136,24 @@ test("listUserTeams returns only active teams in deterministic name, slug, and i
   ]);
 });
 
+test("listUserTeams uses code-point ordering for case and non-ASCII names", async () => {
+  const client = createSupabaseDouble({
+    memberships: response([
+      { teams: { id: "team-4", name: "Đội", slug: "doi" } },
+      { teams: { id: "team-3", name: "Doi", slug: "doi" } },
+      { teams: { id: "team-2", name: "alpha", slug: "alpha" } },
+      { teams: { id: "team-1", name: "Alpha", slug: "alpha" } },
+    ]),
+  });
+
+  assert.deepEqual(await listUserTeams("user-1", client), [
+    { id: "team-1", name: "Alpha", slug: "alpha" },
+    { id: "team-3", name: "Doi", slug: "doi" },
+    { id: "team-2", name: "alpha", slug: "alpha" },
+    { id: "team-4", name: "Đội", slug: "doi" },
+  ]);
+});
+
 test("requireTeamPermission uses verified identity and denies missing permissions", async () => {
   let identityReads = 0;
   const context = await requireTeamPermission("falcons", "finance.read", {

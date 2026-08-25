@@ -63,6 +63,11 @@ function isPermissionRow(value: unknown): value is { permission_code: string } {
   );
 }
 
+function compareText(left: string, right: string): number {
+  if (left === right) return 0;
+  return left < right ? -1 : 1;
+}
+
 async function resolveSupabaseClient(
   supabase?: SupabaseClient<Database>,
 ): Promise<SupabaseClient<Database>> {
@@ -164,9 +169,9 @@ export async function listUserTeams(
       .filter((team): team is TeamSummary => team !== null)
       .sort(
         (left, right) =>
-          left.name.localeCompare(right.name) ||
-          left.slug.localeCompare(right.slug) ||
-          left.id.localeCompare(right.id),
+          compareText(left.name, right.name) ||
+          compareText(left.slug, right.slug) ||
+          compareText(left.id, right.id),
       );
   } catch {
     return [];

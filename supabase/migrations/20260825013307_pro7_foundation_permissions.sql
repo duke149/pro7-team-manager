@@ -130,6 +130,60 @@ alter function private.can_view_profile(uuid) owner to postgres;
 revoke execute on function private.can_view_profile(uuid) from public, anon, authenticated, service_role;
 grant execute on function private.can_view_profile(uuid) to authenticated;
 
+-- Context loading must precede route authorization. Retain the existing
+-- permission-based visibility while allowing an active member to load only
+-- its own team summary, assigned role, and assigned role's permissions.
+drop policy if exists teams_select_authorized on public.teams;
+create policy teams_select_authorized
+on public.teams
+for select
+to authenticated
+using (
+  private.has_team_permission(id, 'team.read')
+  or private.has_team_permission(id, 'team.update')
+  or private.has_team_permission(id, 'team.delete')
+  or exists (
+    select 1
+    from public.memberships as context_membership
+    where context_membership.team_id = id
+      and context_membership.user_id = (select auth.uid())
+      and context_membership.status = 'active'
+  )
+);
+
+drop policy if exists roles_select_authorized on public.roles;
+create policy roles_select_authorized
+on public.roles
+for select
+to authenticated
+using (
+  private.has_team_permission(team_id, 'roles.read')
+  or private.has_team_permission(team_id, 'roles.manage')
+  or exists (
+    select 1
+    from public.memberships as context_membership
+    where context_membership.role_id = id
+      and context_membership.user_id = (select auth.uid())
+      and context_membership.status = 'active'
+  )
+);
+
+drop policy if exists role_permissions_select_authorized on public.role_permissions;
+create policy role_permissions_select_authorized
+on public.role_permissions
+for select
+to authenticated
+using (
+  private.can_view_role(role_id)
+  or exists (
+    select 1
+    from public.memberships as context_membership
+    where context_membership.role_id = public.role_permissions.role_id
+      and context_membership.user_id = (select auth.uid())
+      and context_membership.status = 'active'
+  )
+);
+
 create or replace function private.bootstrap_team()
 returns trigger
 language plpgsql

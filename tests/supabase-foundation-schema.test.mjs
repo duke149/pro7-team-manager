@@ -116,6 +116,23 @@ test("foundation migration excludes inactive memberships from permission context
   assert.match(sql, /create or replace function private\.can_view_profile\(p_profile_user_id uuid\)[\s\S]*viewer\.status = 'active'/);
 });
 
+test("foundation migration exposes only active assigned context metadata without broad permissions", async () => {
+  const sql = normalizeSql(await readFoundationMigration());
+
+  assert.match(
+    sql,
+    /create policy teams_select_authorized[\s\S]*private\.has_team_permission\(id, 'team\.read'\)[\s\S]*or exists \(\s*select 1 from public\.memberships as context_membership where context_membership\.team_id = id and context_membership\.user_id = \(select auth\.uid\(\)\) and context_membership\.status = 'active'\s*\)/,
+  );
+  assert.match(
+    sql,
+    /create policy roles_select_authorized[\s\S]*private\.has_team_permission\(team_id, 'roles\.read'\)[\s\S]*or exists \(\s*select 1 from public\.memberships as context_membership where context_membership\.role_id = id and context_membership\.user_id = \(select auth\.uid\(\)\) and context_membership\.status = 'active'\s*\)/,
+  );
+  assert.match(
+    sql,
+    /create policy role_permissions_select_authorized[\s\S]*private\.can_view_role\(role_id\)[\s\S]*or exists \(\s*select 1 from public\.memberships as context_membership where context_membership\.role_id = public\.role_permissions\.role_id and context_membership\.user_id = \(select auth\.uid\(\)\) and context_membership\.status = 'active'\s*\)/,
+  );
+});
+
 test("foundation live harness preserves pre-migration fixtures through the additive migration", async () => {
   const testFiles = await readdir(fileURLToPath(new URL("./", import.meta.url)));
   for (const file of [

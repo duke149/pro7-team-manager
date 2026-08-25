@@ -18,7 +18,9 @@ declare
   v_post_owner_role uuid;
   v_post_admin_role uuid;
   v_post_member_role uuid;
+  v_context_role uuid;
   v_actual text[];
+  v_count integer;
   v_failed boolean;
   v_error_state text;
   v_old_updated_at constant timestamptz := '2000-01-01 00:00:00+00';
@@ -153,6 +155,106 @@ begin
     raise exception 'foundation live verification: bootstrap Member permissions differ: %', v_actual;
   end if;
 
+  insert into public.roles (team_id, slug, name, description)
+  values (v_existing_team, 'finance-context', 'Finance context', 'context-only fixture')
+  returning id into v_context_role;
+
+  insert into public.role_permissions (role_id, permission_code)
+  values (v_context_role, 'finance.read');
+
+  insert into public.memberships (team_id, user_id, role_id)
+  values (v_existing_team, v_invalid_user, v_context_role);
+
+  perform pg_catalog.set_config('request.jwt.claim.sub', v_invalid_user::text, true);
+  perform pg_catalog.set_config(
+    'request.jwt.claims',
+    pg_catalog.jsonb_build_object('sub', v_invalid_user, 'role', 'authenticated')::text,
+    true
+  );
+  execute 'set local role authenticated';
+
+  execute 'reset role';
+  if not private.has_team_permission(v_existing_team, 'finance.read')
+    or private.has_team_permission(v_existing_team, 'team.read')
+    or private.has_team_permission(v_existing_team, 'roles.read') then
+    raise exception 'foundation live verification: context-only role permission boundary differs';
+  end if;
+  execute 'set local role authenticated';
+
+  select pg_catalog.count(*) into v_count
+  from public.teams
+  where id = v_existing_team;
+  if v_count <> 1 then
+    raise exception 'foundation live verification: context-only role cannot read its own team summary';
+  end if;
+
+  select pg_catalog.count(*) into v_count
+  from public.teams
+  where id = v_post_team;
+  if v_count <> 0 then
+    raise exception 'foundation live verification: context-only role can read an unrelated team';
+  end if;
+
+  select pg_catalog.count(*) into v_count
+  from public.roles
+  where id = v_context_role;
+  if v_count <> 1 then
+    raise exception 'foundation live verification: context-only role cannot read its assigned role';
+  end if;
+
+  select pg_catalog.count(*) into v_count
+  from public.roles
+  where id = v_existing_member_role;
+  if v_count <> 0 then
+    raise exception 'foundation live verification: context-only role can read an unrelated role';
+  end if;
+
+  select pg_catalog.array_agg(permission_code order by permission_code) into v_actual
+  from public.role_permissions
+  where role_id = v_context_role;
+  if v_actual is distinct from array['finance.read']::text[] then
+    raise exception 'foundation live verification: context-only role permissions differ: %', v_actual;
+  end if;
+
+  select pg_catalog.count(*) into v_count
+  from public.role_permissions
+  where role_id = v_existing_member_role;
+  if v_count <> 0 then
+    raise exception 'foundation live verification: context-only role can read unrelated permissions';
+  end if;
+
+  execute 'reset role';
+  update public.memberships
+  set status = 'inactive'
+  where team_id = v_existing_team and user_id = v_invalid_user;
+
+  if private.has_team_permission(v_existing_team, 'finance.read') then
+    raise exception 'foundation live verification: inactive context-only role retained route permission';
+  end if;
+
+  execute 'set local role authenticated';
+  select pg_catalog.count(*) into v_count
+  from public.teams
+  where id = v_existing_team;
+  if v_count <> 0 then
+    raise exception 'foundation live verification: inactive context-only role can read team metadata';
+  end if;
+
+  select pg_catalog.count(*) into v_count
+  from public.roles
+  where id = v_context_role;
+  if v_count <> 0 then
+    raise exception 'foundation live verification: inactive context-only role can read role metadata';
+  end if;
+
+  select pg_catalog.count(*) into v_count
+  from public.role_permissions
+  where role_id = v_context_role;
+  if v_count <> 0 then
+    raise exception 'foundation live verification: inactive context-only role can read permission metadata';
+  end if;
+  execute 'reset role';
+
   v_failed := false;
   v_error_state := null;
   begin
@@ -233,7 +335,7 @@ rollback;
 
 select
   'ok'::text as status,
-  13::integer as assertions,
-  9::integer as coverage_groups,
-  'existing remap; custom preservation; bootstrap mappings; password default; lifecycle constraint, ACL, timestamp, audit, and active context'::text as coverage,
+  22::integer as assertions,
+  10::integer as coverage_groups,
+  'existing remap; custom preservation; bootstrap mappings; password default; lifecycle constraint, ACL, timestamp, audit, active context, and narrow custom-role metadata visibility'::text as coverage,
   'post-migration fixtures rolled back; pre-migration fixtures require cleanup'::text as fixtures;
