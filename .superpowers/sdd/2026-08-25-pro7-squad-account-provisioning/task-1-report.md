@@ -61,3 +61,50 @@ git diff --check
 
 - Full authenticated screenshot comparison was not possible: the hosted reference opened only the ChatGPT sign-in gate, and no user session was provided. Automated desktop/mobile class, hierarchy, link-order, light/dark control, and permission contracts passed.
 - The required scoped ESLint invocation still reports 7 pre-existing accessibility errors and 1 warning in the retained standalone `app/pro7-app.tsx` prototype (lines 123, 190, 214, and 230). The new route components produced no lint findings. Build passes; the existing Vinext middleware deprecation warning remains.
+
+## Review-fix round 1/5
+
+### Findings verified and fixed
+
+- Added the guarded `/teams/[slug]/tactics` landing page. It requires `tactics.read`, renders an honest no-match state, and allows a tactics-only membership to resolve to that stable route. A local unauthenticated request to `/teams/falcons/tactics` returned `307 Location: /login?next=%2Fteams%2Ffalcons%2Ftactics`, rather than 404.
+- Replaced the premature `/account/profile` anchor with the same non-interactive hosted account block.
+- Reused the existing `resolveBrowserTheme` contract in `Pro7RouteShell` after hydration, with deferred state resolution and timer cancellation to avoid hydration mismatch and stale queued preference writes.
+- Restored white active text on the red desktop navigation item.
+- Added explicit coverage that a member without `players.manage` receives neither the Squad add card nor the header CTA.
+
+### RED evidence
+
+```bash
+npm run test:unit -- tests/pro7-shell-parity.test.ts tests/product-navigation.test.ts tests/team-navigation.test.ts
+# 14 pass, 2 fail: account block still linked to /account/profile; tactics-only landing resolved null.
+
+npm run test:unit -- tests/pro7-route-shell-mounted.test.ts
+# 0 pass, 1 fail: persisted pro7-theme=dark hydrated as "pro7-shell light".
+```
+
+The CSS render contract was also added before the style token change and failed against `color:var(--navy)`.
+
+### GREEN verification
+
+```bash
+npm run test:unit -- tests/pro7-shell-parity.test.ts tests/product-navigation.test.ts tests/team-navigation.test.ts tests/pro7-route-shell-mounted.test.ts tests/tactics-route.test.ts
+# 18 pass, 0 fail
+
+node --test tests/rendered-html.test.mjs
+# 6 pass, 0 fail
+
+npx eslint app/components/pro7-route-* app/teams/[slug]/tactics/page.tsx lib/teams/navigation.ts tests/pro7-shell-parity.test.ts tests/product-navigation.test.ts tests/team-navigation.test.ts tests/pro7-route-shell-mounted.test.ts tests/tactics-route.test.ts tests/rendered-html.test.mjs
+# exit 0
+
+npm run build
+# exit 0; route table includes /teams/:slug/tactics
+
+git diff --check
+# exit 0
+```
+
+The combined unit invocation emitted a non-fatal Vite HMR port-24678-in-use warning while all 18 tests passed. The existing Vinext middleware deprecation warning also remains.
+
+### Review-fix commit
+
+- `278af40a270f51f0197716b391743903b384e072` (`fix: stabilize PRO7 tactics and theme routes`)
