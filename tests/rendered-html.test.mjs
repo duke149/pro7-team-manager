@@ -59,7 +59,11 @@ test("wires verified Supabase auth without changing Sites auth routes", async ()
   assert.match(auth, /redirect\([^)]*\/login/, "unauthenticated users must be sent to /login");
   assert.match(callback, /auth\.exchangeCodeForSession\(code\)/, "callback must exchange its PKCE code");
   assert.match(callback, /safeRelativeReturnPath\(/, "callback redirects must be local-only");
-  assert.match(home, /await requireCurrentUser\("\/"\)/, "the dashboard must require a verified user");
+  assert.match(
+    home,
+    /await requireProductUser\("\/"\)/,
+    "the dashboard must enforce the temporary-password boundary",
+  );
   assert.match(dashboard, /auth\.signOut\(\)/, "the dashboard must expose Supabase logout");
   assert.match(dashboard, /Đăng xuất/, "logout must have an accessible Vietnamese label");
   assert.match(chatgptAuth, /const SIGN_IN_PATH = "\/signin-with-chatgpt"/);
@@ -97,6 +101,11 @@ test("browser password replacement bundle contains no service credential", async
     .join("\n");
 
   assert.match(bundledCode, /change-temporary-password/);
+  assert.match(
+    bundledCode,
+    /Không thể hoàn tất đổi mật khẩu\. Vui lòng liên hệ quản trị viên\./,
+    "the browser must surface manual recovery guidance without upstream details",
+  );
   assert.doesNotMatch(
     bundledCode,
     /SUPABASE_SERVICE_ROLE_KEY|service-value-that-must-never-reach-the-browser/u,

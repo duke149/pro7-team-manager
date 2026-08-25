@@ -5,6 +5,29 @@ import { FormEvent, useState } from "react";
 import { createBrowserSupabaseClient } from "../../../lib/supabase/client";
 
 const CHANGE_PASSWORD_ERROR = "Không thể đổi mật khẩu. Vui lòng thử lại.";
+const MANUAL_RECOVERY_ERROR =
+  "Không thể hoàn tất đổi mật khẩu. Vui lòng liên hệ quản trị viên.";
+
+async function errorMessageForFunctionFailure(error: unknown): Promise<string> {
+  if (
+    typeof error !== "object" ||
+    error === null ||
+    !("context" in error) ||
+    !(error.context instanceof Response)
+  ) {
+    return CHANGE_PASSWORD_ERROR;
+  }
+
+  const payload: unknown = await error.context.clone().json().catch(() => null);
+  return (
+    typeof payload === "object" &&
+    payload !== null &&
+    "code" in payload &&
+    payload.code === "manual_recovery_required"
+  )
+    ? MANUAL_RECOVERY_ERROR
+    : CHANGE_PASSWORD_ERROR;
+}
 
 export default function ChangePasswordForm() {
   const [currentTemporaryPassword, setCurrentTemporaryPassword] = useState("");
@@ -49,7 +72,7 @@ export default function ChangePasswordForm() {
       );
       clearFields();
       if (error) {
-        setErrorMessage(CHANGE_PASSWORD_ERROR);
+        setErrorMessage(await errorMessageForFunctionFailure(error));
         return;
       }
 

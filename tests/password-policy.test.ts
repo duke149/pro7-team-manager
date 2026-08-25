@@ -55,6 +55,28 @@ test("validateNewPassword rejects reusing the temporary password", () => {
   );
 });
 
+test("validateNewPassword reports unchanged before any other policy failure", () => {
+  assert.deepEqual(
+    validateNewPassword({
+      password: "short",
+      email: "member@example.com",
+      temporaryPassword: "short",
+    }),
+    { ok: false, code: "unchanged" },
+  );
+});
+
+test("validateNewPassword normalizes Unicode and uses deterministic case folding for email checks", () => {
+  assert.deepEqual(
+    validateNewPassword({
+      password: "member-Aa1!xyz",
+      email: "ＭＥＭＢＥＲ@example.com",
+      temporaryPassword: "Temporary-1!",
+    }),
+    { ok: false, code: "email" },
+  );
+});
+
 test("validateNewPassword accepts a sufficiently strong unrelated password", () => {
   assert.deepEqual(
     validateNewPassword({

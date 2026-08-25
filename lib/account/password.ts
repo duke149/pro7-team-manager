@@ -13,6 +13,7 @@ export function validateNewPassword({
   email,
   temporaryPassword,
 }: PasswordValidationInput): PasswordValidation {
+  if (password === temporaryPassword) return { ok: false, code: "unchanged" };
   if (password.length < 12) return { ok: false, code: "length" };
   if (
     !/[A-Z]/u.test(password) ||
@@ -23,11 +24,17 @@ export function validateNewPassword({
     return { ok: false, code: "complexity" };
   }
 
-  const emailLocalPart = email.trim().toLocaleLowerCase().split("@", 1)[0];
-  if (emailLocalPart && password.toLocaleLowerCase().includes(emailLocalPart)) {
+  const emailLocalPart = email
+    .trim()
+    .normalize("NFKC")
+    .toLowerCase()
+    .split("@", 1)[0];
+  if (
+    emailLocalPart &&
+    password.normalize("NFKC").toLowerCase().includes(emailLocalPart)
+  ) {
     return { ok: false, code: "email" };
   }
-  if (password === temporaryPassword) return { ok: false, code: "unchanged" };
 
   return { ok: true };
 }
