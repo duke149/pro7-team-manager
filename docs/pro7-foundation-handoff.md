@@ -78,10 +78,12 @@ This was local disposable-database evidence only; no SQL reached Supabase.
   unscoped `npm run lint` also traverses generated `work/` test bundles and
   consequently reports 480 errors and 1 warning; that result is not a source
   regression signal.
-- `npx tsc --noEmit` reports 21 pre-existing project/configuration diagnostics
-  across Cloudflare worker types, Supabase SSR typings, Deno extension policy,
-  browser-test fixtures, and test-only type boundaries.  It is not a passing
-  foundation gate.
+- `npx tsc --noEmit` reproduces 21 known, non-gating root TypeScript
+  configuration/boundary diagnostics.  Fifteen are emitted from this slice's
+  Deno, mounted-shell-test, and team-route-test files; six are from pre-existing
+  configuration/runtime files.  This root check is not green and must not be
+  described as entirely pre-existing.  Native Deno checking and focused/scoped
+  checks remain green as recorded above.
 - The test/build runs emit non-failing Node `DEP0205`, Vinext
   middleware-to-proxy, route-classification, and occasional Vite HMR-port
   notices.
@@ -107,8 +109,18 @@ until the approved remote migration/deployment checkpoint is complete.
    `SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, and
    `ALLOWED_ORIGINS`.  No values are recorded here.
 5. Deploy `change-temporary-password`; deployment has not occurred.
-6. Run authorized remote rollback/cleanup verification and security/performance
-   advisors, then perform the pending desktop/mobile browser QA.
+6. Before any remote validation run, design and review a separate,
+   non-destructive post-apply validator for the populated project: read-only
+   catalog/ACL/policy/permission-matrix checks, plus transaction-scoped,
+   uniquely named fixtures only if mutations are explicitly approved.  It must
+   make no global-empty-audit or fixture assumptions.
+7. Run that separately approved validator, then security/performance advisors.
+8. Perform the pending desktop/mobile browser QA.
+
+Never run `tests/supabase-foundation-live-harness.sql` against the remote
+project.  It is local/disposable-only: it re-includes the apply-once foundation
+migration, creates committed pre-migration fixtures, and assumes empty audit
+fixtures during cleanup.
 
 ## Mandatory security warning
 
