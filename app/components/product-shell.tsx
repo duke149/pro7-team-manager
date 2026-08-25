@@ -1,12 +1,20 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { usePathname } from "next/navigation";
 
 import type { TeamAccessContext } from "../../lib/teams/context";
 import type { PermissionCode } from "../../lib/teams/permissions";
 import { AccountMenu } from "./account-menu";
 import { ProductNav } from "./product-nav";
+import {
+  INITIAL_THEME,
+  nextTheme,
+  persistBrowserTheme,
+  resolveBrowserTheme,
+  ThemeToggle,
+  type Theme,
+} from "./product-shell-controls";
 
 export function ProductShell({
   children,
@@ -22,8 +30,21 @@ export function ProductShell({
   email?: string;
 }) {
   const pathname = usePathname() || `/teams/${encodeURIComponent(team.slug)}/overview`;
-  const [theme, setTheme] = useState<"light" | "dark">("light");
-  const isDark = theme === "dark";
+  const [theme, setTheme] = useState<Theme>(INITIAL_THEME);
+
+  useEffect(() => {
+    const resolvedTheme = resolveBrowserTheme();
+    if (resolvedTheme === INITIAL_THEME) return;
+
+    const timer = window.setTimeout(() => setTheme(resolvedTheme), 0);
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  function toggleTheme() {
+    const next = nextTheme(theme);
+    setTheme(next);
+    persistBrowserTheme(next);
+  }
 
   return (
     <div className={`pro7-shell product-shell ${theme}`}>
@@ -46,15 +67,7 @@ export function ProductShell({
             <p>{roleName}</p>
           </div>
           <div className="product-header-actions">
-            <button
-              className="theme-button"
-              type="button"
-              aria-pressed={isDark}
-              aria-label={isDark ? "Bật giao diện sáng" : "Bật giao diện tối"}
-              onClick={() => setTheme(isDark ? "light" : "dark")}
-            >
-              {isDark ? "Sáng" : "Tối"}
-            </button>
+            <ThemeToggle theme={theme} onToggle={toggleTheme} />
             <AccountMenu email={email} />
           </div>
         </header>

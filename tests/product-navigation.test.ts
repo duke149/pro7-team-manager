@@ -81,6 +81,30 @@ test("navigation recognizes the browser pathname when its team slug is decoded",
   assert.match(html, /href="\/teams\/%C4%91%E1%BB%99i%20b%C3%B3ng\/matches" aria-current="page"/u);
 });
 
+test("navigation keeps the squad item active for an encoded player-detail pathname", () => {
+  const html = renderNav(member, false, "/teams/%C4%91%E1%BB%99i%20b%C3%B3ng/squad/player-12");
+
+  assert.match(html, /href="\/teams\/%C4%91%E1%BB%99i%20b%C3%B3ng\/squad" aria-current="page"/u);
+});
+
+test("navigation keeps the matches item active for a decoded match-detail pathname", () => {
+  const html = renderNav(member, false, "/teams/đội bóng/matches/match-12");
+
+  assert.match(html, /href="\/teams\/%C4%91%E1%BB%99i%20b%C3%B3ng\/matches" aria-current="page"/u);
+});
+
+test("navigation accepts an encoded slug and trailing slash as the current route", () => {
+  const html = renderNav(member, false, "/teams/%C4%91%E1%BB%99i%20b%C3%B3ng/matches/");
+
+  assert.match(html, /href="\/teams\/%C4%91%E1%BB%99i%20b%C3%B3ng\/matches" aria-current="page"/u);
+});
+
+test("navigation does not mark a false-prefix sibling active", () => {
+  const html = renderNav(member, false, "/teams/đội bóng/matches-archive");
+
+  assert.doesNotMatch(html, /aria-current="page"/u);
+});
+
 test("account menu renders the signed-in address and an accessible logout control", () => {
   const html = renderToStaticMarkup(createElement(AccountMenu, { email: "member@example.com" }));
 

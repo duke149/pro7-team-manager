@@ -23,12 +23,28 @@ const navigationItems: readonly NavigationItem[] = [
   { label: "Cài đặt đội", path: "admin/settings", permission: "settings.read" },
 ];
 
+function normalizedSegments(path: string): string[] {
+  return path
+    .split(/[?#]/u, 1)[0]
+    .split("/")
+    .filter(Boolean)
+    .map((segment) => {
+      try {
+        return decodeURIComponent(segment);
+      } catch {
+        return segment;
+      }
+    });
+}
+
 function isCurrentPath(currentPath: string, href: string): boolean {
-  try {
-    return decodeURIComponent(currentPath) === decodeURIComponent(href);
-  } catch {
-    return currentPath === href;
-  }
+  const currentSegments = normalizedSegments(currentPath);
+  const hrefSegments = normalizedSegments(href);
+
+  return (
+    currentSegments.length >= hrefSegments.length &&
+    hrefSegments.every((segment, index) => currentSegments[index] === segment)
+  );
 }
 
 export function ProductNav({

@@ -3,29 +3,29 @@
 import { useState } from "react";
 
 import { createBrowserSupabaseClient } from "../../lib/supabase/client";
-
-const LOGOUT_ERROR = "Không thể đăng xuất. Vui lòng thử lại.";
+import {
+  getLogoutPresentation,
+  requestLocalLogout,
+  type LogoutPhase,
+} from "./product-shell-controls";
 
 export function AccountMenu({ email }: { email?: string }) {
-  const [isSigningOut, setIsSigningOut] = useState(false);
-  const [errorMessage, setErrorMessage] = useState("");
+  const [phase, setPhase] = useState<LogoutPhase>("idle");
+  const presentation = getLogoutPresentation(phase);
 
   async function signOut() {
-    setErrorMessage("");
-    setIsSigningOut(true);
+    setPhase("pending");
 
     try {
-      const { error } = await createBrowserSupabaseClient().auth.signOut();
-      if (error) {
-        setErrorMessage(LOGOUT_ERROR);
-        return;
-      }
-
-      window.location.assign("/login");
+      const supabase = createBrowserSupabaseClient();
+      const didRedirect = await requestLocalLogout({
+        signOut: (options) => supabase.auth.signOut(options),
+        getSession: () => supabase.auth.getSession(),
+        replace: (href) => window.location.replace(href),
+      });
+      if (!didRedirect) setPhase("error");
     } catch {
-      setErrorMessage(LOGOUT_ERROR);
-    } finally {
-      setIsSigningOut(false);
+      setPhase("error");
     }
   }
 
@@ -39,14 +39,14 @@ export function AccountMenu({ email }: { email?: string }) {
         className="logout-button"
         type="button"
         onClick={signOut}
-        disabled={isSigningOut}
-        aria-busy={isSigningOut}
-        aria-label={isSigningOut ? "Đang đăng xuất" : "Đăng xuất"}
+        disabled={presentation.disabled}
+        aria-busy={presentation.disabled}
+        aria-label={presentation.ariaLabel}
       >
-        {isSigningOut ? "Đang đăng xuất…" : "Đăng xuất"}
+        {presentation.label}
       </button>
       <p className="account-menu-error" role="status" aria-live="polite">
-        {errorMessage}
+        {presentation.errorMessage}
       </p>
     </div>
   );

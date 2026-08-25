@@ -33,25 +33,37 @@ test("redirects an unauthenticated dashboard request to the Supabase login", asy
   assert.equal(response.headers.get("location"), "/login?next=%2F");
 });
 
-test("includes the five core surfaces and social metadata", async () => {
-  const [source, layout] = await Promise.all([
-    readFile(new URL("../app/pro7-app.tsx", import.meta.url), "utf8"),
+test("includes the production shell surfaces and social metadata", async () => {
+  const [navigation, overview, squad, matches, funds, settings, layout] = await Promise.all([
+    readFile(new URL("../app/components/product-nav.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/teams/[slug]/overview/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/teams/[slug]/squad/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/teams/[slug]/matches/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/teams/[slug]/funds/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/teams/[slug]/admin/settings/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/layout.tsx", import.meta.url), "utf8"),
   ]);
-  for (const label of ["Tổng quan", "Đội hình", "Trận đấu", "Chiến thuật", "Quỹ đội"]) {
-    assert.match(source, new RegExp(label));
+  for (const label of ["Tổng quan", "Đội hình", "Trận đấu", "Quỹ đội", "Cài đặt đội"]) {
+    assert.match(navigation, new RegExp(label));
   }
+  assert.doesNotMatch(navigation, /Chiến thuật/u);
+  assert.match(overview, /team\.read/);
+  assert.match(squad, /players\.read/);
+  assert.match(matches, /matches\.read/);
+  assert.match(funds, /finance\.read/);
+  assert.match(settings, /settings\.read/);
   assert.match(layout, /openGraph/);
   assert.match(layout, /twitter/);
   assert.doesNotMatch(layout, /og\.png/);
 });
 
 test("wires verified Supabase auth without changing Sites auth routes", async () => {
-  const [auth, callback, home, accountMenu, productShell, chatgptAuth] = await Promise.all([
+  const [auth, callback, home, accountMenu, controls, productShell, chatgptAuth] = await Promise.all([
     readFile(new URL("../lib/supabase/auth.ts", import.meta.url), "utf8").catch(() => ""),
     readFile(new URL("../app/auth/callback/route.ts", import.meta.url), "utf8").catch(() => ""),
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/components/account-menu.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/components/product-shell-controls.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/components/product-shell.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/chatgpt-auth.ts", import.meta.url), "utf8"),
   ]);
@@ -65,8 +77,10 @@ test("wires verified Supabase auth without changing Sites auth routes", async ()
     /await requireProductUser\("\/"\)/,
     "the dashboard must enforce the temporary-password boundary",
   );
-  assert.match(accountMenu, /auth\.signOut\(\)/, "the product shell must expose Supabase logout");
-  assert.match(accountMenu, /Đăng xuất/, "logout must have an accessible Vietnamese label");
+  assert.match(accountMenu, /createBrowserSupabaseClient/, "the product shell must use the browser client");
+  assert.match(accountMenu, /requestLocalLogout/, "the product shell must use verified local logout");
+  assert.match(accountMenu, /window\.location\.replace/, "logout must use safe replacement navigation");
+  assert.match(controls, /Đăng xuất/, "logout must have an accessible Vietnamese label");
   assert.match(productShell, /<ProductNav/, "the product shell must render route-aware navigation");
   assert.doesNotMatch(productShell, /FC Spartans|Coach Miller/u);
   assert.match(chatgptAuth, /const SIGN_IN_PATH = "\/signin-with-chatgpt"/);
@@ -112,5 +126,39 @@ test("browser password replacement bundle contains no service credential", async
   assert.doesNotMatch(
     bundledCode,
     /SUPABASE_SERVICE_ROLE_KEY|service-value-that-must-never-reach-the-browser/u,
+  );
+});
+
+test("browser product-shell bundle contains no server-only imports or credentials", async () => {
+  const result = await build({
+    configFile: false,
+    define: {
+      "process.env.NEXT_PUBLIC_SUPABASE_URL": JSON.stringify("https://bundle-test.supabase.co"),
+      "process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY": JSON.stringify(
+        "sb_publishable_bundle_test_key",
+      ),
+      "process.env.SUPABASE_SERVICE_ROLE_KEY": JSON.stringify(
+        "product-shell-service-sentinel-must-not-bundle",
+      ),
+    },
+    build: {
+      lib: {
+        entry: resolve("app/components/product-shell.tsx"),
+        formats: ["es"],
+        fileName: "product-shell",
+      },
+      rollupOptions: { external: ["next/navigation"] },
+      write: false,
+    },
+  });
+  const bundledCode = (Array.isArray(result) ? result : [result])
+    .flatMap((bundle) => bundle.output)
+    .filter((output) => output.type === "chunk")
+    .map((output) => output.code)
+    .join("\n");
+
+  assert.doesNotMatch(
+    bundledCode,
+    /SUPABASE_SERVICE_ROLE_KEY|product-shell-service-sentinel-must-not-bundle|createServerSupabaseClient|lib\/supabase\/server/u,
   );
 });
