@@ -114,6 +114,17 @@ test("account menu renders the signed-in address and an accessible logout contro
   assert.match(html, /Đăng xuất/u);
 });
 
+test("account menu exposes team settings only when the guarded route is supplied", () => {
+  const adminHtml = renderToStaticMarkup(createElement(AccountMenu, {
+    email: "admin@example.com",
+    settingsHref: "/teams/pro7-fc/admin/settings",
+  }));
+  const memberHtml = renderToStaticMarkup(createElement(AccountMenu, { email: "member@example.com" }));
+  assert.match(adminHtml, /href="\/teams\/pro7-fc\/admin\/settings"/u);
+  assert.match(adminHtml, />Cài đặt đội</u);
+  assert.doesNotMatch(memberHtml, /Cài đặt đội/u);
+});
+
 test("hosted route navigation preserves the five-slot Squad order with route links", () => {
   const html = renderToStaticMarkup(
     createElement(Pro7RouteNavigation, {

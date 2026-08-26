@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { useState, type FormEvent } from "react";
 
+import { AccessibleModal } from "../../../components/accessible-modal";
 import type { SquadFilters } from "../../../../lib/squad/filters";
 import { isUuid, type SquadAssignableRole, type SquadListResult, type SquadPlayerSummary } from "../../../../lib/squad/model";
 import { validateProvisionMemberPayload, type ProvisionMemberSuccess } from "../../../../lib/squad/provisioning";
@@ -188,8 +189,7 @@ function ProvisionMemberModal({
   if (state.kind === "success") {
     const created = state.result.account === "created";
     return (
-      <div className="modal-layer provision-modal-layer">
-        <section className="modal provision-result-modal" role="dialog" aria-modal="true" aria-labelledby="provision-result-title">
+      <AccessibleModal layerClassName="provision-modal-layer" dialogClassName="provision-result-modal" labelledBy="provision-result-title" onClose={() => onClose(true)}>
           <div className="modal-head"><div><span>PRO7 TEAM MANAGER</span><h2 id="provision-result-title">{created ? "Tài khoản đã sẵn sàng" : "Đã thêm cầu thủ"}</h2><p>{created ? "Lưu thông tin đăng nhập trước khi đóng." : "Tài khoản hiện có đã được thêm vào đội."}</p></div><button type="button" onClick={() => onClose(true)} aria-label="Đóng"><X /></button></div>
           {created ? (
             <div className="one-time-credential">
@@ -203,14 +203,12 @@ function ProvisionMemberModal({
             <p className="provision-success-message" role="status">Cầu thủ đã được gắn vào đội mà không thay đổi mật khẩu hiện tại.</p>
           )}
           <div className="modal-actions"><button className="lime-button" type="button" onClick={() => onClose(true)}>{created ? "Đóng, tôi đã lưu" : "Hoàn tất"}</button></div>
-        </section>
-      </div>
+      </AccessibleModal>
     );
   }
 
   return (
-    <div className="modal-layer provision-modal-layer">
-      <section className="modal provision-member-modal" role="dialog" aria-modal="true" aria-labelledby="provision-member-title">
+    <AccessibleModal layerClassName="provision-modal-layer" dialogClassName="provision-member-modal" labelledBy="provision-member-title" onClose={() => onClose()} closeBlocked={state.kind === "pending"}>
         <div className="modal-head"><div><span>PRO7 TEAM MANAGER</span><h2 id="provision-member-title">Thêm cầu thủ</h2><p>Tạo hồ sơ thành viên mới</p></div><button type="button" onClick={() => onClose()} disabled={state.kind === "pending"} aria-label="Đóng"><X /></button></div>
         <form className="provision-member-form" onSubmit={(event) => void submit(event)} noValidate>
           <label>Họ và tên<input name="displayName" placeholder="Ví dụ: Nguyễn Minh Anh" autoComplete="name" value={displayName} onChange={(event) => setDisplayName(event.target.value)} disabled={state.kind === "pending"} aria-invalid={Boolean(fieldErrors.displayName)} aria-describedby={fieldErrors.displayName ? "provision-error-displayName" : undefined} /><FieldError id="provision-error-displayName" message={fieldErrors.displayName} /></label>
@@ -227,8 +225,7 @@ function ProvisionMemberModal({
           {state.kind === "error" && <p className="provision-message error" role="alert">{state.message}</p>}
           <div className="modal-actions"><button className="soft-button" type="button" onClick={() => onClose()} disabled={state.kind === "pending"}>Hủy</button><button className="lime-button" type="submit" disabled={disabled} aria-busy={state.kind === "pending"}>{state.kind === "pending" ? "Đang thêm…" : "Thêm vào đội"}</button></div>
         </form>
-      </section>
-    </div>
+    </AccessibleModal>
   );
 }
 

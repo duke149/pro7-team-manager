@@ -9,7 +9,7 @@ import {
   type LogoutPhase,
 } from "./product-shell-controls";
 
-export function AccountMenu({ email }: { email?: string }) {
+export function AccountMenu({ email, settingsHref }: { email?: string; settingsHref?: string }) {
   const [phase, setPhase] = useState<LogoutPhase>("idle");
   const presentation = getLogoutPresentation(phase);
 
@@ -38,6 +38,7 @@ export function AccountMenu({ email }: { email?: string }) {
       <a className="profile-button" href="/account/profile">
         Hồ sơ
       </a>
+      {settingsHref && <a className="profile-button" href={settingsHref}>Cài đặt đội</a>}
       <button
         className="logout-button"
         type="button"

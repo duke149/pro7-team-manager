@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { usePathname } from "next/navigation";
 
 import type { TeamAccessContext } from "../../lib/teams/context";
+import type { TeamNotification } from "../../lib/notifications/model";
 import type { PermissionCode } from "../../lib/teams/permissions";
 import { INITIAL_THEME, Pro7RouteHeader } from "./pro7-route-header";
 import { Pro7RouteNavigation } from "./pro7-route-navigation";
@@ -15,12 +16,14 @@ export function Pro7RouteShell({
   roleName,
   permissions,
   email,
+  notifications = [],
 }: {
   children: ReactNode;
   team: TeamAccessContext["team"];
   roleName: string;
   permissions: readonly PermissionCode[];
   email?: string;
+  notifications?: readonly TeamNotification[];
 }) {
   const pathname = usePathname() || `/teams/${encodeURIComponent(team.slug)}/overview`;
   const [theme, setTheme] = useState<Theme>(INITIAL_THEME);
@@ -60,6 +63,7 @@ export function Pro7RouteShell({
           team={team}
           permissions={permissions}
           email={email}
+          notifications={notifications}
           pathname={pathname}
           theme={theme}
           onThemeChange={(nextTheme) => {

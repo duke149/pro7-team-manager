@@ -1,27 +1,26 @@
 import { notFound } from "next/navigation";
 
-import { renderTeamRoute, type TeamRoutePageArguments } from "../../../../components/team-placeholder";
-import { requireTeamPermission } from "../../../../../lib/teams/context";
+import { loadAdminSettings } from "../../../../../lib/settings/queries";
+import type { AdminSettingsResult } from "../../../../../lib/settings/model";
+import { requireTeamPermission, type TeamAccessContext } from "../../../../../lib/teams/context";
+import type { PermissionCode } from "../../../../../lib/teams/permissions";
+import { SettingsView } from "./settings-view";
 
-export async function renderSettingsPage(
-  arguments_: Omit<TeamRoutePageArguments, "permission" | "title" | "pendingSlice"> = {
-    params: Promise.resolve({ slug: "" }),
-    requireTeamPermission,
-    denied: notFound,
-  },
-) {
-  return renderTeamRoute({
-    ...arguments_,
-    permission: "settings.read",
-    title: "Cài đặt đội",
-    pendingSlice: "Cài đặt đội và vai trò",
-  });
+export async function renderSettingsPage(arguments_: {
+  params: Promise<{ slug: string }>;
+  requireTeamPermission: (slug: string, permission: PermissionCode) => Promise<TeamAccessContext | null>;
+  loadAdminSettings?: (teamId: string) => Promise<AdminSettingsResult>;
+  denied: () => unknown;
+}) {
+  const { slug } = await arguments_.params;
+  const context = await arguments_.requireTeamPermission(slug, "settings.read");
+  if (!context) return arguments_.denied();
+  const result = arguments_.loadAdminSettings
+    ? await arguments_.loadAdminSettings(context.team.id)
+    : { ok: true as const, data: null };
+  return <SettingsView team={context.team} permissions={context.permissions} data={result.ok ? result.data : null} />;
 }
 
-export default async function SettingsPage({
-  params,
-}: {
-  params: Promise<{ slug: string }>;
-}) {
-  return renderSettingsPage({ params, requireTeamPermission, denied: notFound });
+export default async function SettingsPage({ params }: { params: Promise<{ slug: string }> }) {
+  return renderSettingsPage({ params, requireTeamPermission, loadAdminSettings, denied: notFound });
 }

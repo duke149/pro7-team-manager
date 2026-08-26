@@ -1,16 +1,19 @@
 "use client";
 
-import { Bell, Menu, Moon, Plus, Sun } from "lucide-react";
+import { Menu, Moon, Plus, Sun } from "lucide-react";
 
+import type { TeamNotification } from "../../lib/notifications/model";
 import type { TeamAccessContext } from "../../lib/teams/context";
 import { hasPermission, type PermissionCode } from "../../lib/teams/permissions";
 import { AccountMenu } from "./account-menu";
+import { NotificationCenter } from "./notification-center";
 import { INITIAL_THEME, nextTheme, persistBrowserTheme, type Theme } from "./product-shell-controls";
 
 export type Pro7RouteHeaderProps = {
   team: TeamAccessContext["team"];
   permissions: readonly PermissionCode[];
   email?: string;
+  notifications?: readonly TeamNotification[];
   pathname: string;
   theme: Theme;
   onThemeChange: (theme: Theme) => void;
@@ -36,6 +39,7 @@ export function Pro7RouteHeader({
   team,
   permissions,
   email,
+  notifications = [],
   pathname,
   theme,
   onThemeChange,
@@ -74,9 +78,14 @@ export function Pro7RouteHeader({
         >
           {theme === "light" ? <Moon size={19} /> : <Sun size={19} />}
         </button>
-        <button className="icon-button notification" type="button" aria-label="Thông báo"><Bell size={20} /></button>
+        <NotificationCenter initialNotifications={notifications} />
         {contextualAction && <a className="primary-button header-cta" href={contextualAction.href}><Plus size={18} />{contextualAction.label}</a>}
-        <AccountMenu email={email} />
+        <AccountMenu
+          email={email}
+          settingsHref={hasPermission({ permissions }, "settings.read")
+            ? `/teams/${encodeURIComponent(team.slug)}/admin/settings`
+            : undefined}
+        />
       </div>
     </header>
   );

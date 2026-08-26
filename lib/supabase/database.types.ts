@@ -961,6 +961,18 @@ export type Database = {
     }
     Functions: {
       accept_team_invitation: { Args: { token: string }; Returns: string }
+      get_team_audit_events: {
+        Args: { p_limit?: number; p_team_id: string }
+        Returns: {
+          action: string
+          actor_display_name: string | null
+          actor_user_id: string | null
+          event_id: number
+          occurred_at: string
+          row_key: Json
+          table_name: string
+        }[]
+      }
       apply_match_tactic: {
         Args: {
           p_expected_updated_at: string

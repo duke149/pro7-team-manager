@@ -59,6 +59,12 @@ test("tactics landing denies before reads and lists only live scheduled match li
   assert.match(markup, /Metro City[\s\S]*Riverside/u);
   assert.match(markup, new RegExp(`/teams/pro7-fc/tactics/${MATCH_ID}`, "u"));
   assert.doesNotMatch(markup, /FC Spartans|J\. Smith|Marcus/u);
+
+  const memberOutput = await landing.renderTacticsPage({ params: Promise.resolve({ slug: "pro7-fc" }), requireTeamPermission: async () => MEMBER, listScheduledMatches: async () => ({ ok: true, matches: [MATCH] }), denied: () => "SAFE_DENIAL" });
+  const memberMarkup = html(memberOutput);
+  assert.match(markup, /Lập đội hình →/u);
+  assert.match(memberMarkup, /Xem đội hình →/u);
+  assert.doesNotMatch(memberMarkup, /Lập đội hình →/u);
 });
 
 test("tactics landing and detail expose honest empty and error states", async () => {

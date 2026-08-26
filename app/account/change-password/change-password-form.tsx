@@ -58,7 +58,8 @@ export default function ChangePasswordForm() {
         data: { session },
       } = await supabase.auth.getSession();
       const accessToken = session?.access_token;
-      if (!accessToken) {
+      const user = session?.user;
+      if (!accessToken || !user?.email) {
         setErrorMessage(CHANGE_PASSWORD_ERROR);
         return;
       }
@@ -70,14 +71,18 @@ export default function ChangePasswordForm() {
           body: { currentTemporaryPassword, newPassword },
         },
       );
-      clearFields();
       if (error) {
+        clearFields();
         setErrorMessage(await errorMessageForFunctionFailure(error));
         return;
       }
 
-      const { error: refreshError } = await supabase.auth.refreshSession();
-      if (refreshError) {
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email: user.email,
+        password: newPassword,
+      });
+      clearFields();
+      if (signInError) {
         setErrorMessage(CHANGE_PASSWORD_ERROR);
         return;
       }

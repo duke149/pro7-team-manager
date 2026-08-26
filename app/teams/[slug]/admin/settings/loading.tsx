@@ -1,0 +1,1 @@
+export default function SettingsLoading() { return <div className="settings-view" aria-busy="true"><section className="card settings-state"><span className="squad-loading-dot" /><h2>Đang tải cài đặt</h2><p>Đang kiểm tra quyền và dữ liệu quản trị.</p></section></div>; }

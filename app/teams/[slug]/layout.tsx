@@ -1,5 +1,7 @@
 import { requireProductUser } from "../../../lib/supabase/auth";
 import { loadTeamAccessContext } from "../../../lib/teams/context";
+import { listTeamNotifications } from "../../../lib/notifications/queries";
+import type { NotificationListResult } from "../../../lib/notifications/model";
 import {
   safeTeamReturnPath,
   TEAM_RETURN_PATH_HEADER,
@@ -15,6 +17,7 @@ export async function renderTeamLayout({
   loadTeamAccessContext: loadContext,
   getReturnPath,
   denied = notFound,
+  loadNotifications,
 }: {
   children: React.ReactNode;
   params: Promise<{ slug: string }>;
@@ -22,6 +25,7 @@ export async function renderTeamLayout({
   loadTeamAccessContext?: (slug: string) => ReturnType<typeof loadTeamAccessContext>;
   getReturnPath?: (slug: string) => Promise<string>;
   denied?: () => React.ReactNode;
+  loadNotifications?: (teamId: string, userId: string, slug: string) => Promise<NotificationListResult>;
 }) {
   const { slug } = await params;
   const returnPath = getReturnPath
@@ -33,6 +37,7 @@ export async function renderTeamLayout({
 
   const context = await loadContext(slug);
   if (!context) return denied();
+  const notificationResult = loadNotifications ? await loadNotifications(context.team.id, context.userId, context.team.slug) : null;
 
   return (
     <Pro7RouteShell
@@ -40,6 +45,7 @@ export async function renderTeamLayout({
       roleName={context.membership.roleName}
       permissions={context.permissions}
       email={productUser.user.email}
+      notifications={notificationResult?.ok ? notificationResult.notifications : []}
     >
       {children}
     </Pro7RouteShell>
@@ -58,5 +64,6 @@ export default async function TeamLayout({
     params,
     requireProductUser,
     loadTeamAccessContext,
+    loadNotifications: listTeamNotifications,
   });
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useState } from "react";
+import { Eye, EyeOff } from "lucide-react";
 
 import { createBrowserSupabaseClient } from "../../lib/supabase/client";
 
@@ -16,6 +17,7 @@ export default function LoginForm({
 }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [errorMessage, setErrorMessage] = useState(initialError ?? "");
   const [isLoading, setIsLoading] = useState(false);
 
@@ -59,18 +61,23 @@ export default function LoginForm({
         required
       />
 
-      <label htmlFor="login-password">Mật khẩu</label>
-      <input
-        id="login-password"
-        name="password"
-        type="password"
-        autoComplete="current-password"
-        placeholder="Nhập mật khẩu"
-        value={password}
-        onChange={(event) => setPassword(event.target.value)}
-        disabled={isLoading}
-        required
-      />
+      <div className="login-label-row"><label htmlFor="login-password">Mật khẩu</label><a href="/account/forgot-password">Quên mật khẩu?</a></div>
+      <div className="password-field">
+        <input
+          id="login-password"
+          name="password"
+          type={showPassword ? "text" : "password"}
+          autoComplete="current-password"
+          placeholder="Nhập mật khẩu"
+          value={password}
+          onChange={(event) => setPassword(event.target.value)}
+          disabled={isLoading}
+          required
+        />
+        <button type="button" className="password-visibility" aria-label={showPassword ? "Ẩn mật khẩu" : "Hiện mật khẩu"} aria-pressed={showPassword} onClick={() => setShowPassword((current) => !current)} disabled={isLoading}>
+          {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+        </button>
+      </div>
 
       <p className="login-error" role="alert" aria-live="polite">
         {errorMessage}
