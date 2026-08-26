@@ -12,7 +12,8 @@ with target_tables(table_name) as (
     ('match_tactics'),
     ('lineup_slots'),
     ('finance_entries'),
-    ('member_dues')
+    ('member_dues'),
+    ('notifications')
 ),
 target_functions(function_name, identity_arguments) as (
   values
@@ -23,7 +24,8 @@ target_functions(function_name, identity_arguments) as (
     ('save_match_tactic', 'uuid, uuid, uuid, text, text, text, smallint, text, text, jsonb, timestamp with time zone'),
     ('apply_match_tactic', 'uuid, uuid, timestamp with time zone'),
     ('manage_finance_entry', 'text, uuid, uuid, text, bigint, text, date, text, text, timestamp with time zone'),
-    ('manage_member_due', 'text, uuid, uuid, uuid, date, bigint, date, text, timestamp with time zone')
+    ('manage_member_due', 'text, uuid, uuid, uuid, date, bigint, date, text, timestamp with time zone'),
+    ('remind_match_attendance', 'uuid, uuid, uuid[]')
 ),
 expected_tenant_constraints(table_name, constraint_name, definition_fragment) as (
   values
@@ -36,13 +38,15 @@ expected_tenant_constraints(table_name, constraint_name, definition_fragment) as
     ('match_tactics', 'match_tactics_match_team_fkey', 'FOREIGN KEY (match_id, team_id) REFERENCES matches(id, team_id)'),
     ('lineup_slots', 'lineup_slots_tactic_team_fkey', 'FOREIGN KEY (tactic_id, team_id) REFERENCES match_tactics(id, team_id)'),
     ('lineup_slots', 'lineup_slots_membership_fkey', 'FOREIGN KEY (team_id, user_id) REFERENCES memberships(team_id, user_id)'),
-    ('member_dues', 'member_dues_finance_entry_team_fkey', 'FOREIGN KEY (finance_entry_id, team_id) REFERENCES finance_entries(id, team_id)')
+    ('member_dues', 'member_dues_finance_entry_team_fkey', 'FOREIGN KEY (finance_entry_id, team_id) REFERENCES finance_entries(id, team_id)'),
+    ('notifications', 'notifications_membership_fkey', 'FOREIGN KEY (team_id, user_id) REFERENCES memberships(team_id, user_id)'),
+    ('notifications', 'notifications_match_team_fkey', 'FOREIGN KEY (source_id, team_id) REFERENCES matches(id, team_id)')
 ),
 migration_history as (
   select
     '20260826043803'::text as expected_version,
     'pro7_remaining_mvp'::text as expected_name,
-    '7b98a63b474b36d1f6cfdf39987f6ce5d599eaf09f396761a9773db53f13dc5e'::text as source_sha256,
+    '4046befe2bb00af95e2825c42866a1471c1393c30001714fb9150d5facfc1a85'::text as source_sha256,
     (migration.version is not null) as is_applied,
     migration.name as recorded_name,
     pg_catalog.md5(coalesce(pg_catalog.array_to_string(migration.statements, E'\n'), '')) as recorded_statements_md5

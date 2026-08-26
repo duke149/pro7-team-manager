@@ -623,6 +623,63 @@ export type Database = {
           },
         ]
       }
+      notifications: {
+        Row: {
+          body: string
+          created_at: string
+          id: string
+          read_at: string | null
+          source_entity: string
+          source_id: string
+          target_path: string
+          team_id: string
+          title: string
+          type: string
+          user_id: string
+        }
+        Insert: {
+          body: string
+          created_at?: string
+          id?: string
+          read_at?: string | null
+          source_entity?: string
+          source_id: string
+          target_path: string
+          team_id: string
+          title: string
+          type: string
+          user_id: string
+        }
+        Update: {
+          body?: string
+          created_at?: string
+          id?: string
+          read_at?: string | null
+          source_entity?: string
+          source_id?: string
+          target_path?: string
+          team_id?: string
+          title?: string
+          type?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notifications_match_team_fkey"
+            columns: ["source_id", "team_id"]
+            isOneToOne: false
+            referencedRelation: "matches"
+            referencedColumns: ["id", "team_id"]
+          },
+          {
+            foreignKeyName: "notifications_membership_fkey"
+            columns: ["team_id", "user_id"]
+            isOneToOne: false
+            referencedRelation: "memberships"
+            referencedColumns: ["team_id", "user_id"]
+          },
+        ]
+      }
       permissions: {
         Row: {
           code: string
@@ -1029,6 +1086,14 @@ export type Database = {
           p_user_id: string
         }
         Returns: undefined
+      }
+      remind_match_attendance: {
+        Args: {
+          p_match_id: string
+          p_team_id: string
+          p_user_ids: string[]
+        }
+        Returns: number
       }
       respond_match_attendance: {
         Args: {

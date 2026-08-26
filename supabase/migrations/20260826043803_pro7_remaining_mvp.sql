@@ -307,6 +307,44 @@ create table public.member_dues (
   )
 );
 
+create table public.notifications (
+  id uuid primary key default extensions.gen_random_uuid(),
+  team_id uuid not null,
+  user_id uuid not null,
+  type text not null
+    constraint notifications_type_check
+    check (type in ('match_invitation', 'match_reminder')),
+  source_entity text not null default 'match'
+    constraint notifications_source_check
+    check (source_entity = 'match'),
+  source_id uuid not null,
+  title text not null
+    constraint notifications_title_check
+    check (title = btrim(title) and char_length(title) between 1 and 160),
+  body text not null
+    constraint notifications_body_check
+    check (body = btrim(body) and char_length(body) between 1 and 500),
+  target_path text not null
+    constraint notifications_target_path_check
+    check (
+      target_path = btrim(target_path)
+      and char_length(target_path) between 1 and 200
+      and target_path ~ '^/teams/[a-z0-9]+(-[a-z0-9]+)*/matches/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+    ),
+  read_at timestamptz,
+  created_at timestamptz not null default pg_catalog.clock_timestamp(),
+  constraint notifications_membership_fkey
+    foreign key (team_id, user_id)
+    references public.memberships (team_id, user_id)
+    on delete cascade,
+  constraint notifications_match_team_fkey
+    foreign key (source_id, team_id)
+    references public.matches (id, team_id)
+    on delete cascade,
+  constraint notifications_user_type_source_key
+    unique (user_id, type, source_entity, source_id)
+);
+
 create index matches_team_status_starts_at_idx
   on public.matches (team_id, status, starts_at);
 create index matches_created_by_user_id_idx
@@ -359,6 +397,10 @@ create index member_dues_finance_entry_team_idx
   on public.member_dues (finance_entry_id, team_id) where finance_entry_id is not null;
 create index member_dues_created_by_user_id_idx
   on public.member_dues (created_by_user_id);
+create index notifications_user_created_at_idx
+  on public.notifications (user_id, created_at desc);
+create index notifications_source_team_idx
+  on public.notifications (source_id, team_id);
 
 create or replace function private.set_monotonic_updated_at()
 returns trigger
@@ -406,6 +448,7 @@ alter table public.match_tactics enable row level security;
 alter table public.lineup_slots enable row level security;
 alter table public.finance_entries enable row level security;
 alter table public.member_dues enable row level security;
+alter table public.notifications enable row level security;
 
 create policy matches_select_authorized
 on public.matches for select to authenticated
@@ -472,6 +515,15 @@ create policy member_dues_select_authorized
 on public.member_dues for select to authenticated
 using (private.has_team_permission(team_id, 'finance.read'));
 
+create policy notifications_select_own
+on public.notifications for select to authenticated
+using (user_id = (select auth.uid()));
+
+create policy notifications_update_own
+on public.notifications for update to authenticated
+using (user_id = (select auth.uid()))
+with check (user_id = (select auth.uid()));
+
 revoke all privileges on table
   public.matches,
   public.match_attendance,
@@ -482,7 +534,8 @@ revoke all privileges on table
   public.match_tactics,
   public.lineup_slots,
   public.finance_entries,
-  public.member_dues
+  public.member_dues,
+  public.notifications
 from public, anon, authenticated, service_role;
 
 grant select on table
@@ -495,8 +548,11 @@ grant select on table
   public.match_tactics,
   public.lineup_slots,
   public.finance_entries,
-  public.member_dues
+  public.member_dues,
+  public.notifications
 to authenticated;
+
+grant update (read_at) on table public.notifications to authenticated;
 
 grant select, insert, update, delete on table
   public.matches,
@@ -508,7 +564,8 @@ grant select, insert, update, delete on table
   public.match_tactics,
   public.lineup_slots,
   public.finance_entries,
-  public.member_dues
+  public.member_dues,
+  public.notifications
 to service_role;
 
 create or replace function public.manage_match(
@@ -669,6 +726,8 @@ declare
   v_requested_count integer;
   v_valid_count integer;
   v_inserted_count integer;
+  v_inserted_user_ids uuid[];
+  v_team_slug text;
 begin
   if v_actor_user_id is null then
     raise exception using errcode = '28000', message = 'Authentication required';
@@ -692,6 +751,10 @@ begin
     raise exception using errcode = '55000', message = 'Only scheduled matches can be invited';
   end if;
 
+  select team.slug into strict v_team_slug
+  from public.teams as team
+  where team.id = p_team_id;
+
   select count(distinct requested.user_id)
   into v_requested_count
   from unnest(p_user_ids) as requested(user_id);
@@ -710,16 +773,37 @@ begin
     raise exception using errcode = '23503', message = 'Invitee is not an active team member';
   end if;
 
-  insert into public.match_attendance (
-    match_id, team_id, user_id, status, invited_at, invited_by_user_id
+  with inserted as (
+    insert into public.match_attendance (
+      match_id, team_id, user_id, status, invited_at, invited_by_user_id
+    )
+    select p_match_id, p_team_id, requested.user_id, 'pending', pg_catalog.now(), v_actor_user_id
+    from (select distinct unnest(p_user_ids) as user_id) as requested
+    on conflict (match_id, user_id) do nothing
+    returning user_id
   )
-  select p_match_id, p_team_id, requested.user_id, 'pending', pg_catalog.now(), v_actor_user_id
-  from (select distinct unnest(p_user_ids) as user_id) as requested
-  on conflict (match_id, user_id) do nothing;
-
-  get diagnostics v_inserted_count = row_count;
+  select
+    coalesce(pg_catalog.array_agg(inserted.user_id order by inserted.user_id), array[]::uuid[]),
+    count(*)::integer
+  into v_inserted_user_ids, v_inserted_count
+  from inserted;
 
   if v_inserted_count > 0 then
+    insert into public.notifications (
+      team_id, user_id, type, source_entity, source_id, title, body, target_path
+    )
+    select
+      p_team_id,
+      inserted_user.user_id,
+      'match_invitation',
+      'match',
+      p_match_id,
+      'Lời mời tham gia trận đấu',
+      'Bạn được mời xác nhận tham gia trận gặp ' || v_match.opponent || '.',
+      '/teams/' || v_team_slug || '/matches/' || p_match_id::text
+    from unnest(v_inserted_user_ids) as inserted_user(user_id)
+    on conflict (user_id, type, source_entity, source_id) do nothing;
+
     insert into private.audit_events (
       actor_user_id, team_id, table_name, action, row_key, old_data, new_data, request_id
     ) values (
@@ -737,6 +821,135 @@ alter function public.invite_match_attendance( uuid, uuid, uuid[] ) owner to pos
 revoke execute on function public.invite_match_attendance( uuid, uuid, uuid[] )
 from public, anon, authenticated, service_role;
 grant execute on function public.invite_match_attendance( uuid, uuid, uuid[] ) to authenticated;
+
+create or replace function public.remind_match_attendance(
+  p_team_id uuid,
+  p_match_id uuid,
+  p_user_ids uuid[]
+)
+returns integer
+language plpgsql
+security definer
+set search_path = ''
+as $function$
+declare
+  v_actor_user_id uuid := (select auth.uid());
+  v_match public.matches%rowtype;
+  v_requested_count integer;
+  v_valid_count integer;
+  v_pending_count integer;
+  v_written_count integer;
+  v_team_slug text;
+begin
+  if v_actor_user_id is null then
+    raise exception using errcode = '28000', message = 'Authentication required';
+  end if;
+  if not private.has_team_permission(p_team_id, 'matches.manage') then
+    raise exception using errcode = '42501', message = 'Match management permission required';
+  end if;
+  if p_user_ids is null or cardinality(p_user_ids) = 0 or array_position(p_user_ids, null) is not null then
+    raise exception using errcode = '22023', message = 'At least one reminder recipient is required';
+  end if;
+
+  select m.* into v_match
+  from public.matches as m
+  where m.id = p_match_id and m.team_id = p_team_id
+  for update;
+  if not found then
+    raise exception using errcode = 'P0002', message = 'Match not found';
+  end if;
+  if v_match.status <> 'scheduled' then
+    raise exception using errcode = '55000', message = 'Only scheduled matches can send reminders';
+  end if;
+
+  select team.slug into strict v_team_slug
+  from public.teams as team
+  where team.id = p_team_id;
+
+  select count(distinct requested.user_id)
+  into v_requested_count
+  from unnest(p_user_ids) as requested(user_id);
+
+  select count(*) into v_valid_count
+  from (
+    select distinct requested.user_id
+    from unnest(p_user_ids) as requested(user_id)
+  ) as requested
+  join public.memberships as membership
+    on membership.team_id = p_team_id
+   and membership.user_id = requested.user_id
+   and membership.status = 'active';
+  if v_valid_count <> v_requested_count then
+    raise exception using errcode = '23503', message = 'Reminder recipient is not an active team member';
+  end if;
+
+  select count(*) into v_pending_count
+  from (
+    select distinct requested.user_id
+    from unnest(p_user_ids) as requested(user_id)
+  ) as requested
+  join public.match_attendance as attendance
+    on attendance.match_id = p_match_id
+   and attendance.team_id = p_team_id
+   and attendance.user_id = requested.user_id
+   and attendance.status = 'pending';
+  if v_pending_count <> v_requested_count then
+    raise exception using errcode = '55000', message = 'Only pending attendance can be reminded';
+  end if;
+
+  with written as (
+    insert into public.notifications (
+      team_id, user_id, type, source_entity, source_id, title, body, target_path
+    )
+    select
+      p_team_id,
+      requested.user_id,
+      'match_reminder',
+      'match',
+      p_match_id,
+      'Nhắc xác nhận tham gia trận đấu',
+      'Vui lòng xác nhận tham gia trận gặp ' || v_match.opponent || '.',
+      '/teams/' || v_team_slug || '/matches/' || p_match_id::text
+    from (
+      select distinct requested_user.user_id
+      from unnest(p_user_ids) as requested_user(user_id)
+    ) as requested
+    on conflict (user_id, type, source_entity, source_id) do update
+    set title = excluded.title,
+        body = excluded.body,
+        target_path = excluded.target_path,
+        read_at = null,
+        created_at = greatest(
+          pg_catalog.clock_timestamp(),
+          public.notifications.created_at + interval '1 microsecond'
+        )
+    returning id
+  )
+  select count(*)::integer into v_written_count from written;
+
+  if v_written_count > 0 then
+    insert into private.audit_events (
+      actor_user_id, team_id, table_name, action, row_key, old_data, new_data, request_id
+    ) values (
+      v_actor_user_id,
+      p_team_id,
+      'notifications',
+      'UPDATE',
+      pg_catalog.jsonb_build_object('match_id', p_match_id),
+      null,
+      pg_catalog.jsonb_build_object('operation', 'remind', 'recipient_count', v_written_count),
+      null
+    );
+  end if;
+
+  return v_written_count;
+end;
+$function$;
+
+alter function public.remind_match_attendance( uuid, uuid, uuid[] ) owner to postgres;
+revoke execute on function public.remind_match_attendance( uuid, uuid, uuid[] )
+from public, anon, authenticated, service_role;
+grant execute on function public.remind_match_attendance( uuid, uuid, uuid[] ) to authenticated;
 
 create or replace function public.respond_match_attendance(
   p_team_id uuid,

@@ -12,7 +12,7 @@ Status: `DONE_WITH_CONCERNS`
 - `tests/supabase-remaining-mvp-pre-apply.test.mjs`
 - `lib/supabase/database.types.ts`
 
-The migration is additive and creates the ten requested public tables, their tenant/composite constraints and access indexes, explicit table ACLs, RLS policies, optimistic timestamp checks, and the eight requested hardened RPCs. Direct authenticated writes remain closed; writes flow through the narrow RPC boundaries. No demo rows, credentials, remote mutation, migration apply, or deployment were added.
+The migration is additive and creates the eleven required public tables, their tenant/composite constraints and access indexes, explicit table/column ACLs, RLS policies, optimistic timestamp checks, and the nine hardened RPCs. Direct authenticated writes remain closed except own-user notification `read_at`; trusted writes flow through narrow RPC boundaries. No demo rows, credentials, remote mutation, migration apply, or deployment were added.
 
 ## TDD evidence
 
@@ -68,7 +68,7 @@ The artifact starts a read-only transaction and reports migration history, prosp
 ## Migration identity
 
 - Path: `supabase/migrations/20260826043803_pro7_remaining_mvp.sql`
-- SHA-256: `7b98a63b474b36d1f6cfdf39987f6ce5d599eaf09f396761a9773db53f13dc5e`
+- SHA-256: `4046befe2bb00af95e2825c42866a1471c1393c30001714fb9150d5facfc1a85`
 
 ## Concerns / boundaries
 
@@ -127,3 +127,47 @@ The live verifier also pins the prerequisite foundation role mappings without mo
 1. Pinned CLI `db lint` could not complete against the Homebrew PostgreSQL 17 disposable database because CLI v2.55.8 forced TLS while that local server exposes a non-TLS listener. Fresh PostgreSQL execution and the catalog security/index probes above passed as the local substitute; no remote advisor was invoked.
 2. Existing whole-repository TypeScript baseline failures remain outside this task. Focused types, the complete unit suite, and production build pass.
 3. No remote mutation/apply/deploy occurred. The tracked foundation migration was not modified; all database mutations were confined to disposable local PostgreSQL 17 databases.
+
+## Review fix round 2/5 — 2026-08-26
+
+### Load-bearing notification gap corrected
+
+- Added `public.notifications` with bounded invitation/reminder types, title/body, match source, own user, team, validated local match-detail target path, `read_at`, and `created_at`.
+- Added tenant-safe membership and match composite FKs, idempotency uniqueness on `(user_id, type, source_entity, source_id)`, own-feed and source indexes, explicit ACLs, and RLS.
+- Authenticated clients receive table-level `SELECT` and only column-level `UPDATE(read_at)`; they receive no notification `INSERT`, `DELETE`, or content/source mutation capability. Both SELECT and UPDATE policies require `(select auth.uid()) = user_id`.
+- `invite_match_attendance` now creates an invitation notification for every newly inserted attendance row in the same transaction. Exact retries change neither attendance nor invitation notification timestamps/counts/audit.
+- Added hardened `remind_match_attendance(uuid,uuid,uuid[])`: it requires `matches.manage`, locks the scheduled parent, validates the entire distinct UUID set as active same-team pending attendance, upserts one deterministic reminder per recipient/match, refreshes it unread with a monotonic notification time, leaves RSVP optimistic tokens untouched, audits once per successful reminder write set, and returns the written count.
+- Notification target paths are constructed only from the authoritative team slug and match UUID and constrained to `/teams/<slug>/matches/<uuid>`; arbitrary URLs, query strings, fragments, and cross-tenant match sources are rejected by the table contract.
+
+### Round 2 TDD and verification evidence
+
+- RED static regression: `node --test tests/supabase-remaining-mvp-schema.test.mjs` returned `4 pass / 6 fail`; the failures named the missing notification table/constraints/ACL/RLS, invitation side effect, and reminder RPC.
+- GREEN static regression: same command returned `10 pass / 0 fail`.
+- Fresh PostgreSQL 17 apply/live harness returned:
+  - `remaining_mvp_live_transaction_rollback_ok`
+  - `remaining_mvp_live_fixture_counts_zero`
+  - `remaining_mvp_live_harness_ok`
+- Live coverage includes Admin reminder success/retry, Member reminder denial, unrelated-recipient denial, pending-only enforcement, invitation/reminder cardinality, exact invitation retry timestamp stability, own-user notification visibility/read update, denied client content insert/update/delete, local target paths, unchanged RSVP token, and exactly one audit row per successful reminder call.
+- Controlled pending/applied pre-apply: `3 pass / 0 fail / 0 skip`, now covering 11 tables, 9 RPCs, and both notification composite FKs.
+- Full unit suite: `318 pass / 0 fail / 5 skip` (`323` total).
+- Focused TypeScript compile: exit `0`.
+- Scoped ESLint: exit `0`.
+- Production build: exit `0`.
+- `git diff --check`: exit `0`.
+- Final catalog probes: `rls_tables=11`, `hardened_rpcs=9`, `unexpected_rpc_acl=0`, `unindexed_fks=0`; authenticated notification privileges are exactly table `SELECT` and column `read_at:UPDATE`.
+
+### Round 2 files and migration identity
+
+- Modified `supabase/migrations/20260826043803_pro7_remaining_mvp.sql` while it remains pending outside disposable local databases.
+- Modified `tests/supabase-remaining-mvp-schema.test.mjs`.
+- Modified `tests/supabase-remaining-mvp-live-verification.sql`.
+- Modified `tests/supabase-remaining-mvp-pre-apply.sql` and `tests/supabase-remaining-mvp-pre-apply.test.mjs`.
+- Modified `lib/supabase/database.types.ts` with the notification table and reminder RPC contracts.
+- Appended this report.
+- Final SHA-256: `4046befe2bb00af95e2825c42866a1471c1393c30001714fb9150d5facfc1a85`.
+
+### Round 2 concerns / boundaries
+
+1. Pinned Supabase CLI v2.55.8 again forced TLS when pointed at the non-TLS Homebrew PostgreSQL 17 listener, so `db lint` could not inspect that disposable database. Fresh PostgreSQL execution plus explicit catalog RLS/ACL/function/FK-index probes passed; no remote advisor was invoked.
+2. Existing whole-repository TypeScript baseline issues remain outside Task 1. Focused types, full unit tests, and the production build pass.
+3. No remote mutation/apply/deploy occurred; all database writes were confined to disposable local PostgreSQL 17 databases. `supabase/.temp/` remains untouched.

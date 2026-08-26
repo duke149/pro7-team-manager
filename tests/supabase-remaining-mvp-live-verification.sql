@@ -30,6 +30,8 @@ declare
   v_analysis_updated_at timestamptz;
   v_invited_at timestamptz;
   v_invite_updated_at timestamptz;
+  v_notification_created_at timestamptz;
+  v_reminder_created_at timestamptz;
   v_count integer;
   v_audit_count integer;
   v_failed boolean;
@@ -159,6 +161,20 @@ begin
   into strict v_invited_at, v_invite_updated_at
   from public.match_attendance
   where match_id = v_match_id and user_id = v_member;
+  select created_at into strict v_notification_created_at
+  from public.notifications
+  where user_id = v_member
+    and type = 'match_invitation'
+    and source_entity = 'match'
+    and source_id = v_match_id;
+  if (select count(*) from public.notifications where source_id = v_match_id) <> 7
+    or exists (
+      select 1 from public.notifications
+      where source_id = v_match_id
+        and target_path <> '/teams/remaining-mvp-team-20260826/matches/' || v_match_id::text
+    ) then
+    raise exception 'remaining MVP live: invitations did not create one local notification per new attendance';
+  end if;
   select count(*) into v_audit_count
   from private.audit_events
   where team_id = v_team
@@ -188,11 +204,68 @@ begin
       and table_name = 'match_attendance'
       and action = 'INSERT'
       and row_key = pg_catalog.jsonb_build_object('match_id', v_match_id)
-  ) <> v_audit_count then
+  ) <> v_audit_count or (
+    select created_at from public.notifications
+    where user_id = v_member and type = 'match_invitation'
+      and source_entity = 'match' and source_id = v_match_id
+  ) is distinct from v_notification_created_at
+    or (select count(*) from public.notifications where source_id = v_match_id) <> 7 then
     raise exception 'remaining MVP live: exact invitation retry changed token, timestamps, or audit';
   end if;
   if exists (select 1 from public.match_attendance where match_id = v_match_id and status <> 'pending') then
     raise exception 'remaining MVP live: new invitation status differs';
+  end if;
+
+  select updated_at into strict v_updated_at
+  from public.match_attendance where match_id = v_match_id and user_id = v_member;
+  select count(*) into v_audit_count
+  from private.audit_events
+  where team_id = v_team and table_name = 'notifications'
+    and action = 'UPDATE'
+    and row_key = pg_catalog.jsonb_build_object('match_id', v_match_id);
+
+  execute 'set local role authenticated';
+  select public.remind_match_attendance(v_team, v_match_id, array[v_member]) into v_count;
+  if v_count <> 1 then
+    raise exception 'remaining MVP live: reminder count differs (%)', v_count;
+  end if;
+  execute 'reset role';
+  select created_at into strict v_reminder_created_at
+  from public.notifications
+  where user_id = v_member and type = 'match_reminder'
+    and source_entity = 'match' and source_id = v_match_id;
+  if (select updated_at from public.match_attendance where match_id = v_match_id and user_id = v_member)
+      is distinct from v_updated_at
+    or (select count(*) from public.notifications where user_id = v_member and source_id = v_match_id) <> 2 then
+    raise exception 'remaining MVP live: reminder changed RSVP token or notification cardinality';
+  end if;
+
+  execute 'set local role authenticated';
+  perform public.remind_match_attendance(v_team, v_match_id, array[v_member]);
+  execute 'reset role';
+  if (select count(*) from public.notifications where user_id = v_member and type = 'match_reminder' and source_id = v_match_id) <> 1
+    or (select created_at from public.notifications where user_id = v_member and type = 'match_reminder' and source_id = v_match_id) <= v_reminder_created_at
+    or (select updated_at from public.match_attendance where match_id = v_match_id and user_id = v_member)
+      is distinct from v_updated_at
+    or (
+      select count(*) from private.audit_events
+      where team_id = v_team and table_name = 'notifications'
+        and action = 'UPDATE'
+        and row_key = pg_catalog.jsonb_build_object('match_id', v_match_id)
+    ) <> v_audit_count + 2 then
+    raise exception 'remaining MVP live: reminder retry was not one-row, token-safe, and once-audited per write';
+  end if;
+
+  execute 'set local role authenticated';
+  v_failed := false;
+  begin
+    perform public.remind_match_attendance(v_team, v_match_id, array[v_unrelated]);
+  exception when others then
+    v_failed := true;
+    v_state := sqlstate;
+  end;
+  if not v_failed or v_state <> '23503' then
+    raise exception 'remaining MVP live: cross-team reminder was not denied (state=%)', v_state;
   end if;
 
   execute 'set local role authenticated';
@@ -213,6 +286,69 @@ begin
     pg_catalog.jsonb_build_object('sub', v_member, 'role', 'authenticated')::text,
     true
   );
+  v_failed := false;
+  begin
+    perform public.remind_match_attendance(v_team, v_match_id, array[v_member]);
+  exception when others then
+    v_failed := true;
+    v_state := sqlstate;
+  end;
+  if not v_failed or v_state <> '42501' then
+    raise exception 'remaining MVP live: Member sent reminders (state=%)', v_state;
+  end if;
+
+  if (select count(*) from public.notifications) <> 2
+    or exists (select 1 from public.notifications where user_id <> v_member) then
+    raise exception 'remaining MVP live: own-notification SELECT policy leaked another user';
+  end if;
+  update public.notifications
+  set read_at = pg_catalog.clock_timestamp()
+  where user_id = v_member and type = 'match_invitation' and source_id = v_match_id;
+  if not exists (
+    select 1 from public.notifications
+    where user_id = v_member and type = 'match_invitation'
+      and source_id = v_match_id and read_at is not null
+  ) then
+    raise exception 'remaining MVP live: own notification read update did not persist';
+  end if;
+  v_failed := false;
+  begin
+    update public.notifications
+    set title = 'Tampered'
+    where user_id = v_member and source_id = v_match_id;
+  exception when others then
+    v_failed := true;
+    v_state := sqlstate;
+  end;
+  if not v_failed or v_state <> '42501' then
+    raise exception 'remaining MVP live: notification content was client-writable (state=%)', v_state;
+  end if;
+  v_failed := false;
+  begin
+    insert into public.notifications (
+      team_id, user_id, type, source_entity, source_id, title, body, target_path
+    ) values (
+      v_team, v_member, 'match_reminder', 'match', v_match_id,
+      'Tampered', 'Tampered', '/teams/remaining-mvp-team-20260826/matches/' || v_match_id::text
+    );
+  exception when others then
+    v_failed := true;
+    v_state := sqlstate;
+  end;
+  if not v_failed or v_state <> '42501' then
+    raise exception 'remaining MVP live: notification insert was client-writable (state=%)', v_state;
+  end if;
+  v_failed := false;
+  begin
+    delete from public.notifications where user_id = v_member and source_id = v_match_id;
+  exception when others then
+    v_failed := true;
+    v_state := sqlstate;
+  end;
+  if not v_failed or v_state <> '42501' then
+    raise exception 'remaining MVP live: notification delete was client-writable (state=%)', v_state;
+  end if;
+
   select updated_at into strict v_updated_at
   from public.match_attendance where match_id = v_match_id and user_id = v_member;
   perform public.respond_match_attendance(
@@ -225,6 +361,30 @@ begin
   if v_count <> 1 then
     raise exception 'remaining MVP live: own RSVP did not persist';
   end if;
+
+  perform pg_catalog.set_config('request.jwt.claim.sub', v_admin::text, true);
+  perform pg_catalog.set_config(
+    'request.jwt.claims',
+    pg_catalog.jsonb_build_object('sub', v_admin, 'role', 'authenticated')::text,
+    true
+  );
+  v_failed := false;
+  begin
+    perform public.remind_match_attendance(v_team, v_match_id, array[v_member]);
+  exception when others then
+    v_failed := true;
+    v_state := sqlstate;
+  end;
+  if not v_failed or v_state <> '55000' then
+    raise exception 'remaining MVP live: non-pending attendance was reminded (state=%)', v_state;
+  end if;
+
+  perform pg_catalog.set_config('request.jwt.claim.sub', v_member::text, true);
+  perform pg_catalog.set_config(
+    'request.jwt.claims',
+    pg_catalog.jsonb_build_object('sub', v_member, 'role', 'authenticated')::text,
+    true
+  );
 
   select updated_at into strict v_updated_at
   from public.match_attendance where match_id = v_match_id and user_id = v_owner;
@@ -662,7 +822,8 @@ begin
   if exists (select 1 from public.matches where team_id = v_team)
     or exists (select 1 from public.match_attendance where team_id = v_team)
     or exists (select 1 from public.match_tactics where team_id = v_team)
-    or exists (select 1 from public.finance_entries where team_id = v_team) then
+    or exists (select 1 from public.finance_entries where team_id = v_team)
+    or exists (select 1 from public.notifications where team_id = v_team) then
     raise exception 'remaining MVP live: unrelated user read cross-team records';
   end if;
   v_failed := false;

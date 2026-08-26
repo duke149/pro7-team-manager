@@ -52,6 +52,7 @@ test("remaining MVP tables use tenant-safe relational contracts", async () => {
     "lineup_slots",
     "finance_entries",
     "member_dues",
+    "notifications",
   ]) {
     assert.match(sql, new RegExp(`create table public\\.${table} \\(`));
     assert.match(sql, new RegExp(`alter table public\\.${table} enable row level security;`));
@@ -68,6 +69,25 @@ test("remaining MVP tables use tenant-safe relational contracts", async () => {
     /constraint lineup_slots_tactic_team_fkey foreign key \(tactic_id, team_id\) references public\.match_tactics \(id, team_id\) on delete cascade/,
     /constraint lineup_slots_membership_fkey foreign key \(team_id, user_id\) references public\.memberships \(team_id, user_id\) on delete restrict/,
     /constraint member_dues_finance_entry_team_fkey foreign key \(finance_entry_id, team_id\) references public\.finance_entries \(id, team_id\) on delete restrict/,
+    /constraint notifications_membership_fkey foreign key \(team_id, user_id\) references public\.memberships \(team_id, user_id\) on delete cascade/,
+    /constraint notifications_match_team_fkey foreign key \(source_id, team_id\) references public\.matches \(id, team_id\) on delete cascade/,
+  ]) {
+    assert.match(sql, clause);
+  }
+});
+
+test("notifications are bounded, tenant-safe, idempotent, and local-path only", async () => {
+  const sql = normalizeSql(await readMigration());
+
+  for (const clause of [
+    /constraint notifications_type_check check \(type in \('match_invitation', 'match_reminder'\)\)/,
+    /constraint notifications_source_check check \(source_entity = 'match'\)/,
+    /constraint notifications_title_check check \(title = btrim\(title\) and char_length\(title\) between 1 and 160\)/,
+    /constraint notifications_body_check check \(body = btrim\(body\) and char_length\(body\) between 1 and 500\)/,
+    /constraint notifications_target_path_check check \( target_path = btrim\(target_path\) and char_length\(target_path\) between 1 and 200 and target_path ~ '\^\/teams\//,
+    /constraint notifications_user_type_source_key unique \(user_id, type, source_entity, source_id\)/,
+    /create index notifications_user_created_at_idx on public\.notifications \(user_id, created_at desc\)/,
+    /create index notifications_source_team_idx on public\.notifications \(source_id, team_id\)/,
   ]) {
     assert.match(sql, clause);
   }
@@ -144,6 +164,7 @@ test("table grants are explicit and direct writes stay closed", async () => {
     "lineup_slots",
     "finance_entries",
     "member_dues",
+    "notifications",
   ].join(", public\\.");
 
   assert.match(
@@ -154,8 +175,10 @@ test("table grants are explicit and direct writes stay closed", async () => {
     sql,
     new RegExp(`grant select, insert, update, delete on table public\\.${tables} to service_role;`),
   );
-  assert.match(sql, /grant select on table public\.matches, public\.match_attendance, public\.match_events, public\.match_player_stats, public\.match_team_stats, public\.team_news, public\.match_tactics, public\.lineup_slots, public\.finance_entries, public\.member_dues to authenticated;/);
-  assert.doesNotMatch(sql, /grant (?:insert|update|delete)[^;]*to authenticated/);
+  assert.match(sql, /grant select on table public\.matches, public\.match_attendance, public\.match_events, public\.match_player_stats, public\.match_team_stats, public\.team_news, public\.match_tactics, public\.lineup_slots, public\.finance_entries, public\.member_dues, public\.notifications to authenticated;/);
+  assert.match(sql, /grant update \(read_at\) on table public\.notifications to authenticated/);
+  assert.doesNotMatch(sql, /grant (?:insert|delete)[^;]*to authenticated/);
+  assert.doesNotMatch(sql, /grant update on table[^;]*to authenticated/);
 });
 
 test("RLS allows team reads, published news, and own optimistic RSVP only", async () => {
@@ -164,11 +187,13 @@ test("RLS allows team reads, published news, and own optimistic RSVP only", asyn
   for (const clause of [
     /create policy matches_select_authorized on public\.matches for select to authenticated using \(private\.has_team_permission\(team_id, 'matches\.read'\)\)/,
     /create policy match_attendance_select_authorized on public\.match_attendance for select to authenticated using \(private\.has_team_permission\(team_id, 'matches\.read'\)\)/,
-    /create policy match_attendance_update_own on public\.match_attendance for update to authenticated using \(user_id = \(select auth\.uid\(\)\) and private\.has_team_permission\(team_id, 'matches\.respond'\)\) with check \(user_id = \(select auth\.uid\(\)\) and private\.has_team_permission\(team_id, 'matches\.respond'\)\)/,
     /create policy team_news_select_authorized on public\.team_news for select to authenticated using \( private\.has_team_permission\(team_id, 'news\.manage'\) or \(status = 'published' and private\.has_team_permission\(team_id, 'news\.read'\)\) \)/,
+    /create policy notifications_select_own on public\.notifications for select to authenticated using \(user_id = \(select auth\.uid\(\)\)\)/,
+    /create policy notifications_update_own on public\.notifications for update to authenticated using \(user_id = \(select auth\.uid\(\)\)\) with check \(user_id = \(select auth\.uid\(\)\)\)/,
   ]) {
     assert.match(sql, clause);
   }
+  assert.doesNotMatch(sql, /create policy notifications_(?:insert|delete)/);
 });
 
 test("all narrow RPCs are hardened, owned, and explicitly ACLed", async () => {
@@ -182,6 +207,7 @@ test("all narrow RPCs are hardened, owned, and explicitly ACLed", async () => {
     apply_match_tactic: "uuid, uuid, timestamptz",
     manage_finance_entry: "text, uuid, uuid, text, bigint, text, date, text, text, timestamptz",
     manage_member_due: "text, uuid, uuid, uuid, date, bigint, date, text, timestamptz",
+    remind_match_attendance: "uuid, uuid, uuid[]",
   };
 
   for (const [name, signature] of Object.entries(signatures)) {
@@ -211,6 +237,21 @@ test("RPCs enforce permission, concurrency, lifecycle, lineup, void, and audit b
   assert.match(invite, /on conflict \(match_id, user_id\) do nothing/);
   assert.match(invite, /if v_inserted_count > 0 then/);
   assert.match(invite, /v_match\.status <> 'scheduled'/);
+  assert.match(invite, /insert into public\.notifications/);
+  assert.match(invite, /'match_invitation'/);
+  assert.match(invite, /on conflict \(user_id, type, source_entity, source_id\) do nothing/);
+  assert.match(invite, /'\/teams\/' \|\| v_team_slug \|\| '\/matches\/' \|\| p_match_id::text/);
+
+  const remind = extractFunction(sql, "public.remind_match_attendance");
+  assert.match(remind, /private\.has_team_permission\(p_team_id, 'matches\.manage'\)/);
+  assert.match(remind, /where m\.id = p_match_id and m\.team_id = p_team_id for update/);
+  assert.match(remind, /attendance\.status = 'pending'/);
+  assert.match(remind, /membership\.status = 'active'/);
+  assert.match(remind, /on conflict \(user_id, type, source_entity, source_id\) do update/);
+  assert.match(remind, /read_at = null/);
+  assert.match(remind, /if v_written_count > 0 then/);
+  assert.match(remind, /insert into private\.audit_events/);
+  assert.doesNotMatch(remind, /update public\.match_attendance/);
 
   const respond = extractFunction(sql, "public.respond_match_attendance");
   assert.match(respond, /v_actor_user_id <> p_user_id/);

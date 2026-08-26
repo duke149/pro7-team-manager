@@ -83,8 +83,8 @@ test(
     const result = runPreapply(appliedDatabaseUrl);
     assert.equal(result.migration_history.is_applied, true);
     assert.equal(result.migration_history.recorded_name, "pro7_remaining_mvp");
-    assert.equal(result.prospective_tables.length, 10);
-    assert.equal(result.prospective_functions.length, 8);
+    assert.equal(result.prospective_tables.length, 11);
+    assert.equal(result.prospective_functions.length, 9);
     assert.deepEqual(result.legacy_write_grants, []);
     assert.deepEqual(result.rls_disabled_tables, []);
     assert.deepEqual(result.tenant_reference_conflicts, []);
