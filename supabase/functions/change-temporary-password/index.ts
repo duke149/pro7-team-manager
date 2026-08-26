@@ -237,7 +237,8 @@ export function createChangeTemporaryPasswordRuntimeDependencies(
   const url = getEnvironment("SUPABASE_URL");
   const anonKey = getEnvironment("SUPABASE_ANON_KEY");
   const serviceRoleKey = getEnvironment("SUPABASE_SERVICE_ROLE_KEY");
-  const allowedOriginsValue = getEnvironment("ALLOWED_ORIGINS") ?? "";
+  const allowedOriginsValue = getEnvironment("ALLOWED_ORIGINS") ??
+    "http://localhost:3000,https://pro7-team-manager.duke149-work.chatgpt.site";
   if (!url || !anonKey || !serviceRoleKey) {
     throw new Error("Missing required Edge Function configuration.");
   }

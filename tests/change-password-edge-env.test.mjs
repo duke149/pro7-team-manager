@@ -62,3 +62,21 @@ test("Edge runtime construction uses the pinned automatically injected key names
     "https://admin.pro7.example",
   ]);
 });
+
+test("password runtime permits the checked-in localhost and hosted PRO7 origins when no custom secret is configured", async () => {
+  const edge = await import("../supabase/functions/change-temporary-password/index.ts");
+  const values = new Map([
+    ["SUPABASE_URL", "https://local.supabase.invalid"],
+    ["SUPABASE_ANON_KEY", "legacy-anon-key"],
+    ["SUPABASE_SERVICE_ROLE_KEY", "legacy-service-role-key"],
+  ]);
+  const dependencies = edge.createChangeTemporaryPasswordRuntimeDependencies({
+    getEnvironment: (name) => values.get(name),
+    createSupabaseClient: () => ({}),
+  });
+
+  assert.deepEqual(dependencies.allowedOrigins, [
+    "http://localhost:3000",
+    "https://pro7-team-manager.duke149-work.chatgpt.site",
+  ]);
+});

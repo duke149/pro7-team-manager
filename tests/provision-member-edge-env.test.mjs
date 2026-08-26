@@ -57,3 +57,21 @@ test("provisioning runtime reads only injected keys and builds caller/service cl
   assert.deepEqual(clients[1].options.auth, clients[0].options.auth);
   assert.equal(clients[1].options.global, undefined);
 });
+
+test("provisioning runtime permits the checked-in localhost and hosted PRO7 origins when no custom secret is configured", async () => {
+  const edge = await import("../supabase/functions/provision-team-member/index.ts");
+  const values = new Map([
+    ["SUPABASE_URL", "https://local.supabase.invalid"],
+    ["SUPABASE_ANON_KEY", "legacy-anon-key"],
+    ["SUPABASE_SERVICE_ROLE_KEY", "legacy-service-role-key"],
+  ]);
+  const dependencies = edge.createProvisionTeamMemberRuntimeDependencies({
+    getEnvironment: (name) => values.get(name),
+    createSupabaseClient: () => ({}),
+  });
+
+  assert.deepEqual(dependencies.allowedOrigins, [
+    "http://localhost:3000",
+    "https://pro7-team-manager.duke149-work.chatgpt.site",
+  ]);
+});

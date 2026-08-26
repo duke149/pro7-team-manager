@@ -154,31 +154,19 @@ test("authorized add-player route reuses the PRO7 modal and keeps the hosted Squ
   await act(async () => hidden.root.unmount());
 });
 
-test("provisioning form invokes the authenticated function and holds a new password only in the one-time dialog", async () => {
-  const calls: Array<{ name: string; options: Record<string, unknown> }> = [];
+test("provisioning form uses the same-origin team API and holds a new password only in the one-time dialog", async () => {
+  const calls: Array<{ input: string; init?: RequestInit }> = [];
   const storageWrites: string[] = [];
   browserWindow.localStorage.setItem = (key) => storageWrites.push(`local:${key}`);
   browserWindow.sessionStorage.setItem = (key) => storageWrites.push(`session:${key}`);
-  globalThis.__provisioningClient = {
-    auth: {
-      async getSession() {
-        return { data: { session: { access_token: "browser-token" } } };
-      },
-    },
-    functions: {
-      async invoke(name: string, options: Record<string, unknown>) {
-        calls.push({ name, options });
-        return {
-          data: {
-            ok: true,
-            account: "created",
-            userId: "00000000-0000-4000-8000-000000000004",
-            temporaryPassword: "Temp-Account-7!Secure#9",
-          },
-          error: null,
-        };
-      },
-    },
+  globalThis.fetch = async (input, init) => {
+    calls.push({ input: String(input), init });
+    return Response.json({
+      ok: true,
+      account: "created",
+      userId: "00000000-0000-4000-8000-000000000004",
+      temporaryPassword: "Temp-Account-7!Secure#9",
+    });
   };
   const view = await mounted();
   const form = view.container.querySelector("form.provision-member-form") as HTMLFormElement;
@@ -195,10 +183,11 @@ test("provisioning form invokes the authenticated function and holds a new passw
   });
 
   assert.deepEqual(calls, [{
-    name: "provision-team-member",
-    options: {
-      headers: { Authorization: "Bearer browser-token" },
-      body: {
+    input: "/api/teams/pro7-fc/members",
+    init: {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
         teamId: TEAM.id,
         email: "player@example.com",
         displayName: "Nguyễn Minh Anh",
@@ -206,7 +195,7 @@ test("provisioning form invokes the authenticated function and holds a new passw
         shirtNumber: 17,
         officialPosition: "MID",
         joinDate: "2026-08-25",
-      },
+      }),
     },
   }]);
   assert.equal(view.container.querySelector(".one-time-password")?.textContent, "Temp-Account-7!Secure#9");

@@ -15,7 +15,6 @@ import { useState, type FormEvent } from "react";
 import type { SquadFilters } from "../../../../lib/squad/filters";
 import { isUuid, type SquadAssignableRole, type SquadListResult, type SquadPlayerSummary } from "../../../../lib/squad/model";
 import { validateProvisionMemberPayload, type ProvisionMemberSuccess } from "../../../../lib/squad/provisioning";
-import { createBrowserSupabaseClient } from "../../../../lib/supabase/client";
 import type { TeamAccessContext } from "../../../../lib/teams/context";
 import { hasPermission, type PermissionCode } from "../../../../lib/teams/permissions";
 import { SquadToolbar } from "./squad-toolbar";
@@ -99,21 +98,6 @@ function isProvisionMemberSuccess(value: unknown): value is ProvisionMemberSucce
   );
 }
 
-async function functionFailureMessage(error: unknown): Promise<string> {
-  if (
-    typeof error !== "object" ||
-    error === null ||
-    !("context" in error) ||
-    !(error.context instanceof Response)
-  ) {
-    return "Không thể thêm cầu thủ. Vui lòng thử lại.";
-  }
-  const body: unknown = await error.context.clone().json().catch(() => null);
-  return isRecord(body) && typeof body.message === "string" && body.message.length <= 200
-    ? body.message
-    : "Không thể thêm cầu thủ. Vui lòng thử lại.";
-}
-
 function today(): string {
   return new Date().toISOString().slice(0, 10);
 }
@@ -124,10 +108,12 @@ function FieldError({ id, message }: { id: string; message?: string }) {
 
 function ProvisionMemberModal({
   teamId,
+  teamSlug,
   roles,
   onClose,
 }: {
   teamId: string;
+  teamSlug: string;
   roles: readonly SquadAssignableRole[];
   onClose: (reload?: boolean) => void;
 }) {
@@ -163,21 +149,20 @@ function ProvisionMemberModal({
 
     setState({ kind: "pending" });
     try {
-      const supabase = createBrowserSupabaseClient();
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.access_token) {
-        setState({ kind: "error", message: "Không thể xác minh tài khoản.", fieldErrors: {} });
-        return;
-      }
-      const { data, error } = await supabase.functions.invoke(
-        "provision-team-member",
-        {
-          headers: { Authorization: `Bearer ${session.access_token}` },
-          body: validation.value,
-        },
-      );
-      if (error) {
-        setState({ kind: "error", message: await functionFailureMessage(error), fieldErrors: {} });
+      const response = await fetch(`/api/teams/${encodeURIComponent(teamSlug)}/members`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(validation.value),
+      });
+      const data: unknown = await response.json().catch(() => null);
+      if (!response.ok) {
+        const message = isRecord(data) && typeof data.message === "string" && data.message.length <= 200
+          ? data.message
+          : "Không thể thêm cầu thủ. Vui lòng thử lại.";
+        const serverErrors = isRecord(data) && isRecord(data.fieldErrors)
+          ? Object.fromEntries(Object.entries(data.fieldErrors).filter((entry): entry is [string, string] => typeof entry[1] === "string"))
+          : {};
+        setState({ kind: "error", message, fieldErrors: serverErrors });
         return;
       }
       if (!isProvisionMemberSuccess(data)) {
@@ -286,6 +271,7 @@ export function SquadView({
       {provisioningOpen && canManage && (
         <ProvisionMemberModal
           teamId={team.id}
+          teamSlug={team.slug}
           roles={assignableRoles}
           onClose={closeProvisioning}
         />
