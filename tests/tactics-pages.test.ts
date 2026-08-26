@@ -5,7 +5,6 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { createServer, type ViteDevServer } from "vite";
 
 import type { MatchSummary } from "../lib/matches/model";
-import type { SquadListResult } from "../lib/squad/model";
 import type { TeamAccessContext } from "../lib/teams/context";
 import type { TacticsDetail, TacticsDetailResult, TacticsMatchesResult } from "../lib/tactics/model";
 import { getTacticsDetail } from "../lib/tactics/queries";
@@ -37,13 +36,16 @@ const MEMBER: TeamAccessContext = { ...ADMIN, userId: "member-1", membership: { 
 
 type Landing = { renderTacticsPage(args: { params: Promise<{ slug: string }>; requireTeamPermission: () => Promise<TeamAccessContext | null>; listScheduledMatches: (teamId: string, userId: string) => Promise<TacticsMatchesResult>; denied: () => unknown }): Promise<unknown> };
 type DetailPage = { renderTacticsMatchPage(args: { params: Promise<{ slug: string; matchId: string }>; requireTeamPermission: () => Promise<TeamAccessContext | null>; getTacticsDetail: (teamId: string, matchId: string, userId: string, canManage: boolean) => Promise<TacticsDetailResult>; denied: () => unknown }): Promise<unknown> };
+type Boundary = { default(props: { reset?: () => void }): unknown };
 let vite: ViteDevServer;
 let landing: Landing;
 let detailPage: DetailPage;
+let loading: Boundary;
+let error: Boundary;
 
 test.before(async () => {
   vite = await createServer({ appType: "custom", configFile: false, plugins: [{ name: "tactics-page-navigation", resolveId(id) { return id === "next/navigation" ? "\0tactics-navigation" : null; }, load(id) { return id === "\0tactics-navigation" ? "export function notFound(){return 'SAFE_DENIAL'}; export function useRouter(){return {refresh(){}}}" : null; } }], resolve: { alias: { "next/navigation": resolve("tests/fixtures/squad-page-navigation.ts") } }, server: { middlewareMode: true } });
-  [landing, detailPage] = await Promise.all([vite.ssrLoadModule("/app/teams/[slug]/tactics/page.tsx"), vite.ssrLoadModule("/app/teams/[slug]/tactics/[matchId]/page.tsx")]) as [Landing, DetailPage];
+  [landing, detailPage, loading, error] = await Promise.all([vite.ssrLoadModule("/app/teams/[slug]/tactics/page.tsx"), vite.ssrLoadModule("/app/teams/[slug]/tactics/[matchId]/page.tsx"), vite.ssrLoadModule("/app/teams/[slug]/tactics/loading.tsx"), vite.ssrLoadModule("/app/teams/[slug]/tactics/error.tsx")]) as [Landing, DetailPage, Boundary, Boundary];
 });
 test.after(async () => vite.close());
 const html = (value: unknown) => renderToStaticMarkup(value as React.ReactElement);
@@ -81,7 +83,8 @@ test("detail page preserves hosted tactics hierarchy for Admin and removes every
     const markup = html(output);
     assert.equal(queryCanManage, canManage);
     assert.match(markup, /tactics-toolbar[\s\S]*mode-toggle[\s\S]*tactics-layout[\s\S]*pitch-card[\s\S]*pitch[\s\S]*instruction-card[\s\S]*bench-card/u);
-    assert.match(markup, /SƠ ĐỒ[\s\S]*Cân bằng[\s\S]*Tấn công[\s\S]*Phòng ngự/u);
+    assert.match(markup, /SƠ ĐỒ[\s\S]*Có bóng[\s\S]*Không bóng/u);
+    assert.doesNotMatch(markup, /Cân bằng|Tấn công|Phòng ngự/u);
     assert.match(markup, /Cầu thủ 1[\s\S]*Cầu thủ 8/u);
     assert.equal(markup.includes("Lưu bản nháp"), canManage);
     assert.equal(markup.includes("Áp dụng cho đội"), canManage);
@@ -89,21 +92,62 @@ test("detail page preserves hosted tactics hierarchy for Admin and removes every
   }
 });
 
-test("Member tactics query explicitly requests applied rows and maps only scheduled matches plus active squad records", async () => {
-  const calls: Array<{ method: string; value: unknown }> = [];
+test("tactics loading and error boundaries preserve the PRO7 pending surface and retry action", () => {
+  const pending = html(loading.default({}));
+  assert.match(pending, /class="view-stack tactics-view"[\s\S]*data-state="loading"[\s\S]*aria-busy="true"[\s\S]*squad-loading-dot[\s\S]*Đang tải chiến thuật/u);
+  const failed = html(error.default({ reset() {} }));
+  assert.match(failed, /class="view-stack tactics-view"[\s\S]*data-state="error"[\s\S]*Không thể tải chiến thuật[\s\S]*Thử lại/u);
+});
+
+test("Member tactics query reads every active membership regardless of player availability and requests only applied rows", async () => {
+  const calls: Array<{ table: string; method: string; value: unknown }> = [];
   const row = {
     id: "00000000-0000-4000-8000-000000000201", mode: "balanced", formation: "2-3-1", instructions: null,
     version: 2, pressing: "high", defensive_line: "medium", status: "applied", updated_at: "2026-10-02T00:00:00.000Z",
     applied_at: "2026-10-03T00:00:00.000Z", slots: DETAIL.tactics[0].slots.map((slot) => ({ user_id: slot.userId, slot_kind: slot.slotKind, slot_key: slot.slotKey, role_label: slot.roleLabel, shirt_number: slot.shirtNumber, x: slot.x, y: slot.y })),
   };
-  const query = { select(value: string) { calls.push({ method: "select", value }); return this; }, eq(column: string, value: unknown) { calls.push({ method: "eq", value: { column, value } }); return this; }, order(column: string, value: unknown) { calls.push({ method: "order", value: { column, value } }); return this; }, async limit(value: number) { calls.push({ method: "limit", value }); return { data: [row], error: null }; } };
-  const squad: SquadListResult = { ok: true, players: PLAYERS.map((player) => ({ ...player, avatarPath: null, avatarUrl: null, membershipStatus: "active", role: { id: "role", name: "Member", slug: "member", isSystem: true }, playerStatus: "available", joinDate: "2026-01-01" })) };
+  const membershipRows = PLAYERS.map((player, index) => ({
+    user_id: player.userId,
+    player: { shirt_number: player.shirtNumber, official_position: player.officialPosition, player_status: index % 3 === 0 ? "injured" : index % 3 === 1 ? "unavailable" : "available" },
+  }));
+  const profileRows = PLAYERS.map((player) => ({ id: player.userId, display_name: player.displayName }));
+  const query = (table: string) => ({
+    select(value: string) { calls.push({ table, method: "select", value }); return this; },
+    eq(column: string, value: unknown) { calls.push({ table, method: "eq", value: { column, value } }); return this; },
+    gt(column: string, value: unknown) { calls.push({ table, method: "gt", value: { column, value } }); return this; },
+    in(column: string, value: unknown) { calls.push({ table, method: "in", value: { column, value } }); return this; },
+    order(column: string, value: unknown) { calls.push({ table, method: "order", value: { column, value } }); return this; },
+    async limit(value: number) {
+      calls.push({ table, method: "limit", value });
+      return { data: table === "memberships" ? membershipRows : table === "profiles" ? profileRows : [row], error: null };
+    },
+  });
   const result = await getTacticsDetail("team-1", MATCH_ID, "member-1", false, {
     listMatches: async () => ({ ok: true, matches: [MATCH] }),
-    listSquadPlayers: async (_teamId, filters) => { assert.deepEqual(filters, { q: "", searchPattern: null, position: "all", status: "active", sort: "name", direction: "asc" }); return squad; },
-    supabase: { from(table: string) { assert.equal(table, "match_tactics"); return query; } } as never,
+    supabase: { from(table: string) { return query(table); } } as never,
   });
   assert.equal(result.ok, true);
-  assert.ok(calls.some((call) => call.method === "eq" && JSON.stringify(call.value) === JSON.stringify({ column: "status", value: "applied" })));
-  if (result.ok) assert.equal(result.detail.tactics.every((tactic) => tactic.status === "applied"), true);
+  assert.ok(calls.some((call) => call.table === "memberships" && call.method === "eq" && JSON.stringify(call.value) === JSON.stringify({ column: "status", value: "active" })));
+  assert.equal(calls.some((call) => call.table === "memberships" && call.method === "eq" && (call.value as { column?: string }).column === "player.player_status"), false);
+  assert.ok(calls.some((call) => call.table === "match_tactics" && call.method === "eq" && JSON.stringify(call.value) === JSON.stringify({ column: "status", value: "applied" })));
+  if (result.ok) {
+    assert.deepEqual(result.detail.players.map((player) => player.userId), USER_IDS);
+    assert.equal(result.detail.tactics.every((tactic) => tactic.status === "applied"), true);
+  }
+});
+
+test("tactics player loading fails closed when an active membership lacks its player or public profile", async () => {
+  for (const missing of ["player", "profile"] as const) {
+    const memberships = [{ user_id: USER_IDS[0], player: missing === "player" ? null : { shirt_number: 1, official_position: "GK", player_status: "injured" } }];
+    const profiles = missing === "profile" ? [] : [{ id: USER_IDS[0], display_name: "Cầu thủ 1" }];
+    const query = (table: string) => ({
+      select() { return this; }, eq() { return this; }, gt() { return this; }, in() { return this; }, order() { return this; },
+      async limit() { return { data: table === "memberships" ? memberships : table === "profiles" ? profiles : [], error: null }; },
+    });
+    const result = await getTacticsDetail("team-1", MATCH_ID, "member-1", false, {
+      listMatches: async () => ({ ok: true, matches: [MATCH] }),
+      supabase: { from(table: string) { return query(table); } } as never,
+    });
+    assert.deepEqual(result, { ok: false, error: "server" });
+  }
 });

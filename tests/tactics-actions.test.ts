@@ -42,17 +42,21 @@ function request(body: unknown, headers: Record<string, string> = {}) {
   });
 }
 
-function dependencies(options: { context?: TeamAccessContext | null; activeIds?: readonly string[]; rpcError?: { code?: string } | null; rpcData?: unknown } = {}) {
+function dependencies(options: { context?: TeamAccessContext | null; activeIds?: readonly string[]; rpcError?: { code?: string } | null; rpcData?: unknown; savedRow?: unknown } = {}) {
   const calls: Array<{ kind: "permission"; permission: PermissionCode } | { kind: "from"; table: string } | { kind: "rpc"; name: string; args: unknown }> = [];
   const activeIds = options.activeIds ?? PLAYER_IDS;
-  const query = {
+  const membershipQuery = {
     select() { return this; }, eq() { return this; }, in() { return this; }, order() { return this; },
     async limit() { return { data: activeIds.map((user_id) => ({ user_id })), error: null }; },
+  };
+  const savedTacticQuery = {
+    select() { return this; }, eq() { return this; }, limit() { return this; },
+    async maybeSingle() { return { data: "savedRow" in options ? options.savedRow : { id: TACTIC_ID, version: 3, updated_at: "2026-10-02T00:00:00.000Z", status: "draft" }, error: null }; },
   };
   const deps: TacticsActionDependencies = {
     requireTeamPermission: async (_slug, permission) => { calls.push({ kind: "permission", permission }); return "context" in options ? options.context ?? null : CONTEXT; },
     supabase: {
-      from: ((table: string) => { calls.push({ kind: "from", table }); return query; }) as never,
+      from: ((table: string) => { calls.push({ kind: "from", table }); return table === "memberships" ? membershipQuery : savedTacticQuery; }) as never,
       rpc: (async (name: string, args: unknown) => { calls.push({ kind: "rpc", name, args }); return { data: "rpcData" in options ? options.rpcData : TACTIC_ID, error: options.rpcError ?? null }; }) as never,
     },
   };
@@ -75,7 +79,7 @@ test("Admin save verifies every lineup user is active on the guarded team and in
   const fixture = dependencies();
   const response = await mutateTactics(request(payload()), { slug: "pro7-fc", matchId: MATCH_ID }, fixture.deps);
   assert.equal(response.status, 200);
-  assert.deepEqual(await response.json(), { ok: true, tacticId: TACTIC_ID });
+  assert.deepEqual(await response.json(), { ok: true, tactic: { id: TACTIC_ID, version: 3, updatedAt: "2026-10-02T00:00:00.000Z" } });
   assert.deepEqual(fixture.calls, [
     { kind: "permission", permission: "tactics.manage" },
     { kind: "from", table: "memberships" },
@@ -86,7 +90,15 @@ test("Admin save verifies every lineup user is active on the guarded team and in
       p_slots: slots().map((slot) => ({ user_id: slot.userId, slot_kind: slot.slotKind, slot_key: slot.slotKey, role_label: slot.roleLabel, shirt_number: slot.shirtNumber, x: slot.x, y: slot.y })),
       p_expected_updated_at: UPDATED_AT,
     } },
+    { kind: "from", table: "match_tactics" },
   ]);
+});
+
+test("save fails closed when the authoritative tactic row is malformed", async () => {
+  const fixture = dependencies({ savedRow: { id: TACTIC_ID, version: "3", updated_at: "not-a-date", status: "draft" } });
+  const response = await mutateTactics(request(payload()), { slug: "pro7-fc", matchId: MATCH_ID }, fixture.deps);
+  assert.equal(response.status, 500);
+  assert.deepEqual(await response.json(), { ok: false, code: "server", message: "Không thể lưu chiến thuật lúc này." });
 });
 
 test("save fails closed before RPC when any player is inactive or belongs to another team", async () => {

@@ -4,6 +4,7 @@ import type { Database } from "../supabase/database.types";
 import type { TeamAccessContext } from "../teams/context";
 import type { PermissionCode } from "../teams/permissions";
 import { isUuid } from "../matches/model";
+import { isIsoTimestamp } from "../matches/validation";
 import { validateTacticsPayload, type SaveTacticPayload } from "./validation";
 
 const MAX_REQUEST_BYTES = 16 * 1024;
@@ -69,6 +70,17 @@ async function allPlayersAreActive(dependencies: TacticsActionDependencies, team
   return returned.every((userId, index) => userId === requested[index]);
 }
 
+function parseSavedTactic(value: unknown, expectedId: string) {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
+  const row = value as Record<string, unknown>;
+  if (Object.keys(row).length !== 4
+    || row.id !== expectedId
+    || !Number.isInteger(row.version) || (row.version as number) < 1 || (row.version as number) > 32767
+    || !isIsoTimestamp(row.updated_at)
+    || row.status !== "draft") return null;
+  return Object.freeze({ id: row.id, version: row.version as number, updatedAt: row.updated_at });
+}
+
 export async function mutateTactics(
   request: Request,
   target: Readonly<{ slug: string; matchId: string }>,
@@ -115,7 +127,17 @@ export async function mutateTactics(
     });
     if (result.error) return rpcFailure(result.error);
     if (!isUuid(result.data)) return failure(500, "server", "Không thể cập nhật chiến thuật. Vui lòng thử lại.");
-    return Response.json({ ok: true, tacticId: result.data });
+    const saved = await dependencies.supabase
+      .from("match_tactics")
+      .select("id,version,updated_at,status")
+      .eq("team_id", context.team.id)
+      .eq("match_id", target.matchId)
+      .eq("id", result.data)
+      .limit(1)
+      .maybeSingle();
+    const tactic = saved.error ? null : parseSavedTactic(saved.data, result.data);
+    if (!tactic) return failure(500, "server", "Không thể lưu chiến thuật lúc này.");
+    return Response.json({ ok: true, tactic });
   } catch {
     return failure(500, "server", "Không thể cập nhật chiến thuật. Vui lòng thử lại.");
   }

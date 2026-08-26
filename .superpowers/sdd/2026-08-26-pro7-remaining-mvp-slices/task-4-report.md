@@ -76,3 +76,35 @@ The hosted `tactics-toolbar`, `mode-toggle`, `tactics-layout`, `pitch-card`, `pi
 ## Concern
 
 Whole-repository `npm run lint` remains red at the unchanged documented baseline: 479 errors and 1 warning in pre-existing `app/pro7-app.tsx` accessibility findings and generated bundles under `work/`. The fresh tactics-scoped ESLint run is clean. `supabase/.temp/` remains untracked and untouched.
+
+---
+
+## Fix round 1/5 — authoritative saves, lineup assignment, and hosted parity
+
+Status: `DONE_WITH_CONCERNS`
+
+### Changes
+
+- Save now reads back the exact scoped `match_tactics` row after the RPC, strictly validates `id`, `version`, `updated_at`, and draft status, and returns the authoritative `{ id, version, updatedAt }` contract. The mounted editor reconciles that result before refresh, enabling a newly created draft to apply and ensuring consecutive save/apply requests use the latest optimistic token.
+- Tactics player authority now comes directly from active memberships. The bounded keyset query does not filter `player_status`, so injured and unavailable active members remain valid; inactive memberships are excluded, and missing/malformed player or public profile rows fail closed.
+- Admins can exchange assignments between any starter and bench slot through pointer drop or Enter/Space selection. Bench entries are semantic buttons; swapping preserves seven starter slot records, one goalkeeper role, unique users, and unique slot keys.
+- Pointer movement uses one coherent pointer-events path with capture, release, cancel, and lost-capture cleanup. Native HTML dragging was removed, and a released/lost pointer can no longer move a player on later pointer events.
+- Formation changes rewrite all seven starter role/coordinate records from the literal `2-3-1`, `3-2-1`, or `2-2-2` template while retaining the current goalkeeper assignment.
+- The hosted toolbar now exposes exactly `Có bóng` and `Không bóng`, mapped to `attacking` and `defensive`. A legacy `balanced` row is surfaced only as an explicitly identified old-data fallback under `Có bóng`; Member fallback is applied-only, so no draft can leak.
+- Mode, defensive-line, formation, starter, and bench selection controls expose pressed/selected semantics. Tactics loading and error boundaries now match the existing PRO7 pending/error surfaces and retry behavior.
+
+### Fix-round TDD evidence
+
+- Authoritative save RED: expected the parsed tactic row and malformed-row rejection; old action returned only `tacticId` and accepted malformed readback. GREEN: 6/6 action tests.
+- Membership-authority RED: injured/unavailable active members caused the inherited Squad availability filter to fail the applied lineup read. GREEN: direct active-membership query includes all three player statuses and rejects missing player/profile rows.
+- Mounted RED: seven failures demonstrated three old mode controls, absent pointer capture, unchanged geometry after formation selection, non-interactive bench assignments, unreconciled new saves, missing ARIA state, and no legacy fallback notice. GREEN: 10/10 mounted tests, including a keyboard swap payload, pointer swaps in both directions, and release/lost-capture regression.
+- Boundary RED: tactics `loading.tsx` and `error.tsx` modules were absent. GREEN: pending and retry boundary rendering covered in the page suite.
+
+### Fresh verification
+
+- Focused tactics suite: 27 passed, 0 failed.
+- Full `npm run test:unit`: 365 total; 360 passed, 0 failed, 5 optional live-database skips.
+- `npm test`: production build succeeded and rendered HTML/browser-boundary checks passed 7/7.
+- Tactics-scoped ESLint: exit 0. `git diff --check`: exit 0.
+- Whole-repository `npm run lint`: unchanged baseline of 479 errors and 1 warning in pre-existing/generated files.
+- No remote operation, migration edit/apply, deployment, or `supabase/.temp/` mutation occurred.
