@@ -52,7 +52,7 @@ export function Pro7RouteHeader({
   const fundsHref = `/teams/${encodeURIComponent(team.slug)}/funds?add=expense`;
   const contextualAction = onFunds && hasPermission({ permissions }, "finance.manage")
     ? { href: fundsHref, label: "Thêm khoản chi" }
-    : onSquad && canManagePlayers
+    : canManagePlayers
       ? { href: squadHref, label: "Thêm cầu thủ" }
       : null;
 

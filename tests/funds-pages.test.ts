@@ -44,16 +44,25 @@ test("funds renders honest empty and error states without exposing action contro
   }
 });
 
-test("Funds and Squad headers expose only their contextual hosted CTA", () => {
+test("Funds overrides the hosted CTA while every other Admin team route retains add player", () => {
   const common = { team: ADMIN.team, permissions: ["finance.manage", "players.manage", "members.manage"] as PermissionCode[], theme: "light" as const, onThemeChange() {}, onOpenMenu() {} };
   const funds = renderToStaticMarkup(createElement(Pro7RouteHeader, { ...common, pathname: "/teams/pro7-fc/funds" }));
   assert.match(funds, /header-cta[\s\S]*href="\/teams\/pro7-fc\/funds\?add=expense"[\s\S]*Thêm khoản chi/u);
   assert.doesNotMatch(funds, /Thêm cầu thủ/u);
-  const squad = renderToStaticMarkup(createElement(Pro7RouteHeader, { ...common, pathname: "/teams/pro7-fc/squad" }));
-  assert.match(squad, /header-cta[\s\S]*href="\/teams\/pro7-fc\/squad\?add=player"[\s\S]*Thêm cầu thủ/u);
-  assert.doesNotMatch(squad, /Thêm khoản chi/u);
-  const overview = renderToStaticMarkup(createElement(Pro7RouteHeader, { ...common, pathname: "/teams/pro7-fc/overview" }));
-  assert.doesNotMatch(overview, /header-cta|Thêm cầu thủ|Thêm khoản chi/u);
+
+  for (const route of ["overview", "matches", "tactics", "squad"]) {
+    const html = renderToStaticMarkup(createElement(Pro7RouteHeader, { ...common, pathname: `/teams/pro7-fc/${route}` }));
+    assert.match(html, /header-cta[\s\S]*href="\/teams\/pro7-fc\/squad\?add=player"[\s\S]*Thêm cầu thủ/u, route);
+    assert.doesNotMatch(html, /Thêm khoản chi/u, route);
+  }
+});
+
+test("Member headers hide both hosted management CTAs on every team route", () => {
+  const common = { team: ADMIN.team, permissions: ["finance.read", "players.read"] as PermissionCode[], theme: "light" as const, onThemeChange() {}, onOpenMenu() {} };
+  for (const route of ["funds", "overview", "matches", "tactics", "squad"]) {
+    const html = renderToStaticMarkup(createElement(Pro7RouteHeader, { ...common, pathname: `/teams/pro7-fc/${route}` }));
+    assert.doesNotMatch(html, /header-cta|Thêm cầu thủ|Thêm khoản chi/u, route);
+  }
 });
 
 test("Funds header query opens the expense dialog and route states preserve retry/loading contracts", async () => {
