@@ -299,6 +299,17 @@ async function parsedTacticsDetail(canManage) {
   });
 }
 
+function assertBoardReadyTactic(detail, mode, expectedBench) {
+  assert.equal(detail.ok, true);
+  const tactic = detail.ok && detail.detail.tactics.find((candidate) => candidate.mode === mode);
+  assert.ok(tactic, `missing ${mode} tactic`);
+  const starters = tactic.slots.filter((slot) => slot.slotKind === "starter");
+  const bench = tactic.slots.filter((slot) => slot.slotKind === "bench");
+  assert.equal(starters.length, 7, `${mode} tactic is hidden by TacticsBoard's seven-starter readiness gate`);
+  assert.equal(starters.filter((slot) => slot.roleLabel === "GK").length, 1, `${mode} tactic needs exactly one starting goalkeeper`);
+  assert.equal(bench.length, expectedBench);
+}
+
 before(async () => {
   clusterPath = await mkdtemp(join(tmpdir(), "pro7-demo-pg17-"));
   const dataPath = join(clusterPath, "data");
@@ -336,22 +347,27 @@ test("seed is idempotent, covers every MVP state, and cleanup restores the exact
   const firstSeed = psql(["-f", seedPath]);
   const resultLine = firstSeed.stdout.split(/\r?\n/u).map((line) => line.trim()).find((line) => line.startsWith("{"));
   assert.ok(resultLine);
-  assert.deepEqual(JSON.parse(resultLine), { marker: "PRO7-DEMO", player_count: 7, injured_player_count: 1, injured_coverage: "available" });
+  assert.deepEqual(JSON.parse(resultLine), {
+    marker: "PRO7-DEMO", player_count: 8, starter_count: 7, bench_count: 1, bench_coverage: "available",
+    injured_player_count: 1, injured_coverage: "available",
+  });
   const firstCoverage = demoCoverage();
   assert.deepEqual(firstCoverage, {
     matches: 3, match_statuses: ["cancelled", "completed", "scheduled"], attendance: 3,
     rsvp_statuses: ["available", "pending", "unavailable"], events: 5, player_stats: 3,
     team_stats: 1, news: 2, news_statuses: ["draft", "published"], tactics: 2,
-    tactic_statuses: ["applied", "draft"], lineup_slots: 14, starters: 13, bench: 1,
+    tactic_statuses: ["applied", "draft"], lineup_slots: 16, starters: 14, bench: 2,
     finance: 3, finance_directions: ["expense", "income"], voided_finance: 1,
     dues: 3, due_statuses: ["paid", "pending", "waived"], due_markers: 3, notifications: 2,
   });
   const adminDetail = await parsedTacticsDetail(true);
   assert.equal(adminDetail.ok, true, "admin getTacticsDetail rejected seeded tactics");
   assert.equal(adminDetail.ok && adminDetail.detail.tactics.length, 2);
+  assertBoardReadyTactic(adminDetail, "attacking", 1);
   const memberDetail = await parsedTacticsDetail(false);
   assert.equal(memberDetail.ok, true, "member getTacticsDetail rejected seeded applied tactic");
   assert.equal(memberDetail.ok && memberDetail.detail.tactics.length, 1);
+  assertBoardReadyTactic(memberDetail, "balanced", 1);
   assert.equal(markerViolationCount(), 0, "a demo row lacks a bounded marker or marked parent");
   assert.deepEqual(await databaseSnapshot(true), baseline, "seed changed an unmarked row");
 
@@ -371,20 +387,54 @@ test("seed is idempotent, covers every MVP state, and cleanup restores the exact
   assert.deepEqual(await databaseSnapshot(), baseline, "second cleanup changed the baseline");
 });
 
-test("seed supports one active membership with parser-valid drafts, bench coverage, and truthful injury coverage", async () => {
+test("seven selected players keep both tactics board-ready while reporting deferred bench coverage", async () => {
+  psql(["-c", String.raw`
+    update public.memberships
+    set status = 'inactive'
+    where team_id = '${demoTeamId}'
+      and user_id in (
+        select user_id from public.memberships
+        where team_id = '${demoTeamId}' and status = 'active'
+        order by user_id offset 7
+      )
+  `]);
+  const seeded = psql(["-f", seedPath]);
+  const resultLine = seeded.stdout.split(/\r?\n/u).map((line) => line.trim()).find((line) => line.startsWith("{"));
+  assert.ok(resultLine);
+  assert.deepEqual(JSON.parse(resultLine), {
+    marker: "PRO7-DEMO", player_count: 7, starter_count: 7, bench_count: 0, bench_coverage: "deferred",
+    injured_player_count: 0, injured_coverage: "deferred",
+  });
+  const coverage = demoCoverage();
+  assert.deepEqual(coverage.tactic_statuses, ["applied", "draft"]);
+  assert.equal(coverage.lineup_slots, 14);
+  assert.equal(coverage.starters, 14);
+  assert.equal(coverage.bench, 0);
+  const adminDetail = await parsedTacticsDetail(true);
+  assertBoardReadyTactic(adminDetail, "attacking", 0);
+  const memberDetail = await parsedTacticsDetail(false);
+  assertBoardReadyTactic(memberDetail, "balanced", 0);
+  psql(["-f", cleanupPath]);
+  psql(["-c", `update public.memberships set status = 'active' where team_id = '${demoTeamId}'`]);
+});
+
+test("seed supports one active membership with parser-valid incomplete drafts and truthful deferred coverage", async () => {
   psql(["-c", "update public.memberships set status = 'inactive' where team_id = '20000000-0000-4000-8000-000000000001' and user_id <> '10000000-0000-4000-8000-000000000001'"]);
   const seeded = psql(["-f", seedPath]);
   const resultLine = seeded.stdout.split(/\r?\n/u).map((line) => line.trim()).find((line) => line.startsWith("{"));
   assert.ok(resultLine, `seed returned no player-count result:\n${seeded.stdout}`);
-  assert.deepEqual(JSON.parse(resultLine), { marker: "PRO7-DEMO", player_count: 1, injured_player_count: 0, injured_coverage: "deferred" });
+  assert.deepEqual(JSON.parse(resultLine), {
+    marker: "PRO7-DEMO", player_count: 1, starter_count: 1, bench_count: 0, bench_coverage: "deferred",
+    injured_player_count: 0, injured_coverage: "deferred",
+  });
   const coverage = demoCoverage();
   assert.equal(coverage.attendance, 3);
   assert.deepEqual(coverage.rsvp_statuses, ["available", "pending", "unavailable"]);
   assert.equal(coverage.tactics, 2);
   assert.deepEqual(coverage.tactic_statuses, ["draft", "draft"]);
   assert.equal(coverage.lineup_slots, 2);
-  assert.equal(coverage.starters, 1);
-  assert.equal(coverage.bench, 1);
+  assert.equal(coverage.starters, 2);
+  assert.equal(coverage.bench, 0);
   const adminDetail = await parsedTacticsDetail(true);
   assert.equal(adminDetail.ok, true, "admin getTacticsDetail rejected sparse demo drafts");
   assert.equal(adminDetail.ok && adminDetail.detail.tactics.length, 2);

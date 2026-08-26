@@ -52,7 +52,7 @@ begin
     where membership.team_id = v_team_id
       and membership.status = 'active'
     order by membership.user_id
-    limit 7
+    limit 8
   ) as candidate;
 
   v_player_count := coalesce(pg_catalog.cardinality(v_demo_user_ids), 0);
@@ -251,7 +251,7 @@ begin
     id, team_id, match_id, mode, formation, instructions, pressing,
     defensive_line, version, status, created_by_user_id, applied_by_user_id, applied_at
   ) values
-    ('70000000-0000-4000-8000-000000000301', v_team_id, '70000000-0000-4000-8000-000000000001', 'balanced', '2-3-1', v_marker || ' balanced plan.', 'high', 'medium', 1, case when v_player_count = 7 then 'applied' else 'draft' end, v_actor_user_id, case when v_player_count = 7 then v_actor_user_id else null end, case when v_player_count = 7 then pg_catalog.now() else null end),
+    ('70000000-0000-4000-8000-000000000301', v_team_id, '70000000-0000-4000-8000-000000000001', 'balanced', '2-3-1', v_marker || ' balanced plan.', 'high', 'medium', 1, case when v_player_count >= 7 then 'applied' else 'draft' end, v_actor_user_id, case when v_player_count >= 7 then v_actor_user_id else null end, case when v_player_count >= 7 then pg_catalog.now() else null end),
     ('70000000-0000-4000-8000-000000000302', v_team_id, '70000000-0000-4000-8000-000000000001', 'attacking', '3-2-1', v_marker || ' draft attacking plan.', 'medium', 'high', 1, 'draft', v_actor_user_id, null, null)
   on conflict (id) do update set
     mode = excluded.mode,
@@ -283,8 +283,8 @@ begin
     tactic.id,
     v_team_id,
     selected.user_id,
-    case when tactic.id = '70000000-0000-4000-8000-000000000302' and selected.ordinality = v_player_count then 'bench' else 'starter' end,
-    case when tactic.id = '70000000-0000-4000-8000-000000000302' and selected.ordinality = v_player_count then 'bench-' || selected.ordinality::text when selected.ordinality = 1 then 'gk' else 'player-' || selected.ordinality::text end,
+    case when selected.ordinality = 8 then 'bench' else 'starter' end,
+    case when selected.ordinality = 8 then 'bench-1' when selected.ordinality = 1 then 'gk' else 'player-' || selected.ordinality::text end,
     case when selected.ordinality = 1 then 'GK' when selected.ordinality <= 3 then 'DEF' when selected.ordinality <= 5 then 'MID' else 'ATT' end,
     coalesce(player.shirt_number, selected.ordinality::smallint),
     case selected.ordinality when 1 then 50 when 2 then 25 when 3 then 75 when 4 then 25 when 5 then 75 when 6 then 35 else 65 end,
@@ -394,12 +394,15 @@ with active_players as (
     and membership.status = 'active'
 ), coverage as (
   select
-    (select pg_catalog.count(*) from (select user_id from active_players order by user_id limit 7) as selected) as player_count,
+    (select pg_catalog.count(*) from (select user_id from active_players order by user_id limit 8) as selected) as player_count,
     (select pg_catalog.count(*) from active_players where player_status = 'injured') as injured_player_count
 )
 select pg_catalog.jsonb_build_object(
   'marker', 'PRO7-DEMO',
   'player_count', coverage.player_count,
+  'starter_count', case when coverage.player_count >= 7 then 7 else coverage.player_count end,
+  'bench_count', case when coverage.player_count = 8 then 1 else 0 end,
+  'bench_coverage', case when coverage.player_count = 8 then 'available' else 'deferred' end,
   'injured_player_count', coverage.injured_player_count,
   'injured_coverage', case when coverage.injured_player_count > 0 then 'available' else 'deferred' end
 )
