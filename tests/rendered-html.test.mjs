@@ -34,7 +34,7 @@ test("redirects an unauthenticated dashboard request to the Supabase login", asy
 });
 
 test("includes the production shell surfaces and social metadata", async () => {
-  const [navigation, routeNavigation, routeHeader, routeShell, squadView, squadDetail, playerDetail, squadLoading, squadError, playerApi, overview, squad, tactics, matches, funds, settings, teamLayout, layout, styles] = await Promise.all([
+  const [navigation, routeNavigation, routeHeader, routeShell, squadView, squadDetail, playerDetail, squadLoading, squadError, playerApi, profilePage, profileForm, profileApi, overview, squad, tactics, matches, funds, settings, teamLayout, layout, styles] = await Promise.all([
     readFile(new URL("../app/components/product-nav.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/components/pro7-route-navigation.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/components/pro7-route-header.tsx", import.meta.url), "utf8"),
@@ -45,6 +45,9 @@ test("includes the production shell surfaces and social metadata", async () => {
     readFile(new URL("../app/teams/[slug]/squad/loading.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/teams/[slug]/squad/error.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/api/teams/[slug]/players/[userId]/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/account/profile/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/account/profile/profile-form.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/account/profile/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/teams/[slug]/overview/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/teams/[slug]/squad/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/teams/[slug]/tactics/page.tsx", import.meta.url), "utf8"),
@@ -90,6 +93,13 @@ test("includes the production shell surfaces and social metadata", async () => {
   assert.match(squadError, /Không thể tải đội hình/);
   assert.match(playerApi, /updateTeamPlayer/);
   assert.match(playerApi, /deactivateTeamPlayer/);
+  assert.match(profilePage, /createSignedUrl\(path, 300\)/);
+  assert.match(profilePage, /Hồ sơ cá nhân/);
+  assert.match(profileForm, /player-avatars|AVATAR_BUCKET/);
+  assert.match(profileForm, /replaceOwnAvatar/);
+  assert.match(profileForm, /removeOwnAvatar/);
+  assert.doesNotMatch(profileForm, /getPublicUrl|\.list\(/u);
+  assert.match(profileApi, /updateOwnProfile/);
   assert.doesNotMatch(squad, /TeamPlaceholder/);
   assert.match(tactics, /tactics\.read/);
   assert.match(tactics, /Chưa có trận đấu để lập chiến thuật/);
@@ -100,6 +110,38 @@ test("includes the production shell surfaces and social metadata", async () => {
   assert.match(layout, /openGraph/);
   assert.match(layout, /twitter/);
   assert.doesNotMatch(layout, /og\.png/);
+});
+
+test("browser profile bundle uses caller-scoped private storage without service credentials", async () => {
+  const result = await build({
+    configFile: false,
+    define: {
+      "process.env.NEXT_PUBLIC_SUPABASE_URL": JSON.stringify("https://bundle-test.supabase.co"),
+      "process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY": JSON.stringify(
+        "sb_publishable_bundle_test_key",
+      ),
+      "process.env.SUPABASE_SERVICE_ROLE_KEY": JSON.stringify(
+        "profile-service-sentinel-must-not-bundle",
+      ),
+    },
+    build: {
+      lib: {
+        entry: resolve("app/account/profile/profile-form.tsx"),
+        formats: ["es"],
+        fileName: "profile-form",
+      },
+      write: false,
+    },
+  });
+  const bundledCode = (Array.isArray(result) ? result : [result])
+    .flatMap((bundle) => bundle.output)
+    .filter((output) => output.type === "chunk")
+    .map((output) => output.code)
+    .join("\n");
+
+  assert.match(bundledCode, /player-avatars/);
+  assert.match(bundledCode, /avatar\.(?:jpg|png|webp)/);
+  assert.doesNotMatch(bundledCode, /SUPABASE_SERVICE_ROLE_KEY|profile-service-sentinel-must-not-bundle/u);
 });
 
 test("wires verified Supabase auth without changing Sites auth routes", async () => {

@@ -35,6 +35,9 @@ export function AccountMenu({ email }: { email?: string }) {
         <span>Tài khoản</span>
         <strong>{email ?? "Tài khoản đã xác minh"}</strong>
       </div>
+      <a className="profile-button" href="/account/profile">
+        Hồ sơ
+      </a>
       <button
         className="logout-button"
         type="button"
