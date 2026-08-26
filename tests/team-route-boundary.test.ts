@@ -5,6 +5,8 @@ import { isValidElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { createServer, type ViteDevServer } from "vite";
 
+import type { SquadFilters } from "../lib/squad/filters";
+import type { SquadListResult } from "../lib/squad/model";
 import type { PermissionCode } from "../lib/teams/permissions";
 
 type ProductUser = {
@@ -22,7 +24,10 @@ type TeamContext = {
 
 type TeamRouteModule = {
   renderOverviewPage: (args: RouteArgs) => Promise<unknown>;
-  renderSquadPage: (args: RouteArgs) => Promise<unknown>;
+  renderSquadPage: (args: RouteArgs & {
+    searchParams: Promise<Record<string, string | string[] | undefined>>;
+    listSquadPlayers: (teamId: string, filters: SquadFilters) => Promise<SquadListResult>;
+  }) => Promise<unknown>;
   renderMatchesPage: (args: RouteArgs) => Promise<unknown>;
   renderFundsPage: (args: RouteArgs) => Promise<unknown>;
   renderSettingsPage: (args: RouteArgs) => Promise<unknown>;
@@ -683,7 +688,13 @@ test("team route skeletons request the exact permission and withhold member-only
 
   const allowed = await Promise.all([
     routes.renderOverviewPage({ params: params(), requireTeamPermission: guard, denied }),
-    routes.renderSquadPage({ params: params(), requireTeamPermission: guard, denied }),
+    routes.renderSquadPage({
+      params: params(),
+      searchParams: Promise.resolve({}),
+      requireTeamPermission: guard,
+      listSquadPlayers: async () => ({ ok: true, players: [] }),
+      denied,
+    }),
     routes.renderMatchesPage({ params: params(), requireTeamPermission: guard, denied }),
   ]);
   assert.equal(allowed.includes("SAFE_DENIAL"), false);

@@ -34,12 +34,17 @@ test("redirects an unauthenticated dashboard request to the Supabase login", asy
 });
 
 test("includes the production shell surfaces and social metadata", async () => {
-  const [navigation, routeNavigation, routeHeader, routeShell, squadSkeleton, overview, squad, tactics, matches, funds, settings, teamLayout, layout, styles] = await Promise.all([
+  const [navigation, routeNavigation, routeHeader, routeShell, squadView, squadDetail, playerDetail, squadLoading, squadError, playerApi, overview, squad, tactics, matches, funds, settings, teamLayout, layout, styles] = await Promise.all([
     readFile(new URL("../app/components/product-nav.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/components/pro7-route-navigation.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/components/pro7-route-header.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/components/pro7-route-shell.tsx", import.meta.url), "utf8"),
-    readFile(new URL("../app/components/pro7-squad-skeleton.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/teams/[slug]/squad/squad-view.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/teams/[slug]/squad/[userId]/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/teams/[slug]/squad/[userId]/player-detail.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/teams/[slug]/squad/loading.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/teams/[slug]/squad/error.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/teams/[slug]/players/[userId]/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/teams/[slug]/overview/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/teams/[slug]/squad/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/teams/[slug]/tactics/page.tsx", import.meta.url), "utf8"),
@@ -65,13 +70,26 @@ test("includes the production shell surfaces and social metadata", async () => {
   assert.match(routeHeader, /Đội hình chính/);
   assert.match(routeHeader, /Theo dõi nhân sự, phong độ và vai trò thi đấu\./);
   assert.match(routeHeader, /players\.manage/);
+  assert.match(routeHeader, /members\.manage/);
   assert.match(routeShell, /<Pro7RouteNavigation/);
   assert.match(routeShell, /<Pro7RouteHeader/);
-  assert.match(squadSkeleton, /squad-toolbar/);
-  assert.match(squadSkeleton, /squad-summary/);
-  assert.match(squadSkeleton, /player-grid/);
-  assert.match(squadSkeleton, /add-player-card/);
-  assert.match(squad, /Pro7SquadSkeleton/);
+  assert.match(squadView, /squad-toolbar/);
+  assert.match(squadView, /squad-summary/);
+  assert.match(squadView, /player-grid/);
+  assert.match(squadView, /add-player-card/);
+  assert.match(squadView, /members\.manage/);
+  assert.doesNotMatch(squadView, /Marcus Trent|David Silva|Liam Kompany/u);
+  assert.match(squad, /parseSquadFilters/);
+  assert.match(squad, /listSquadPlayers/);
+  assert.match(squad, /SquadView/);
+  assert.match(squadDetail, /players\.read/);
+  assert.match(squadDetail, /getSquadPlayer/);
+  assert.match(playerDetail, /Chỉnh sửa thông tin đội/);
+  assert.match(playerDetail, /Nhập DEACTIVATE để xác nhận/);
+  assert.match(squadLoading, /Đang tải đội hình/);
+  assert.match(squadError, /Không thể tải đội hình/);
+  assert.match(playerApi, /updateTeamPlayer/);
+  assert.match(playerApi, /deactivateTeamPlayer/);
   assert.doesNotMatch(squad, /TeamPlaceholder/);
   assert.match(tactics, /tactics\.read/);
   assert.match(tactics, /Chưa có trận đấu để lập chiến thuật/);

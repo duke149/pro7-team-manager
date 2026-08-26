@@ -6,12 +6,16 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { createServer, type ViteDevServer } from "vite";
 
 import { Pro7RouteHeader } from "../app/components/pro7-route-header";
+import type { SquadFilters } from "../lib/squad/filters";
+import type { SquadListResult } from "../lib/squad/model";
 import type { TeamAccessContext } from "../lib/teams/context";
 
 type SquadRouteModule = {
   renderSquadPage: (args: {
     params: Promise<{ slug: string }>;
+    searchParams: Promise<Record<string, string | string[] | undefined>>;
     requireTeamPermission: () => Promise<TeamAccessContext>;
+    listSquadPlayers: (teamId: string, filters: SquadFilters) => Promise<SquadListResult>;
     denied: () => string;
   }) => Promise<unknown>;
 };
@@ -50,6 +54,7 @@ const adminContext: TeamAccessContext = {
     "team.read",
     "players.read",
     "players.manage",
+    "members.manage",
     "matches.read",
     "tactics.read",
     "finance.read",
@@ -60,7 +65,9 @@ async function renderSquadRoute(context: TeamAccessContext = adminContext): Prom
   const params = Promise.resolve({ slug: context.team.slug });
   const page = await squad.renderSquadPage({
     params,
+    searchParams: Promise.resolve({}),
     requireTeamPermission: async () => context,
+    listSquadPlayers: async () => ({ ok: true, players: [] }),
     denied: () => "SAFE_DENIAL",
   });
   return renderToStaticMarkup(page as React.ReactElement);

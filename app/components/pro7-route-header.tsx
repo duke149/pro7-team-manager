@@ -37,7 +37,8 @@ export function Pro7RouteHeader({
   const heading = pathname.includes("/squad")
     ? squadHeading(team.name)
     : { eyebrow: team.name.toLocaleUpperCase("vi-VN"), title: team.name, description: "PRO7 Team Manager" };
-  const canManagePlayers = hasPermission({ permissions }, "players.manage");
+  const canManagePlayers = hasPermission({ permissions }, "players.manage")
+    && hasPermission({ permissions }, "members.manage");
   const squadHref = `/teams/${encodeURIComponent(team.slug)}/squad?add=player`;
 
   return (
