@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import test from "node:test";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -6,6 +7,28 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { parseSquadFilters } from "../lib/squad/filters";
 import { getSquadPlayer, listSquadPlayers } from "../lib/squad/queries";
 import type { Database } from "../lib/supabase/database.types";
+
+const DETAIL_USER_ID = "00000000-0000-4000-8000-000000000051";
+const MISSING_USER_ID = "00000000-0000-4000-8000-000000000052";
+
+test("Squad database contracts reject browser-runtime imports", () => {
+  for (const modulePath of ["queries", "actions"]) {
+    const child = spawnSync(
+      process.execPath,
+      [
+        "--import",
+        "tsx",
+        "--input-type=module",
+        "--eval",
+        `globalThis.window = {}; await import("./lib/squad/${modulePath}.ts");`,
+      ],
+      { cwd: process.cwd(), encoding: "utf8" },
+    );
+
+    assert.notEqual(child.status, 0, modulePath);
+    assert.match(`${child.stdout}${child.stderr}`, /PRO7 server-only boundary/u);
+  }
+});
 
 type SupabaseResponse = {
   data: unknown;
@@ -30,18 +53,6 @@ function response(data: unknown, error: SupabaseResponse["error"] = null): Supab
 function playerRows({ status = "active", playerStatus = "available" } = {}) {
   return [
     {
-      user_id: "user-b",
-      role_id: "role-member",
-      status,
-      role: { id: "role-member", name: "Cầu thủ", slug: "member", is_system: true },
-      player: {
-        shirt_number: 8,
-        official_position: "MID",
-        player_status: playerStatus,
-        join_date: "2026-01-02",
-      },
-    },
-    {
       user_id: "user-a",
       role_id: "role-admin",
       status,
@@ -51,6 +62,18 @@ function playerRows({ status = "active", playerStatus = "available" } = {}) {
         official_position: "ATT",
         player_status: playerStatus,
         join_date: "2026-01-01",
+      },
+    },
+    {
+      user_id: "user-b",
+      role_id: "role-member",
+      status,
+      role: { id: "role-member", name: "Cầu thủ", slug: "member", is_system: true },
+      player: {
+        shirt_number: 8,
+        official_position: "MID",
+        player_status: playerStatus,
+        join_date: "2026-01-02",
       },
     },
   ];
@@ -95,6 +118,7 @@ class QueryDouble implements PromiseLike<SupabaseResponse> {
 
   select(...arguments_: unknown[]) { return this.record("select", ...arguments_); }
   eq(...arguments_: unknown[]) { return this.record("eq", ...arguments_); }
+  gt(...arguments_: unknown[]) { return this.record("gt", ...arguments_); }
   in(...arguments_: unknown[]) { return this.record("in", ...arguments_); }
   ilike(...arguments_: unknown[]) { return this.record("ilike", ...arguments_); }
   order(...arguments_: unknown[]) { return this.record("order", ...arguments_); }
@@ -107,6 +131,33 @@ class QueryDouble implements PromiseLike<SupabaseResponse> {
   ): PromiseLike<TResult1 | TResult2> {
     return Promise.resolve(this.result).then(onfulfilled, onrejected);
   }
+}
+
+function rosterFixture(index: number, overrides: Record<string, unknown> = {}) {
+  const suffix = String(index).padStart(12, "0");
+  const userId = `00000000-0000-4000-8000-${suffix}`;
+  return {
+    membership: {
+      user_id: userId,
+      role_id: "role-member",
+      status: "active",
+      role: { id: "role-member", name: "Cầu thủ", slug: "member", is_system: true },
+      player: {
+        shirt_number: 50,
+        official_position: "MID",
+        player_status: "available",
+        join_date: "2026-01-02",
+        ...(overrides.player as Record<string, unknown> | undefined),
+      },
+    },
+    profile: {
+      id: userId,
+      display_name: `Player ${String(index).padStart(2, "0")}`,
+      avatar_path: null,
+      avatar_url: null,
+      ...(overrides.profile as Record<string, unknown> | undefined),
+    },
+  };
 }
 
 function clientDouble({
@@ -195,7 +246,7 @@ test("listSquadPlayers selects only safe columns, maps rows, and orders equal pr
       table: "profiles",
       calls: [
         { method: "select", arguments: ["id,display_name,avatar_path,avatar_url"] },
-        { method: "in", arguments: ["id", ["user-b", "user-a"]] },
+        { method: "in", arguments: ["id", ["user-a", "user-b"]] },
         { method: "order", arguments: ["display_name", { ascending: true, nullsFirst: false }] },
         { method: "order", arguments: ["id", { ascending: true }] },
         { method: "limit", arguments: [48] },
@@ -237,7 +288,12 @@ test("listSquadPlayers applies inactive membership separately from active player
 });
 
 test("listSquadPlayers sends escaped display-name search only to profiles and remains bounded to 48", async () => {
-  const fixture = clientDouble();
+  const fixture = clientDouble({
+    profiles: [
+      response(profileRows().map(({ id }) => ({ id }))),
+      response([]),
+    ],
+  });
   const result = await listSquadPlayers(
     "team-1",
     parseSquadFilters(new URLSearchParams({ q: "50%_" })),
@@ -245,9 +301,9 @@ test("listSquadPlayers sends escaped display-name search only to profiles and re
   );
 
   assert.equal(result.ok, true);
-  assert.deepEqual(fixture.calls[1].query.calls.slice(0, 5), [
+  assert.deepEqual(fixture.calls[2].query.calls.slice(0, 5), [
     { method: "select", arguments: ["id,display_name,avatar_path,avatar_url"] },
-    { method: "in", arguments: ["id", ["user-b", "user-a"]] },
+    { method: "in", arguments: ["id", ["user-a", "user-b"]] },
     { method: "ilike", arguments: ["display_name", "%50\\%\\_%"] },
     { method: "order", arguments: ["display_name", { ascending: true, nullsFirst: false }] },
     { method: "order", arguments: ["id", { ascending: true }] },
@@ -257,8 +313,78 @@ test("listSquadPlayers sends escaped display-name search only to profiles and re
     [
       { method: "limit", arguments: [48] },
       { method: "limit", arguments: [48] },
+      { method: "limit", arguments: [48] },
     ],
   );
+});
+
+test("listSquadPlayers searches eligible memberships beyond the first 48-user keyset page", async () => {
+  const roster = Array.from({ length: 49 }, (_, offset) =>
+    rosterFixture(offset + 1, offset === 48 ? { profile: { display_name: "Zed Match" } } : {}),
+  );
+  const fixture = clientDouble({
+    memberships: [
+      response(roster.slice(0, 48).map(({ membership }) => membership)),
+      response([roster[48].membership]),
+    ],
+    profiles: [
+      response(roster.slice(0, 48).map(({ profile }) => ({ id: profile.id }))),
+      response([]),
+      response([{ id: roster[48].profile.id }]),
+      response([roster[48].profile]),
+    ],
+  });
+
+  const result = await listSquadPlayers(
+    "team-1",
+    parseSquadFilters(new URLSearchParams({ q: "Zed Match" })),
+    { supabase: fixture.client },
+  );
+
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.ok ? result.players.map((player) => player.userId) : [], [
+    roster[48].profile.id,
+  ]);
+  assert.deepEqual(
+    fixture.calls.filter(({ table }) => table === "memberships")[1]?.query.calls,
+    [
+      { method: "select", arguments: [
+        "user_id,role_id,status,role:roles!memberships_role_team_fkey(id,name,slug,is_system),player:team_player_profiles!team_player_profiles_membership_fkey!inner(shirt_number,official_position,player_status,join_date)",
+      ] },
+      { method: "eq", arguments: ["team_id", "team-1"] },
+      { method: "eq", arguments: ["status", "active"] },
+      { method: "eq", arguments: ["player.player_status", "available"] },
+      { method: "gt", arguments: ["user_id", roster[47].profile.id] },
+      { method: "order", arguments: ["user_id", { ascending: true }] },
+      { method: "limit", arguments: [48] },
+    ],
+  );
+});
+
+test("listSquadPlayers includes a leading requested-sort value outside the first 48-user keyset page", async () => {
+  const roster = Array.from({ length: 49 }, (_, offset) =>
+    rosterFixture(offset + 1, offset === 48 ? { player: { shirt_number: 1 } } : {}),
+  );
+  const fixture = clientDouble({
+    memberships: [
+      response(roster.slice(0, 48).map(({ membership }) => membership)),
+      response([roster[48].membership]),
+    ],
+    profiles: [
+      response(roster.slice(0, 48).map(({ profile }) => profile)),
+      response([roster[48].profile]),
+    ],
+  });
+
+  const result = await listSquadPlayers(
+    "team-1",
+    parseSquadFilters(new URLSearchParams({ sort: "shirt_number", direction: "asc" })),
+    { supabase: fixture.client },
+  );
+
+  assert.equal(result.ok, true);
+  assert.equal(result.ok ? result.players.length : 0, 48);
+  assert.equal(result.ok ? result.players[0].userId : null, roster[48].profile.id);
 });
 
 test("listSquadPlayers fails closed on database errors or malformed rows", async () => {
@@ -281,9 +407,33 @@ test("listSquadPlayers fails closed on database errors or malformed rows", async
   );
 });
 
+test("listSquadPlayers fails closed when an unsearched membership has no visible profile", async () => {
+  const fixture = clientDouble({ profiles: [response(profileRows().slice(0, 1))] });
+
+  assert.deepEqual(
+    await listSquadPlayers("team-1", parseSquadFilters(new URLSearchParams()), {
+      supabase: fixture.client,
+    }),
+    { ok: false, error: "server" },
+  );
+});
+
+test("listSquadPlayers fails closed on a missing profile before applying display-name search", async () => {
+  const fixture = clientDouble({ profiles: [response(profileRows().slice(0, 1))] });
+
+  assert.deepEqual(
+    await listSquadPlayers(
+      "team-1",
+      parseSquadFilters(new URLSearchParams({ q: "An" })),
+      { supabase: fixture.client },
+    ),
+    { ok: false, error: "server" },
+  );
+});
+
 test("getSquadPlayer returns not_found without requesting admin notes when the safe row is absent", async () => {
   const fixture = clientDouble({ memberships: [response(null)], profiles: [] });
-  const result = await getSquadPlayer("team-1", "missing-user", false, {
+  const result = await getSquadPlayer("team-1", MISSING_USER_ID, false, {
     supabase: fixture.client,
   });
 
@@ -295,19 +445,30 @@ test("getSquadPlayer returns not_found without requesting admin notes when the s
   );
 });
 
+test("getSquadPlayer treats a malformed route user ID as not_found before database access", async () => {
+  const fixture = clientDouble({ memberships: [], profiles: [] });
+
+  assert.deepEqual(
+    await getSquadPlayer("team-1", "not-a-uuid", false, { supabase: fixture.client }),
+    { ok: false, error: "not_found" },
+  );
+  assert.deepEqual(fixture.calls, []);
+  assert.deepEqual(fixture.rpcCalls, []);
+});
+
 test("getSquadPlayer augments safe profile detail with manager-only notes through the authorized RPC", async () => {
   const fixture = clientDouble({
-    memberships: [response(playerRows()[0])],
-    profiles: [response(profileRows()[1])],
+    memberships: [response({ ...playerRows()[1], user_id: DETAIL_USER_ID })],
+    profiles: [response({ ...profileRows()[1], id: DETAIL_USER_ID })],
   });
-  const result = await getSquadPlayer("team-1", "user-b", true, {
+  const result = await getSquadPlayer("team-1", DETAIL_USER_ID, true, {
     supabase: fixture.client,
   });
 
   assert.deepEqual(result, {
     ok: true,
     player: {
-      userId: "user-b",
+      userId: DETAIL_USER_ID,
       displayName: "Bình",
       avatarPath: null,
       avatarUrl: "https://example.test/binh.png",
@@ -328,7 +489,7 @@ test("getSquadPlayer augments safe profile detail with manager-only notes throug
   assert.deepEqual(fixture.rpcCalls, [
     {
       name: "get_team_player_admin_detail",
-      arguments: { p_team_id: "team-1", p_user_id: "user-b" },
+      arguments: { p_team_id: "team-1", p_user_id: DETAIL_USER_ID },
     },
   ]);
   assert.equal(
@@ -339,12 +500,12 @@ test("getSquadPlayer augments safe profile detail with manager-only notes throug
 
 test("getSquadPlayer fails closed when the manager note RPC or profile query fails", async () => {
   const rpcError = clientDouble({
-    memberships: [response(playerRows()[0])],
-    profiles: [response(profileRows()[1])],
+    memberships: [response({ ...playerRows()[1], user_id: DETAIL_USER_ID })],
+    profiles: [response({ ...profileRows()[1], id: DETAIL_USER_ID })],
     rpc: response(null, { code: "42501", message: "denied SQL", details: "", hint: "" }),
   });
   assert.deepEqual(
-    await getSquadPlayer("team-1", "user-b", true, { supabase: rpcError.client }),
+    await getSquadPlayer("team-1", DETAIL_USER_ID, true, { supabase: rpcError.client }),
     { ok: false, error: "server" },
   );
 });

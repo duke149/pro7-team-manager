@@ -19,6 +19,8 @@ const VALID_UPDATE = {
   joinDate: "2026-01-02",
   adminNotes: "Theo dõi thể lực",
 };
+const TARGET_USER_ID = "00000000-0000-4000-8000-000000000003";
+const TARGET = { slug: "pro7-fc", userId: TARGET_USER_ID } as const;
 
 type DatabaseError = {
   code: string;
@@ -96,7 +98,7 @@ test("updateTeamPlayer rejects cross-origin and non-JSON requests before authori
   const crossOrigin = dependencies();
   const crossOriginResponse = await updateTeamPlayer(
     request(VALID_UPDATE, { origin: "https://attacker.example" }),
-    { slug: "pro7-fc", userId: "user-2" },
+    TARGET,
     crossOrigin.value,
   );
   assert.equal(crossOriginResponse.status, 403);
@@ -111,7 +113,7 @@ test("updateTeamPlayer rejects cross-origin and non-JSON requests before authori
   const wrongType = dependencies();
   const wrongTypeResponse = await updateTeamPlayer(
     request(VALID_UPDATE, { "content-type": "text/plain" }),
-    { slug: "pro7-fc", userId: "user-2" },
+    TARGET,
     wrongType.value,
   );
   assert.equal(wrongTypeResponse.status, 415);
@@ -123,7 +125,7 @@ test("updateTeamPlayer independently requires both player and member management 
     const fixture = dependencies({ deniedPermission });
     const responseValue = await updateTeamPlayer(
       request(VALID_UPDATE),
-      { slug: "pro7-fc", userId: "user-2" },
+      TARGET,
       fixture.value,
     );
 
@@ -141,11 +143,29 @@ test("updateTeamPlayer independently requires both player and member management 
   }
 });
 
+test("updateTeamPlayer maps a malformed route user ID to not_found before authorization or UUID RPC", async () => {
+  const fixture = dependencies();
+  const responseValue = await updateTeamPlayer(
+    request(VALID_UPDATE),
+    { slug: "pro7-fc", userId: "not-a-uuid" },
+    fixture.value,
+  );
+
+  assert.equal(responseValue.status, 404);
+  assert.deepEqual(await json(responseValue), {
+    ok: false,
+    code: "not_found",
+    message: "Không tìm thấy cầu thủ.",
+  });
+  assert.deepEqual(fixture.permissionCalls, []);
+  assert.deepEqual(fixture.rpcCalls, []);
+});
+
 test("updateTeamPlayer sends only validated fields and verified team context to manage_team_player", async () => {
   const fixture = dependencies();
   const responseValue = await updateTeamPlayer(
     request(VALID_UPDATE),
-    { slug: "pro7-fc", userId: "user-2" },
+    TARGET,
     fixture.value,
   );
 
@@ -156,7 +176,7 @@ test("updateTeamPlayer sends only validated fields and verified team context to 
       name: "manage_team_player",
       arguments: {
         p_team_id: "team-1",
-        p_user_id: "user-2",
+        p_user_id: TARGET_USER_ID,
         p_role_id: "00000000-0000-4000-8000-000000000002",
         p_shirt_number: 8,
         p_official_position: "MID",
@@ -187,7 +207,7 @@ test("updateTeamPlayer returns Vietnamese field errors for malformed official fi
     const fixture = dependencies();
     const responseValue = await updateTeamPlayer(
       request({ ...VALID_UPDATE, [testCase.field]: testCase.value }),
-      { slug: "pro7-fc", userId: "user-2" },
+      TARGET,
       fixture.value,
     );
     assert.equal(responseValue.status, 422, testCase.field);
@@ -205,7 +225,7 @@ test("updateTeamPlayer rejects unknown payload fields and malformed JSON", async
   const extraField = dependencies();
   const extraFieldResponse = await updateTeamPlayer(
     request({ ...VALID_UPDATE, actorId: "attacker" }),
-    { slug: "pro7-fc", userId: "user-2" },
+    TARGET,
     extraField.value,
   );
   assert.equal(extraFieldResponse.status, 400);
@@ -220,7 +240,7 @@ test("updateTeamPlayer rejects unknown payload fields and malformed JSON", async
   });
   const malformedResponse = await updateTeamPlayer(
     malformedRequest,
-    { slug: "pro7-fc", userId: "user-2" },
+    TARGET,
     malformed.value,
   );
   assert.equal(malformedResponse.status, 400);
@@ -250,7 +270,7 @@ test("updateTeamPlayer maps duplicate shirts, stale rows, and owner or cross-tea
     const fixture = dependencies({ rpcError: testCase.error });
     const responseValue = await updateTeamPlayer(
       request(VALID_UPDATE),
-      { slug: "pro7-fc", userId: "user-2" },
+      TARGET,
       fixture.value,
     );
     assert.equal(responseValue.status, testCase.status);
@@ -266,7 +286,7 @@ test("updateTeamPlayer hides generic database failures and raw SQL details", asy
   });
   const responseValue = await updateTeamPlayer(
     request(VALID_UPDATE),
-    { slug: "pro7-fc", userId: "user-2" },
+    TARGET,
     fixture.value,
   );
   const body = await json(responseValue);
@@ -285,7 +305,7 @@ test("deactivateTeamPlayer requires the literal DEACTIVATE confirmation before a
     const fixture = dependencies();
     const responseValue = await deactivateTeamPlayer(
       request({ ...VALID_UPDATE, confirmation }),
-      { slug: "pro7-fc", userId: "user-2" },
+      TARGET,
       fixture.value,
     );
     assert.equal(responseValue.status, 422);
@@ -304,7 +324,7 @@ test("deactivateTeamPlayer invokes the same authorized RPC with deactivation ena
   const fixture = dependencies();
   const responseValue = await deactivateTeamPlayer(
     request({ ...VALID_UPDATE, confirmation: "DEACTIVATE" }),
-    { slug: "pro7-fc", userId: "user-2" },
+    TARGET,
     fixture.value,
   );
 

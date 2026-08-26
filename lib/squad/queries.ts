@@ -11,6 +11,8 @@ import type {
   SquadPlayerDetail,
   SquadPlayerSummary,
 } from "./model";
+import { isUuid } from "./model";
+import "./server-only";
 
 const PAGE_SIZE = 48;
 const MEMBERSHIP_SELECT =
@@ -220,6 +222,103 @@ function buildMembershipQuery(
   return query;
 }
 
+async function loadMembershipRows(
+  client: SupabaseClient<Database>,
+  teamId: string,
+  filters: SquadFilters,
+): Promise<MembershipRow[] | null> {
+  const rows: MembershipRow[] = [];
+  let cursor: string | null = null;
+
+  while (true) {
+    let query = buildMembershipQuery(client, teamId, filters);
+    if (cursor) query = query.gt("user_id", cursor);
+    const result = await query
+      .order("user_id", { ascending: true })
+      .limit(PAGE_SIZE);
+
+    if (
+      result.error ||
+      !Array.isArray(result.data) ||
+      !result.data.every(isMembershipRow)
+    ) {
+      return null;
+    }
+    if (result.data.length === 0) return rows;
+
+    for (const row of result.data) {
+      if (cursor !== null && row.user_id <= cursor) return null;
+      rows.push(row);
+      cursor = row.user_id;
+    }
+    if (result.data.length < PAGE_SIZE) return rows;
+  }
+}
+
+async function loadSummaryProfiles(
+  client: SupabaseClient<Database>,
+  userIds: string[],
+  filters: SquadFilters,
+): Promise<SummaryProfileRow[] | null> {
+  const profiles: SummaryProfileRow[] = [];
+  for (let start = 0; start < userIds.length; start += PAGE_SIZE) {
+    const chunk = userIds.slice(start, start + PAGE_SIZE);
+    if (filters.searchPattern) {
+      const visibilityResult = await client
+        .from("profiles")
+        .select("id")
+        .in("id", chunk)
+        .order("id", { ascending: true })
+        .limit(PAGE_SIZE);
+      if (
+        visibilityResult.error ||
+        !Array.isArray(visibilityResult.data) ||
+        !visibilityResult.data.every(
+          (profile) => isRecord(profile) && typeof profile.id === "string",
+        )
+      ) {
+        return null;
+      }
+      const visibleIds = new Set(visibilityResult.data.map((profile) => profile.id));
+      if (
+        visibleIds.size !== chunk.length ||
+        chunk.some((userId) => !visibleIds.has(userId))
+      ) {
+        return null;
+      }
+    }
+    let query = client
+      .from("profiles")
+      .select(PROFILE_SUMMARY_SELECT)
+      .in("id", chunk);
+    if (filters.searchPattern) {
+      query = query.ilike("display_name", filters.searchPattern);
+    }
+    const result = await query
+      .order("display_name", { ascending: true, nullsFirst: false })
+      .order("id", { ascending: true })
+      .limit(PAGE_SIZE);
+    if (
+      result.error ||
+      !Array.isArray(result.data) ||
+      !result.data.every(isSummaryProfileRow)
+    ) {
+      return null;
+    }
+    if (!filters.searchPattern) {
+      const returnedIds = new Set(result.data.map((profile) => profile.id));
+      if (
+        returnedIds.size !== chunk.length ||
+        chunk.some((userId) => !returnedIds.has(userId))
+      ) {
+        return null;
+      }
+    }
+    profiles.push(...result.data);
+  }
+  return profiles;
+}
+
 export async function listSquadPlayers(
   teamId: string,
   filters: SquadFilters,
@@ -227,46 +326,23 @@ export async function listSquadPlayers(
 ): Promise<SquadListResult> {
   try {
     const client = await resolveClient(dependencies.supabase);
-    const membershipResult = await buildMembershipQuery(client, teamId, filters)
-      .order("user_id", { ascending: true })
-      .limit(PAGE_SIZE);
+    const memberships = await loadMembershipRows(client, teamId, filters);
+    if (!memberships) return { ok: false, error: "server" };
+    if (memberships.length === 0) return { ok: true, players: [] };
 
-    if (
-      membershipResult.error ||
-      !Array.isArray(membershipResult.data) ||
-      !membershipResult.data.every(isMembershipRow)
-    ) {
-      return { ok: false, error: "server" };
-    }
-    if (membershipResult.data.length === 0) return { ok: true, players: [] };
+    const profiles = await loadSummaryProfiles(
+      client,
+      memberships.map((row) => row.user_id),
+      filters,
+    );
+    if (!profiles) return { ok: false, error: "server" };
 
-    const userIds = membershipResult.data.map((row) => row.user_id);
-    let profileQuery = client
-      .from("profiles")
-      .select(PROFILE_SUMMARY_SELECT)
-      .in("id", userIds);
-    if (filters.searchPattern) {
-      profileQuery = profileQuery.ilike("display_name", filters.searchPattern);
-    }
-    const profileResult = await profileQuery
-      .order("display_name", { ascending: true, nullsFirst: false })
-      .order("id", { ascending: true })
-      .limit(PAGE_SIZE);
-
-    if (
-      profileResult.error ||
-      !Array.isArray(profileResult.data) ||
-      !profileResult.data.every(isSummaryProfileRow)
-    ) {
-      return { ok: false, error: "server" };
-    }
-
-    const profileById = new Map(profileResult.data.map((profile) => [profile.id, profile]));
-    const players = membershipResult.data.flatMap((membership) => {
+    const profileById = new Map(profiles.map((profile) => [profile.id, profile]));
+    const players = memberships.flatMap((membership) => {
       const profile = profileById.get(membership.user_id);
       return profile ? [mapSummary(membership, profile)] : [];
     });
-    return { ok: true, players: sortPlayers(players, filters) };
+    return { ok: true, players: sortPlayers(players, filters).slice(0, PAGE_SIZE) };
   } catch {
     return { ok: false, error: "server" };
   }
@@ -278,6 +354,7 @@ export async function getSquadPlayer(
   includeAdminNotes: boolean,
   dependencies: QueryDependencies = {},
 ): Promise<SquadDetailResult> {
+  if (!isUuid(userId)) return { ok: false, error: "not_found" };
   try {
     const client = await resolveClient(dependencies.supabase);
     const membershipResult = await buildMembershipQuery(client, teamId)

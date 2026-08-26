@@ -2,6 +2,10 @@ export type PlayerPosition = "GK" | "DEF" | "MID" | "ATT";
 export type PlayerStatus = "available" | "injured" | "unavailable";
 export type MembershipStatus = "active" | "inactive";
 
+export function isUuid(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu.test(value);
+}
+
 export type SquadPlayerRole = Readonly<{
   id: string;
   name: string;

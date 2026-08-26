@@ -3,7 +3,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "../supabase/database.types";
 import type { TeamAccessContext } from "../teams/context";
 import type { PermissionCode } from "../teams/permissions";
-import type { PlayerPosition, PlayerStatus } from "./model";
+import { isUuid, type PlayerPosition, type PlayerStatus } from "./model";
+import "./server-only";
 
 const MAX_REQUEST_BYTES = 16 * 1024;
 const UPDATE_KEYS = [
@@ -155,10 +156,6 @@ function isPosition(value: unknown): value is PlayerPosition {
 
 function isPlayerStatus(value: unknown): value is PlayerStatus {
   return value === "available" || value === "injured" || value === "unavailable";
-}
-
-function isUuid(value: string): boolean {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu.test(value);
 }
 
 function isIsoDate(value: string): boolean {
@@ -331,6 +328,9 @@ async function mutateTeamPlayer(
     return parsed.kind === "malformed"
       ? failure(400, "malformed", "Dữ liệu yêu cầu không hợp lệ.")
       : validationFailure(parsed.fieldErrors);
+  }
+  if (!isUuid(target.userId)) {
+    return failure(404, "not_found", "Không tìm thấy cầu thủ.");
   }
 
   try {
