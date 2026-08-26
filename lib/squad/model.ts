@@ -13,6 +13,12 @@ export type SquadPlayerRole = Readonly<{
   isSystem: boolean;
 }>;
 
+export type SquadAssignableRole = SquadPlayerRole;
+
+export type SquadAssignableRolesResult =
+  | Readonly<{ ok: true; roles: readonly SquadAssignableRole[] }>
+  | Readonly<{ ok: false; error: "server" }>;
+
 export type SquadPlayerSummary = Readonly<{
   userId: string;
   displayName: string | null;

@@ -1,9 +1,10 @@
 "use client";
 
 import { ArrowLeft, CalendarDays, Ruler, Save, ShieldAlert, Shirt, UserRound, Weight } from "lucide-react";
-import { useState, type FormEvent } from "react";
+import { useRouter } from "next/navigation";
+import { useMemo, useState, type FormEvent } from "react";
 
-import type { SquadPlayerDetail } from "../../../../../lib/squad/model";
+import type { SquadAssignableRole, SquadPlayerDetail } from "../../../../../lib/squad/model";
 
 type FieldErrors = Record<string, string>;
 type MutationState =
@@ -69,11 +70,15 @@ export function PlayerDetail({
   slug,
   player,
   canManage,
+  assignableRoles,
 }: {
   slug: string;
   player: SquadPlayerDetail;
   canManage: boolean;
+  assignableRoles: readonly SquadAssignableRole[];
 }) {
+  const router = useRouter();
+  const [roleId, setRoleId] = useState(player.role.id);
   const [shirtNumber, setShirtNumber] = useState(player.shirtNumber === null ? "" : String(player.shirtNumber));
   const [officialPosition, setOfficialPosition] = useState(player.officialPosition ?? "");
   const [playerStatus, setPlayerStatus] = useState(player.playerStatus);
@@ -84,11 +89,15 @@ export function PlayerDetail({
   const name = player.displayName ?? "Cầu thủ chưa cập nhật tên";
   const avatarUrl = safeAvatarUrl(player.avatarUrl);
   const isOwner = player.role.isSystem && player.role.slug === "owner";
-  const canMutate = canManage && !isOwner;
+  const canMutate = canManage && !isOwner && player.membershipStatus === "active";
+  const eligibleRoleIds = useMemo(
+    () => new Set(assignableRoles.map((role) => role.id)),
+    [assignableRoles],
+  );
   const apiPath = `/api/teams/${encodeURIComponent(slug)}/players/${encodeURIComponent(player.userId)}`;
 
   const payload = () => ({
-    roleId: player.role.id,
+    roleId,
     shirtNumber: shirtNumber === "" ? null : Number(shirtNumber),
     officialPosition: officialPosition === "" ? null : officialPosition,
     playerStatus,
@@ -97,6 +106,14 @@ export function PlayerDetail({
   });
 
   async function mutate(operation: "update" | "deactivate") {
+    if (!eligibleRoleIds.has(roleId)) {
+      setState({
+        kind: "error",
+        message: "Vai trò không còn hợp lệ. Vui lòng tải lại trang.",
+        fieldErrors: { roleId: "Chọn một vai trò hợp lệ của đội." },
+      });
+      return;
+    }
     setState({ kind: "pending", operation });
     try {
       const response = await fetch(apiPath, {
@@ -105,9 +122,12 @@ export function PlayerDetail({
         body: JSON.stringify(operation === "update" ? payload() : { ...payload(), confirmation }),
       });
       const result = await mutationResult(response);
-      setState(result.ok
-        ? { kind: "success", message: operation === "update" ? "Đã cập nhật thông tin cầu thủ." : "Cầu thủ đã ngừng hoạt động." }
-        : { kind: "error", message: result.message, fieldErrors: result.fieldErrors });
+      if (result.ok) {
+        setState({ kind: "success", message: operation === "update" ? "Đã cập nhật thông tin cầu thủ." : "Cầu thủ đã ngừng hoạt động." });
+        router.refresh();
+      } else {
+        setState({ kind: "error", message: result.message, fieldErrors: result.fieldErrors });
+      }
     } catch {
       setState({ kind: "error", message: "Không thể cập nhật cầu thủ. Vui lòng thử lại.", fieldErrors: {} });
     }
@@ -117,6 +137,10 @@ export function PlayerDetail({
     event.preventDefault();
     void mutate("update");
   }
+
+  const fieldError = (field: string) => state.kind === "error"
+    ? state.fieldErrors[field]
+    : undefined;
 
   return (
     <div className="view-stack squad-detail-view">
@@ -144,13 +168,14 @@ export function PlayerDetail({
           <form className="card player-admin-form" onSubmit={submitUpdate}>
             <div className="section-head"><div><span>QUẢN TRỊ ĐỘI HÌNH</span><h2>Chỉnh sửa thông tin đội</h2></div></div>
             <div className="player-admin-fields">
-              <label>Số áo<input name="shirtNumber" type="number" min="1" max="99" value={shirtNumber} onChange={(event) => setShirtNumber(event.target.value)} /></label>
-              <label>Vị trí chính<select name="officialPosition" value={officialPosition} onChange={(event) => setOfficialPosition(event.target.value)}><option value="">Chưa xếp</option><option value="GK">GK</option><option value="DEF">DEF</option><option value="MID">MID</option><option value="ATT">ATT</option></select></label>
-              <label>Tình trạng<select name="playerStatus" value={playerStatus} onChange={(event) => setPlayerStatus(event.target.value as typeof playerStatus)}><option value="available">Sẵn sàng</option><option value="injured">Chấn thương</option><option value="unavailable">Không sẵn sàng</option></select></label>
-              <label>Ngày gia nhập<input name="joinDate" type="date" value={joinDate} onChange={(event) => setJoinDate(event.target.value)} /></label>
-              <label className="player-admin-notes">Ghi chú quản trị<textarea name="adminNotes" maxLength={1000} value={adminNotes} onChange={(event) => setAdminNotes(event.target.value)} /></label>
+              <label>Vai trò<select name="roleId" value={roleId} aria-invalid={fieldError("roleId") ? true : undefined} aria-describedby={fieldError("roleId") ? "player-error-roleId" : undefined} onChange={(event) => setRoleId(event.target.value)}>{assignableRoles.map((role) => <option key={role.id} value={role.id}>{role.name}</option>)}</select></label>
+              <label>Số áo<input name="shirtNumber" type="number" min="1" max="99" value={shirtNumber} aria-invalid={fieldError("shirtNumber") ? true : undefined} aria-describedby={fieldError("shirtNumber") ? "player-error-shirtNumber" : undefined} onChange={(event) => setShirtNumber(event.target.value)} /></label>
+              <label>Vị trí chính<select name="officialPosition" value={officialPosition} aria-invalid={fieldError("officialPosition") ? true : undefined} aria-describedby={fieldError("officialPosition") ? "player-error-officialPosition" : undefined} onChange={(event) => setOfficialPosition(event.target.value)}><option value="">Chưa xếp</option><option value="GK">GK</option><option value="DEF">DEF</option><option value="MID">MID</option><option value="ATT">ATT</option></select></label>
+              <label>Tình trạng<select name="playerStatus" value={playerStatus} aria-invalid={fieldError("playerStatus") ? true : undefined} aria-describedby={fieldError("playerStatus") ? "player-error-playerStatus" : undefined} onChange={(event) => setPlayerStatus(event.target.value as typeof playerStatus)}><option value="available">Sẵn sàng</option><option value="injured">Chấn thương</option><option value="unavailable">Không sẵn sàng</option></select></label>
+              <label>Ngày gia nhập<input name="joinDate" type="date" value={joinDate} aria-invalid={fieldError("joinDate") ? true : undefined} aria-describedby={fieldError("joinDate") ? "player-error-joinDate" : undefined} onChange={(event) => setJoinDate(event.target.value)} /></label>
+              <label className="player-admin-notes">Ghi chú quản trị<textarea name="adminNotes" maxLength={1000} value={adminNotes} aria-invalid={fieldError("adminNotes") ? true : undefined} aria-describedby={fieldError("adminNotes") ? "player-error-adminNotes" : undefined} onChange={(event) => setAdminNotes(event.target.value)} /></label>
             </div>
-            {state.kind === "error" && <div className="player-mutation-message error" role="alert"><strong>{state.message}</strong>{Object.entries(state.fieldErrors).map(([field, message]) => <span key={field}>{message}</span>)}</div>}
+            {state.kind === "error" && <div className="player-mutation-message error" role="alert"><strong>{state.message}</strong>{Object.entries(state.fieldErrors).map(([field, message]) => <span id={`player-error-${field}`} key={field}>{message}</span>)}</div>}
             {state.kind === "success" && <p className="player-mutation-message success" role="status">{state.message}</p>}
             <button className="primary-button" type="submit" disabled={state.kind === "pending"}>{state.kind === "pending" && state.operation === "update" ? "Đang lưu..." : <><Save size={16} /> Lưu thay đổi</>}</button>
             <div className="player-deactivate-panel">

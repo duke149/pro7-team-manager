@@ -5,7 +5,7 @@ import test from "node:test";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { parseSquadFilters } from "../lib/squad/filters";
-import { getSquadPlayer, listSquadPlayers } from "../lib/squad/queries";
+import { getSquadPlayer, listAssignableSquadRoles, listSquadPlayers } from "../lib/squad/queries";
 import type { Database } from "../lib/supabase/database.types";
 
 const DETAIL_USER_ID = "00000000-0000-4000-8000-000000000051";
@@ -163,18 +163,27 @@ function rosterFixture(index: number, overrides: Record<string, unknown> = {}) {
 function clientDouble({
   memberships = [response(playerRows())],
   profiles = [response(profileRows())],
+  roles = [],
+  rolePermissions = [],
   rpc = response([{ admin_notes: "Theo dõi thể lực" }]),
 }: {
   memberships?: SupabaseResponse[];
   profiles?: SupabaseResponse[];
+  roles?: SupabaseResponse[];
+  rolePermissions?: SupabaseResponse[];
   rpc?: SupabaseResponse;
 } = {}) {
   const calls: Array<{ table: string; query: QueryDouble }> = [];
-  const queues = { memberships: [...memberships], profiles: [...profiles] };
+  const queues = {
+    memberships: [...memberships],
+    profiles: [...profiles],
+    roles: [...roles],
+    role_permissions: [...rolePermissions],
+  };
   const rpcCalls: Array<{ name: string; arguments: unknown }> = [];
 
   const client = {
-    from(table: "memberships" | "profiles") {
+    from(table: "memberships" | "profiles" | "roles" | "role_permissions") {
       const result = queues[table].shift();
       assert.ok(result, `unexpected ${table} query`);
       const query = new QueryDouble(result);
@@ -189,6 +198,66 @@ function clientDouble({
 
   return { client, calls, rpcCalls };
 }
+
+test("listAssignableSquadRoles returns only same-team non-owner roles without team.delete", async () => {
+  const fixture = clientDouble({
+    roles: [response([
+      { id: "role-admin", name: "Quản lý", slug: "admin", is_system: true },
+      { id: "role-member", name: "Cầu thủ", slug: "member", is_system: true },
+      { id: "role-owner", name: "Chủ sở hữu", slug: "owner", is_system: true },
+      { id: "role-custom", name: "Đội trưởng", slug: "captain", is_system: false },
+    ])],
+    rolePermissions: [response([
+      { role_id: "role-admin", permission_code: "players.manage" },
+      { role_id: "role-admin", permission_code: "team.delete" },
+      { role_id: "role-member", permission_code: "players.read" },
+      { role_id: "role-custom", permission_code: "players.read" },
+    ])],
+  });
+
+  const result = await listAssignableSquadRoles("team-1", { supabase: fixture.client });
+
+  assert.deepEqual(result, {
+    ok: true,
+    roles: [
+      { id: "role-member", name: "Cầu thủ", slug: "member", isSystem: true },
+      { id: "role-custom", name: "Đội trưởng", slug: "captain", isSystem: false },
+    ],
+  });
+  assert.deepEqual(fixture.calls.map(({ table, query }) => ({ table, calls: query.calls })), [
+    {
+      table: "roles",
+      calls: [
+        { method: "select", arguments: ["id,name,slug,is_system"] },
+        { method: "eq", arguments: ["team_id", "team-1"] },
+        { method: "order", arguments: ["name", { ascending: true }] },
+        { method: "order", arguments: ["id", { ascending: true }] },
+        { method: "limit", arguments: [64] },
+      ],
+    },
+    {
+      table: "role_permissions",
+      calls: [
+        { method: "select", arguments: ["role_id,permission_code"] },
+        { method: "in", arguments: ["role_id", ["role-admin", "role-member", "role-custom"]] },
+        { method: "order", arguments: ["role_id", { ascending: true }] },
+        { method: "limit", arguments: [2048] },
+      ],
+    },
+  ]);
+});
+
+test("listAssignableSquadRoles fails closed on malformed or inaccessible role permissions", async () => {
+  const fixture = clientDouble({
+    roles: [response([{ id: "role-member", name: "Cầu thủ", slug: "member", is_system: true }])],
+    rolePermissions: [response(null, { code: "42501", message: "denied", details: "", hint: "" })],
+  });
+
+  assert.deepEqual(
+    await listAssignableSquadRoles("team-1", { supabase: fixture.client }),
+    { ok: false, error: "server" },
+  );
+});
 
 test("listSquadPlayers selects only safe columns, maps rows, and orders equal primary values by name", async () => {
   const fixture = clientDouble();

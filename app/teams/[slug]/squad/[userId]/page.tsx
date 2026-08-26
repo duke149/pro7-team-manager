@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 
-import type { SquadDetailResult } from "../../../../../lib/squad/model";
-import { getSquadPlayer } from "../../../../../lib/squad/queries";
+import type { SquadAssignableRolesResult, SquadDetailResult, SquadPlayerDetail } from "../../../../../lib/squad/model";
+import { getSquadPlayer, listAssignableSquadRoles } from "../../../../../lib/squad/queries";
 import { requireTeamPermission } from "../../../../../lib/teams/context";
 import type { PermissionCode } from "../../../../../lib/teams/permissions";
 import { hasPermission } from "../../../../../lib/teams/permissions";
@@ -18,8 +18,29 @@ type DetailPageArguments = {
     userId: string,
     includeAdminNotes: boolean,
   ) => Promise<SquadDetailResult>;
+  listAssignableSquadRoles: (
+    teamId: string,
+  ) => Promise<SquadAssignableRolesResult>;
   denied: () => unknown;
 };
+
+function withoutAdminNotes(player: SquadPlayerDetail): SquadPlayerDetail {
+  const safePlayer = { ...player };
+  delete safePlayer.adminNotes;
+  return safePlayer;
+}
+
+function playerMutationVersion(player: SquadPlayerDetail): string {
+  return JSON.stringify([
+    player.role.id,
+    player.membershipStatus,
+    player.shirtNumber,
+    player.officialPosition,
+    player.playerStatus,
+    player.joinDate,
+    player.adminNotes,
+  ]);
+}
 
 export async function renderSquadPlayerPage(arguments_: DetailPageArguments) {
   const { slug, userId } = await arguments_.params;
@@ -44,12 +65,36 @@ export async function renderSquadPlayerPage(arguments_: DetailPageArguments) {
     );
   }
 
+  const isOwner = result.player.role.isSystem && result.player.role.slug === "owner";
+  const isActiveManageTarget = canManage
+    && result.player.membershipStatus === "active"
+    && !isOwner;
+  const rolesResult = isActiveManageTarget
+    ? await arguments_.listAssignableSquadRoles(context.team.id)
+    : { ok: true as const, roles: [] };
+  const hasCurrentRole = rolesResult.ok
+    && rolesResult.roles.some((role) => role.id === result.player.role.id);
+  const canRenderManagerControls = isActiveManageTarget && rolesResult.ok && hasCurrentRole;
+  const playerForClient = canRenderManagerControls
+    ? result.player
+    : withoutAdminNotes(result.player);
+
   return (
-    <PlayerDetail
-      slug={context.team.slug}
-      player={result.player}
-      canManage={canManage}
-    />
+    <>
+      {isActiveManageTarget && !canRenderManagerControls && (
+        <section className="card squad-detail-state" data-state="error">
+          <h2>Không thể tải quyền quản trị cầu thủ</h2>
+          <p>Thông tin hồ sơ vẫn có thể xem, nhưng chỉnh sửa đang được khóa an toàn.</p>
+        </section>
+      )}
+      <PlayerDetail
+        key={playerMutationVersion(playerForClient)}
+        slug={context.team.slug}
+        player={playerForClient}
+        canManage={canRenderManagerControls}
+        assignableRoles={canRenderManagerControls && rolesResult.ok ? rolesResult.roles : []}
+      />
+    </>
   );
 }
 
@@ -62,6 +107,7 @@ export default async function SquadPlayerPage({
     params,
     requireTeamPermission,
     getSquadPlayer,
+    listAssignableSquadRoles,
     denied: notFound,
   });
 }

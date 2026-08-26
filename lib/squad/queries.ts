@@ -6,6 +6,8 @@ import type {
   MembershipStatus,
   PlayerPosition,
   PlayerStatus,
+  SquadAssignableRole,
+  SquadAssignableRolesResult,
   SquadDetailResult,
   SquadListResult,
   SquadPlayerDetail,
@@ -49,6 +51,18 @@ type DetailProfileRow = SummaryProfileRow & {
   height_cm: number | null;
   weight_kg: number | null;
   preferred_positions: PlayerPosition[];
+};
+
+type RoleRow = {
+  id: string;
+  name: string;
+  slug: string;
+  is_system: boolean;
+};
+
+type RolePermissionRow = {
+  role_id: string;
+  permission_code: string;
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -112,6 +126,24 @@ function isDetailProfileRow(value: unknown): value is DetailProfileRow {
     isNullableNumber(detail.weight_kg) &&
     Array.isArray(detail.preferred_positions) &&
     detail.preferred_positions.every(isPosition)
+  );
+}
+
+function isRoleRow(value: unknown): value is RoleRow {
+  return (
+    isRecord(value) &&
+    typeof value.id === "string" &&
+    typeof value.name === "string" &&
+    typeof value.slug === "string" &&
+    typeof value.is_system === "boolean"
+  );
+}
+
+function isRolePermissionRow(value: unknown): value is RolePermissionRow {
+  return (
+    isRecord(value) &&
+    typeof value.role_id === "string" &&
+    typeof value.permission_code === "string"
   );
 }
 
@@ -194,6 +226,65 @@ async function resolveClient(
   if (supplied) return supplied;
   const { createServerSupabaseClient } = await import("../supabase/server");
   return createServerSupabaseClient();
+}
+
+export async function listAssignableSquadRoles(
+  teamId: string,
+  dependencies: QueryDependencies = {},
+): Promise<SquadAssignableRolesResult> {
+  try {
+    const client = await resolveClient(dependencies.supabase);
+    const rolesResult = await client
+      .from("roles")
+      .select("id,name,slug,is_system")
+      .eq("team_id", teamId)
+      .order("name", { ascending: true })
+      .order("id", { ascending: true })
+      .limit(64);
+    if (
+      rolesResult.error ||
+      !Array.isArray(rolesResult.data) ||
+      !rolesResult.data.every(isRoleRow)
+    ) {
+      return { ok: false, error: "server" };
+    }
+
+    const nonOwnerRoles = rolesResult.data.filter(
+      (role) => !(role.is_system && role.slug === "owner"),
+    );
+    if (nonOwnerRoles.length === 0) return { ok: true, roles: [] };
+
+    const permissionsResult = await client
+      .from("role_permissions")
+      .select("role_id,permission_code")
+      .in("role_id", nonOwnerRoles.map((role) => role.id))
+      .order("role_id", { ascending: true })
+      .limit(2048);
+    if (
+      permissionsResult.error ||
+      !Array.isArray(permissionsResult.data) ||
+      !permissionsResult.data.every(isRolePermissionRow)
+    ) {
+      return { ok: false, error: "server" };
+    }
+
+    const rolesWithTeamDelete = new Set(
+      permissionsResult.data
+        .filter((permission) => permission.permission_code === "team.delete")
+        .map((permission) => permission.role_id),
+    );
+    const roles: SquadAssignableRole[] = nonOwnerRoles
+      .filter((role) => !rolesWithTeamDelete.has(role.id))
+      .map((role) => Object.freeze({
+        id: role.id,
+        name: role.name,
+        slug: role.slug,
+        isSystem: role.is_system,
+      }));
+    return { ok: true, roles: Object.freeze(roles) };
+  } catch {
+    return { ok: false, error: "server" };
+  }
 }
 
 function buildMembershipQuery(

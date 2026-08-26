@@ -9,6 +9,7 @@ import { Pro7RouteHeader } from "../app/components/pro7-route-header";
 import type { SquadFilters } from "../lib/squad/filters";
 import type {
   SquadDetailResult,
+  SquadAssignableRolesResult,
   SquadListResult,
   SquadPlayerDetail,
   SquadPlayerSummary,
@@ -41,6 +42,7 @@ type DetailPageModule = {
       userId: string,
       includeAdminNotes: boolean,
     ) => Promise<SquadDetailResult>;
+    listAssignableSquadRoles: (teamId: string) => Promise<SquadAssignableRolesResult>;
     denied: () => unknown;
   }): Promise<unknown>;
 };
@@ -132,7 +134,7 @@ test.before(async () => {
     }],
     resolve: {
       alias: {
-        "next/navigation": resolve("node_modules/vinext/dist/shims/navigation.js"),
+        "next/navigation": resolve("tests/fixtures/squad-page-navigation.ts"),
       },
     },
     server: { middlewareMode: true },
@@ -304,6 +306,7 @@ test("Squad detail denies missing read access and requests admin notes only for 
       deniedQueries += 1;
       return { ok: true, player: DETAIL };
     },
+    listAssignableSquadRoles: async () => { throw new Error("must not query roles"); },
     denied: () => "SAFE_DENIAL",
   });
   assert.equal(denied, "SAFE_DENIAL");
@@ -322,6 +325,7 @@ test("Squad detail denies missing read access and requests admin notes only for 
         captured = includeAdminNotes;
         return { ok: true, player: DETAIL };
       },
+      listAssignableSquadRoles: async () => ({ ok: true, roles: [DETAIL.role] }),
       denied: () => "SAFE_DENIAL",
     });
     assert.equal(captured, fixture.includeAdminNotes);
@@ -336,6 +340,7 @@ test("Member detail renders safe profile fields without mutation controls or adm
       ok: true,
       player: { ...DETAIL, adminNotes: "Không được lộ cho thành viên" },
     }),
+    listAssignableSquadRoles: async () => { throw new Error("members must not query roles"); },
     denied: () => "SAFE_DENIAL",
   });
   const markup = html(output);
@@ -354,12 +359,22 @@ test("Dual manager detail renders official edit and non-owner deactivate control
       ok: true,
       player: { ...DETAIL, adminNotes: "Chỉ quản lý được xem" },
     }),
+    listAssignableSquadRoles: async () => ({
+      ok: true,
+      roles: [
+        DETAIL.role,
+        { id: "00000000-0000-4000-8000-000000000013", name: "Đội trưởng", slug: "captain", isSystem: false },
+      ],
+    }),
     denied: () => "SAFE_DENIAL",
   });
   const markup = html(output);
 
   assert.match(markup, /Chỉnh sửa thông tin đội/u);
   assert.match(markup, /name="shirtNumber"/u);
+  assert.match(markup, /name="roleId"/u);
+  assert.match(markup, /value="00000000-0000-4000-8000-000000000011"[^>]*>Cầu thủ/u);
+  assert.match(markup, /value="00000000-0000-4000-8000-000000000013"[^>]*>Đội trưởng/u);
   assert.match(markup, /name="officialPosition"/u);
   assert.match(markup, /name="playerStatus"/u);
   assert.match(markup, /name="joinDate"/u);
@@ -381,12 +396,30 @@ test("Owner target remains readable but never renders manager mutation controls"
         adminNotes: "Không được lộ qua form",
       },
     }),
+    listAssignableSquadRoles: async () => { throw new Error("owner role list must not be queried"); },
     denied: () => "SAFE_DENIAL",
   });
   const markup = html(output);
 
   assert.match(markup, /Chủ sở hữu/u);
   assert.doesNotMatch(markup, /Chỉnh sửa thông tin đội|Ngừng hoạt động|Không được lộ qua form/u);
+});
+
+test("Dual manager detail fails closed when assignable roles cannot be loaded", async () => {
+  const output = await detailPage.renderSquadPlayerPage({
+    params: Promise.resolve({ slug: "pro7-fc", userId: PLAYER.userId }),
+    requireTeamPermission: async () => ADMIN_CONTEXT,
+    getSquadPlayer: async () => ({
+      ok: true,
+      player: { ...DETAIL, adminNotes: "Không được đưa vào form khi role query lỗi" },
+    }),
+    listAssignableSquadRoles: async () => ({ ok: false, error: "server" }),
+    denied: () => "SAFE_DENIAL",
+  });
+  const markup = html(output);
+
+  assert.match(markup, /Không thể tải quyền quản trị cầu thủ/u);
+  assert.doesNotMatch(markup, /Chỉnh sửa thông tin đội|name="roleId"|Không được đưa vào form khi role query lỗi/u);
 });
 
 test("Squad loading and error boundaries preserve the roster surface with honest text", () => {
