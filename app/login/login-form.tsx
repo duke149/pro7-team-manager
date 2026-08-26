@@ -3,6 +3,7 @@
 import { FormEvent, useState } from "react";
 import { Eye, EyeOff } from "lucide-react";
 
+import { normalizeLoginIdentifier } from "../../lib/account/login-identifier";
 import { createBrowserSupabaseClient } from "../../lib/supabase/client";
 
 const SIGN_IN_ERROR =
@@ -15,7 +16,7 @@ export default function LoginForm({
   next: string;
   initialError?: string;
 }) {
-  const [email, setEmail] = useState("");
+  const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [errorMessage, setErrorMessage] = useState(initialError ?? "");
@@ -27,9 +28,14 @@ export default function LoginForm({
     setIsLoading(true);
 
     try {
+      const normalized = normalizeLoginIdentifier(identifier);
+      if (!normalized.ok) {
+        setErrorMessage(SIGN_IN_ERROR);
+        return;
+      }
       const supabase = createBrowserSupabaseClient();
       const { error } = await supabase.auth.signInWithPassword({
-        email,
+        email: normalized.authEmail,
         password,
       });
 
@@ -48,15 +54,15 @@ export default function LoginForm({
 
   return (
     <form className="login-form" onSubmit={handleSubmit}>
-      <label htmlFor="login-email">Email</label>
+      <label htmlFor="login-identifier">Email hoặc username</label>
       <input
-        id="login-email"
-        name="email"
-        type="email"
-        autoComplete="email"
-        placeholder="ban@example.com"
-        value={email}
-        onChange={(event) => setEmail(event.target.value)}
+        id="login-identifier"
+        name="identifier"
+        type="text"
+        autoComplete="username"
+        placeholder="duclee hoặc email@example.com"
+        value={identifier}
+        onChange={(event) => setIdentifier(event.target.value)}
         disabled={isLoading}
         required
       />
