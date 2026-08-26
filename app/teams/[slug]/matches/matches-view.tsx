@@ -1,12 +1,12 @@
 "use client";
 
 import { CalendarDays, Check, Clock3, MapPin, Plus, X } from "lucide-react";
-import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 
 import type { AttendanceResponseStatus, MatchListResult, MatchSummary } from "../../../../lib/matches/model";
 import type { TeamAccessContext } from "../../../../lib/teams/context";
 import { hasPermission, type PermissionCode } from "../../../../lib/teams/permissions";
+import { reloadAuthoritativeRoute } from "./authoritative-refresh";
 import { useRsvpDeadlineClosed } from "./rsvp-deadline";
 
 function dateParts(value: string) {
@@ -23,7 +23,6 @@ function initials(name: string) { return name.trim().split(/\s+/u).slice(-2).map
 function apiMessage(value: unknown, fallback: string) { return typeof value === "object" && value !== null && "message" in value && typeof value.message === "string" ? value.message : fallback; }
 
 function RsvpControls({ slug, match, canRespond, now }: { slug: string; match: MatchSummary; canRespond: boolean; now: string }) {
-  const router = useRouter();
   const [state, setState] = useState({ pending: false, message: "" });
   const closed = useRsvpDeadlineClosed(match.rsvpDeadline, now);
   async function respond(status: AttendanceResponseStatus) {
@@ -33,7 +32,7 @@ function RsvpControls({ slug, match, canRespond, now }: { slug: string; match: M
       const response = await fetch(`/api/teams/${encodeURIComponent(slug)}/matches/${encodeURIComponent(match.id)}/attendance`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "respond", status, note: null, expectedUpdatedAt: match.ownAttendance.updatedAt }) });
       const data: unknown = await response.json().catch(() => null);
       if (!response.ok) { setState({ pending: false, message: apiMessage(data, "Không thể cập nhật xác nhận.") }); return; }
-      setState({ pending: false, message: "" }); router.refresh();
+      setState({ pending: false, message: "" }); reloadAuthoritativeRoute();
     } catch { setState({ pending: false, message: "Không thể cập nhật xác nhận." }); }
   }
   if (!canRespond || !match.ownAttendance || match.status !== "scheduled") return <p className="match-muted">Bạn chưa nhận được lời mời cho trận này.</p>;
@@ -41,7 +40,6 @@ function RsvpControls({ slug, match, canRespond, now }: { slug: string; match: M
 }
 
 function CreateMatchForm({ slug, close }: { slug: string; close: () => void }) {
-  const router = useRouter();
   const [message, setMessage] = useState("");
   const [pending, setPending] = useState(false);
   const dialogRef = useRef<HTMLElement>(null);
@@ -69,7 +67,7 @@ function CreateMatchForm({ slug, close }: { slug: string; close: () => void }) {
       const response = await fetch(`/api/teams/${encodeURIComponent(slug)}/matches`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(payload) });
       const responseBody: unknown = await response.json().catch(() => null);
       if (!response.ok) { setMessage(apiMessage(responseBody, "Không thể xếp lịch trận đấu.")); setPending(false); return; }
-      router.refresh(); close();
+      close(); reloadAuthoritativeRoute();
     } catch { setMessage("Không thể xếp lịch trận đấu."); setPending(false); }
   }
   return <div className="modal-layer"><section ref={dialogRef} className="modal match-modal" role="dialog" aria-modal="true" aria-labelledby="create-match-title"><div className="modal-head"><div><span>TRẬN ĐẤU</span><h2 id="create-match-title">Xếp lịch trận đấu</h2><p>Nhập thông tin đối thủ và thời gian xác nhận.</p></div><button type="button" onClick={close} aria-label="Đóng"><X /></button></div><form className="match-form" onSubmit={(event) => void submit(event)}><label>Đối thủ<input ref={opponentRef} required maxLength={120} name="opponent" /></label><div className="form-two"><label>Giờ thi đấu<input required type="datetime-local" name="startsAt" /></label><label>Hạn xác nhận<input required type="datetime-local" name="rsvpDeadline" /></label></div><label>Địa điểm<input maxLength={200} name="venue" /></label><label>Sân đấu<select name="isHome" defaultValue="true"><option value="true">Sân nhà</option><option value="false">Sân khách</option></select></label>{message && <p className="match-message error" role="alert">{message}</p>}<div className="modal-actions"><button className="soft-button" type="button" onClick={close}>Hủy</button><button className="primary-button" disabled={pending} type="submit">{pending ? "Đang lưu…" : "Xếp lịch trận đấu"}</button></div></form></section></div>;

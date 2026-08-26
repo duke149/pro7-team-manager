@@ -1,10 +1,10 @@
 "use client";
 
 import { ArrowLeft, CalendarDays, Check, MapPin, Save, Trophy, X } from "lucide-react";
-import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 
 import type { AttendanceResponseStatus, MatchDetail as MatchDetailModel, MatchTeamMetrics } from "../../../../../lib/matches/model";
+import { reloadAuthoritativeRoute } from "../authoritative-refresh";
 import { useRsvpDeadlineClosed } from "../rsvp-deadline";
 
 type State = { pending: boolean; message: string; success: boolean };
@@ -14,7 +14,6 @@ function displayDate(value: string) { return new Intl.DateTimeFormat("vi-VN", { 
 function metricRows(metrics: MatchTeamMetrics | null) { return metrics ? [["Kiểm soát", metrics.possession], ["Cú sút", metrics.shots], ["Trúng đích", metrics.shotsOnTarget], ["Phạt góc", metrics.corners]] as const : []; }
 
 export function MatchDetail({ slug, teamName, userId, detail, canManage, canRespond, now }: { slug: string; teamName: string; userId: string; detail: MatchDetailModel | null; canManage: boolean; canRespond: boolean; now: string }) {
-  const router = useRouter();
   const [state, setState] = useState<State>({ pending: false, message: "", success: false });
   const [selected, setSelected] = useState(() => new Set(detail?.inviteCandidates.map((candidate) => candidate.userId) ?? []));
   const rsvpClosed = useRsvpDeadlineClosed(detail?.match.rsvpDeadline ?? null, now);
@@ -29,7 +28,7 @@ export function MatchDetail({ slug, teamName, userId, detail, canManage, canResp
       const response = await fetch(path, { method, headers: { "content-type": "application/json" }, body: JSON.stringify(payload) });
       const body: unknown = await response.json().catch(() => null);
       if (!response.ok) { setState({ pending: false, message: serverMessage(body, "Không thể cập nhật trận đấu."), success: false }); return false; }
-      setState({ pending: false, message: "Đã cập nhật trận đấu.", success: true }); router.refresh(); return true;
+      setState({ pending: false, message: "Đã cập nhật trận đấu.", success: true }); reloadAuthoritativeRoute(); return true;
     } catch { setState({ pending: false, message: "Không thể cập nhật trận đấu.", success: false }); return false; }
   }
   async function rsvp(status: AttendanceResponseStatus) { if (!own || rsvpClosed) return; await mutate(`${base}/attendance`, { action: "respond", status, note: null, expectedUpdatedAt: own.updatedAt }, "POST"); }

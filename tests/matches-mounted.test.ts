@@ -29,7 +29,20 @@ test.before(async () => {
   browserWindow = new Window({ url: `https://pro7.example/teams/pro7-fc/matches/${MATCH_ID}` });
   for (const [key, value] of Object.entries({ window: browserWindow, document: browserWindow.document, navigator: browserWindow.navigator, HTMLElement: browserWindow.HTMLElement, Node: browserWindow.Node, Event: browserWindow.Event, IS_REACT_ACT_ENVIRONMENT: true })) Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
   const nodeEnvironment = process.env.NODE_ENV;
-  const result = await build({ configFile: false, plugins: [{ name: "matches-mounted-navigation", enforce: "pre", resolveId(id) { return id === "next/navigation" ? resolve("tests/fixtures/matches-navigation.ts") : null; } }], build: { lib: { entry: resolve("tests/fixtures/matches-mounted-entry.ts"), formats: ["cjs"], fileName: "matches-mounted" }, write: false } });
+  const result = await build({ configFile: false, plugins: [{
+    name: "matches-mounted-navigation",
+    enforce: "pre",
+    resolveId(id) {
+      if (id === "next/navigation") return resolve("tests/fixtures/matches-navigation.ts");
+      if (id.endsWith("authoritative-refresh")) return "\0matches-authoritative-refresh";
+      return null;
+    },
+    load(id) {
+      return id === "\0matches-authoritative-refresh"
+        ? "export function reloadAuthoritativeRoute(){globalThis.__matchesReloads=(globalThis.__matchesReloads??0)+1}"
+        : null;
+    },
+  }], build: { lib: { entry: resolve("tests/fixtures/matches-mounted-entry.ts"), formats: ["cjs"], fileName: "matches-mounted" }, write: false } });
   (process.env as Record<string, string | undefined>).NODE_ENV = nodeEnvironment ?? "test";
   const bundles = (Array.isArray(result) ? result : [result]) as unknown as readonly { output: readonly { type: string; code?: string }[] }[];
   const code = bundles.flatMap((bundle) => bundle.output).find((output) => output.type === "chunk")?.code;
@@ -43,7 +56,7 @@ test.after(async () => { await browserWindow.happyDOM.abort(); browserWindow.clo
 async function mounted(canManage = false, now = "2026-10-10T00:00:00.000Z") {
   browserWindow.document.body.innerHTML = '<div id="root"></div>';
   const container = browserWindow.document.getElementById("root"); assert.ok(container);
-  const root = createRoot(container as unknown as Element); globalThis.__matchesRefreshes = 0;
+  const root = createRoot(container as unknown as Element); globalThis.__matchesRefreshes = 0; globalThis.__matchesReloads = 0;
   await act(async () => root.render(createElement(MatchDetail, { slug: "pro7-fc", teamName: "PRO7 FC", userId: USER_ID, detail: DETAIL, canManage, canRespond: true, now })));
   return { container: container as unknown as HTMLElement, root };
 }
@@ -51,29 +64,31 @@ async function mounted(canManage = false, now = "2026-10-10T00:00:00.000Z") {
 async function mountedList(permissions: readonly PermissionCode[], now = "2026-10-10T00:00:00.000Z") {
   browserWindow.document.body.innerHTML = '<div id="root"></div>';
   const container = browserWindow.document.getElementById("root"); assert.ok(container);
-  const root = createRoot(container as unknown as Element); globalThis.__matchesRefreshes = 0;
+  const root = createRoot(container as unknown as Element); globalThis.__matchesRefreshes = 0; globalThis.__matchesReloads = 0;
   await act(async () => root.render(createElement(MatchesView, { team: { id: "team-1", name: "PRO7 FC", slug: "pro7-fc" }, userId: USER_ID, permissions, result: { ok: true, matches: [DETAIL.match] }, now })));
   return { container: container as unknown as HTMLElement, root };
 }
 
-test("own RSVP sends same-origin JSON with stale token then refreshes navigation", async () => {
+test("own RSVP sends same-origin JSON then hard-reloads authoritative server props", async () => {
   const calls: { url: string; init?: RequestInit }[] = [];
   globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => { calls.push({ url: String(input), init }); return Response.json({ ok: true }); }) as typeof fetch;
   const view = await mounted();
   const button = [...view.container.querySelectorAll("button")].find((candidate) => candidate.textContent?.trim() === "Có"); assert.ok(button);
   await act(async () => { button.click(); await new Promise((resolve) => setTimeout(resolve, 0)); });
   assert.deepEqual(calls, [{ url: `/api/teams/pro7-fc/matches/${MATCH_ID}/attendance`, init: { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "respond", status: "available", note: null, expectedUpdatedAt: "2026-10-02T00:00:00.000Z" }) } }]);
-  assert.equal(globalThis.__matchesRefreshes, 1);
+  assert.equal(globalThis.__matchesRefreshes, 0);
+  assert.equal(globalThis.__matchesReloads, 1);
   await act(async () => view.root.unmount());
 });
 
-test("list RSVP resets its pending state after a successful refresh request", async () => {
+test("list RSVP resets pending before hard-reloading authoritative server props", async () => {
   globalThis.fetch = (async () => Response.json({ ok: true })) as typeof fetch;
   const view = await mountedList(["matches.read", "matches.respond"]);
   const button = [...view.container.querySelectorAll("button")].find((candidate) => candidate.textContent?.trim() === "Có"); assert.ok(button);
   await act(async () => { button.click(); await new Promise((resolve) => setTimeout(resolve, 0)); });
   assert.equal(button.disabled, false);
-  assert.equal(globalThis.__matchesRefreshes, 1);
+  assert.equal(globalThis.__matchesRefreshes, 0);
+  assert.equal(globalThis.__matchesReloads, 1);
   await act(async () => view.root.unmount());
 });
 
@@ -147,6 +162,7 @@ test("failed RSVP reports the server message and does not refresh stale UI", asy
   await act(async () => { button.click(); await new Promise((resolve) => setTimeout(resolve, 0)); });
   assert.match(view.container.textContent ?? "", /Dữ liệu đã thay đổi/u);
   assert.equal(globalThis.__matchesRefreshes, 0);
+  assert.equal(globalThis.__matchesReloads, 0);
   await act(async () => view.root.unmount());
 });
 
@@ -164,8 +180,12 @@ test("Admin lifecycle mutation uses PATCH with the current match token", async (
       body: JSON.stringify({ action: "cancel", expectedUpdatedAt: "2026-10-01T00:00:00.000Z" }),
     },
   }]);
-  assert.equal(globalThis.__matchesRefreshes, 1);
+  assert.equal(globalThis.__matchesRefreshes, 0);
+  assert.equal(globalThis.__matchesReloads, 1);
   await act(async () => view.root.unmount());
 });
 
-declare global { var __matchesRefreshes: number | undefined; }
+declare global {
+  var __matchesRefreshes: number | undefined;
+  var __matchesReloads: number | undefined;
+}
