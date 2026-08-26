@@ -152,9 +152,10 @@ export function validateProfilePatch(
       typeof input.weightKg !== "number" ||
       !Number.isFinite(input.weightKg) ||
       input.weightKg <= 30 ||
-      input.weightKg > 300
+      input.weightKg > 300 ||
+      Number(input.weightKg.toFixed(2)) !== input.weightKg
     ) {
-      errors.weightKg = "Cân nặng phải lớn hơn 30 và không quá 300 kg.";
+      errors.weightKg = "Cân nặng phải lớn hơn 30, không quá 300 kg và có tối đa 2 chữ số thập phân.";
     } else {
       value.weight_kg = input.weightKg;
     }

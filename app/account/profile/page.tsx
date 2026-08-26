@@ -3,8 +3,8 @@ import type { Metadata } from "next";
 import { isCanonicalProfileAvatarPath, type PreferredPosition, type ProfileRecord } from "../../../lib/account/profile";
 import { requireProductUser } from "../../../lib/supabase/auth";
 import { createServerSupabaseClient } from "../../../lib/supabase/server";
-import { AccountMenu } from "../../components/account-menu";
 import ProfileForm from "./profile-form";
+import { ProfileShell } from "./profile-shell";
 
 export const metadata: Metadata = {
   title: "Hồ sơ cá nhân — PRO7 Team Manager",
@@ -36,22 +36,14 @@ export async function renderProfilePage(
 
   if (!result.ok) {
     return (
-      <main className="account-profile-shell">
-        <header className="account-profile-header">
-          {/* Route shell uses native links so Vinext can own full-page auth redirects. */}
-          {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
-          <a className="account-profile-brand" href="/" aria-label="PRO7 Team Manager">
-            <span aria-hidden="true">7</span><strong>PRO7</strong>
-          </a>
-          <AccountMenu email={user.email} />
-        </header>
+      <ProfileShell email={user.email}>
         <section className="account-profile-state" role="alert">
           <h1>Không thể tải hồ sơ</h1>
           <p>Vui lòng tải lại trang hoặc thử lại sau.</p>
           {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
           <a href="/">Quay lại đội bóng</a>
         </section>
-      </main>
+      </ProfileShell>
     );
   }
 
@@ -61,14 +53,7 @@ export async function renderProfilePage(
     : null;
 
   return (
-    <main className="account-profile-shell">
-      <header className="account-profile-header">
-        {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
-        <a className="account-profile-brand" href="/" aria-label="PRO7 Team Manager">
-          <span aria-hidden="true">7</span><strong>PRO7</strong><small>TEAM MANAGER</small>
-        </a>
-        <AccountMenu email={user.email} />
-      </header>
+    <ProfileShell email={user.email}>
       <div className="account-profile-content">
         {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
         <a className="account-profile-back" href="/">← Quay lại đội bóng</a>
@@ -84,7 +69,7 @@ export async function renderProfilePage(
           initials={initials(profile.displayName, user.email)}
         />
       </div>
-    </main>
+    </ProfileShell>
   );
 }
 

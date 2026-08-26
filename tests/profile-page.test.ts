@@ -73,6 +73,8 @@ test("profile page loads only the verified caller row and signs only its canonic
 
   assert.deepEqual(loaded, [USER_ID]);
   assert.deepEqual(signed, [`${USER_ID}/avatar.webp`]);
+  assert.match(markup, /class="account-profile-shell light"/u);
+  assert.match(markup, /class="theme-button"[^>]*aria-pressed="false"[^>]*aria-label="Bật giao diện tối"/u);
   assert.match(markup, /Hồ sơ cá nhân/u);
   assert.match(markup, /Nguyễn An/u);
   assert.match(markup, /0901234567/u);

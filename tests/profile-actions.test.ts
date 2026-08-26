@@ -106,8 +106,8 @@ test("profile validation enforces database-aligned field bounds and unique posit
     { field: "dateOfBirth", value: "2026-02-30", message: "Ngày sinh không hợp lệ." },
     { field: "heightCm", value: 99, message: "Chiều cao phải từ 100 đến 250 cm." },
     { field: "heightCm", value: 175.5, message: "Chiều cao phải là số nguyên từ 100 đến 250 cm." },
-    { field: "weightKg", value: 30, message: "Cân nặng phải lớn hơn 30 và không quá 300 kg." },
-    { field: "weightKg", value: 301, message: "Cân nặng phải lớn hơn 30 và không quá 300 kg." },
+    { field: "weightKg", value: 30, message: "Cân nặng phải lớn hơn 30, không quá 300 kg và có tối đa 2 chữ số thập phân." },
+    { field: "weightKg", value: 301, message: "Cân nặng phải lớn hơn 30, không quá 300 kg và có tối đa 2 chữ số thập phân." },
     { field: "preferredPositions", value: ["MID", "MID"], message: "Mỗi vị trí chỉ được chọn một lần." },
     { field: "preferredPositions", value: ["COACH"], message: "Vị trí ưa thích không hợp lệ." },
     { field: "avatarPath", value: `${OTHER_USER_ID}/avatar.png`, message: "Đường dẫn ảnh đại diện không hợp lệ." },
@@ -124,6 +124,28 @@ test("profile validation enforces database-aligned field bounds and unique posit
       kind: "validation",
       fieldErrors: { [fixture.field]: fixture.message },
     }, fixture.field);
+  }
+});
+
+test("profile weight validation rejects values outside numeric(5,2) precision without narrowing valid boundaries", () => {
+  for (const weightKg of [30.001, 68.555]) {
+    assert.deepEqual(
+      validateProfilePatch({ weightKg }, USER_ID, new Date("2026-08-26T00:00:00.000Z")),
+      {
+        ok: false,
+        kind: "validation",
+        fieldErrors: {
+          weightKg: "Cân nặng phải lớn hơn 30, không quá 300 kg và có tối đa 2 chữ số thập phân.",
+        },
+      },
+    );
+  }
+
+  for (const weightKg of [30.01, 68.55, 300]) {
+    assert.deepEqual(
+      validateProfilePatch({ weightKg }, USER_ID, new Date("2026-08-26T00:00:00.000Z")),
+      { ok: true, value: { weight_kg: weightKg } },
+    );
   }
 });
 
@@ -185,6 +207,12 @@ test("avatar validation enforces exact MIME types, positive size, and the 3 MiB 
   assert.deepEqual(validateAvatarFile({ type: "image/gif", size: 10 }), { ok: false, code: "type" });
   assert.deepEqual(validateAvatarFile({ type: "image/png", size: 0 }), { ok: false, code: "empty" });
   assert.deepEqual(validateAvatarFile({ type: "image/png", size: AVATAR_MAX_BYTES + 1 }), { ok: false, code: "size" });
+});
+
+test("avatar validation rejects inherited object keys that are not exact MIME entries", () => {
+  for (const type of ["toString", "constructor", "__proto__"]) {
+    assert.deepEqual(validateAvatarFile({ type, size: 1024 }), { ok: false, code: "type" });
+  }
 });
 
 test("canonical avatar paths are owner-only and never use a client-provided file name", () => {

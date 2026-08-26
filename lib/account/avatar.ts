@@ -31,7 +31,9 @@ function isUuid(value: string): boolean {
 }
 
 export function validateAvatarFile(file: AvatarFile): AvatarValidation {
-  if (!(file.type in EXTENSIONS)) return { ok: false, code: "type" };
+  if (!Object.prototype.hasOwnProperty.call(EXTENSIONS, file.type)) {
+    return { ok: false, code: "type" };
+  }
   if (!Number.isFinite(file.size) || file.size <= 0) return { ok: false, code: "empty" };
   if (file.size > AVATAR_MAX_BYTES) return { ok: false, code: "size" };
   return { ok: true, extension: EXTENSIONS[file.type as AvatarMime] };
