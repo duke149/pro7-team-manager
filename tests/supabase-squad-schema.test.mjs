@@ -30,6 +30,19 @@ async function readSquadMigration() {
   return readFile(path.join(migrationsDirectory, matchingFiles[0]), "utf8");
 }
 
+async function readAttachmentSafetyMigration() {
+  const matchingFiles = (await readdir(migrationsDirectory))
+    .filter((file) => file.endsWith("_preserve_existing_profile_attachment.sql"));
+
+  assert.equal(
+    matchingFiles.length,
+    1,
+    "expected exactly one CLI-generated attachment safety migration",
+  );
+
+  return readFile(path.join(migrationsDirectory, matchingFiles[0]), "utf8");
+}
+
 function extractFunction(sql, qualifiedName) {
   const escapedName = qualifiedName.replaceAll(".", "\\.");
   return sql.match(
@@ -261,4 +274,25 @@ test("service-role attachment RPC rechecks the verified actor and stays unreacha
     /grant execute on function public\.attach_team_member\( uuid, uuid, uuid, text, boolean, uuid, smallint, text, date \) to service_role;/,
   );
   assert.doesNotMatch(sql, /grant execute on function public\.attach_team_member[^;]*to authenticated/);
+});
+
+test("forward attachment migration preserves an existing global profile and makes the password flag monotonic", async () => {
+  const sql = normalizeSql(await readAttachmentSafetyMigration());
+  const functionSql = extractFunction(sql, "public.attach_team_member");
+
+  assert.ok(functionSql, "missing forward replacement for attach_team_member");
+  assert.match(functionSql, /language plpgsql security definer set search_path = ''/);
+  assert.match(
+    functionSql,
+    /on conflict \(id\) do update set display_name = profiles\.display_name, requires_password_change = profiles\.requires_password_change or excluded\.requires_password_change/,
+  );
+  assert.doesNotMatch(functionSql, /display_name = excluded\.display_name/);
+  assert.match(
+    sql,
+    /revoke execute on function public\.attach_team_member\( uuid, uuid, uuid, text, boolean, uuid, smallint, text, date \) from public, anon, authenticated, service_role;/,
+  );
+  assert.match(
+    sql,
+    /grant execute on function public\.attach_team_member\( uuid, uuid, uuid, text, boolean, uuid, smallint, text, date \) to service_role;/,
+  );
 });

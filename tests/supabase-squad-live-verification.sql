@@ -986,12 +986,51 @@ begin
       and player.official_position = 'DEF'
       and player.player_status = 'available'
       and player.join_date = current_date - 5
-      and profile.display_name = 'Attached One'
+      and profile.display_name = 'Attach One'
       and profile.requires_password_change = false
   ) then
     raise exception
       'squad live verification: authorized service attachment differs: %',
       v_attachment;
+  end if;
+  execute 'set local role service_role';
+
+  execute 'set local role postgres';
+  update public.profiles
+  set
+    display_name = 'Existing Cross-Team Name',
+    requires_password_change = true
+  where id = v_other_owner;
+  execute 'set local role service_role';
+
+  perform public.attach_team_member(
+    v_admin,
+    v_team,
+    v_other_owner,
+    'Submitted Replacement Name',
+    false,
+    v_member_role,
+    null::smallint,
+    'MID',
+    current_date
+  );
+
+  execute 'set local role postgres';
+  if not exists (
+    select 1
+    from public.profiles as profile
+    where profile.id = v_other_owner
+      and profile.display_name = 'Existing Cross-Team Name'
+      and profile.requires_password_change = true
+  ) or (
+    select pg_catalog.count(*)
+    from public.memberships as membership
+    where membership.user_id = v_other_owner
+      and membership.team_id = any (array[v_team, v_other_team]::uuid[])
+      and membership.status = 'active'
+  ) <> 2 then
+    raise exception
+      'squad live verification: cross-team attachment overwrote the global profile or cleared its password-change flag';
   end if;
   execute 'set local role service_role';
 

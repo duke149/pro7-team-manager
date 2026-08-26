@@ -6,6 +6,7 @@
 set role postgres;
 \ir supabase-squad-pre-migration-fixture.sql
 \ir ../supabase/migrations/20260825091904_pro7_squad_profiles.sql
+\ir ../supabase/migrations/20260826035128_preserve_existing_profile_attachment.sql
 \ir supabase-squad-live-verification.sql
 
 begin;

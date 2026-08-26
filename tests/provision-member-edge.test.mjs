@@ -216,6 +216,11 @@ function assertAllowedCors(response, expectedOrigin = origin) {
   assert.equal(response.headers.get("vary"), "Origin");
 }
 
+function assertSensitiveJsonIsNotCacheable(response) {
+  assert.equal(response.headers.get("cache-control"), "no-store");
+  assert.equal(response.headers.get("pragma"), "no-cache");
+}
+
 test("Edge handler reflects only an exact allowed origin for CORS preflight", async () => {
   const { handler } = await loadHandler();
   const allowed = await handler(request({ method: "OPTIONS", authorization: "", contentType: "" }));
@@ -327,6 +332,7 @@ test("Edge handler creates, confirms, and atomically attaches a truly new user",
   assert.ok(state.events.indexOf("getUser") < state.events.indexOf("service"));
   assert.ok(state.events.indexOf("authorize") < state.events.indexOf("service"));
   assertAllowedCors(response);
+  assertSensitiveJsonIsNotCacheable(response);
 });
 
 test("Edge handler attaches an existing user without generating or resetting a password", async () => {
@@ -351,6 +357,7 @@ test("Edge handler attaches an existing user without generating or resetting a p
     p_official_position: "MID",
     p_join_date: "2026-08-25",
   }]);
+  assertSensitiveJsonIsNotCacheable(response);
 });
 
 test("Edge handler returns a stable duplicate code for an active membership", async () => {
@@ -364,6 +371,7 @@ test("Edge handler returns a stable duplicate code for an active membership", as
   });
   assert.deepEqual(state.createAttributes, []);
   assert.deepEqual(state.attachArguments, []);
+  assertSensitiveJsonIsNotCacheable(response);
 });
 
 test("Edge handler deletes only its just-created Auth user when attachment fails", async () => {

@@ -110,6 +110,8 @@ function json(
     status,
     headers: {
       "content-type": "application/json; charset=utf-8",
+      "cache-control": "no-store",
+      pragma: "no-cache",
       ...corsHeaders(origin),
     },
   });
@@ -362,7 +364,7 @@ export function createProvisionTeamMemberHandler(
       }
       const validation = validateProvisionMemberPayload(body.value, dependencies.now());
       if (!validation.ok) {
-        return json({ ok: false, ...validation }, 422, origin);
+        return json({ ...validation }, 422, origin);
       }
       const payload = validation.value;
 
