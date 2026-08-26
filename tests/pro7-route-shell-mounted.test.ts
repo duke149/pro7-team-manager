@@ -38,6 +38,7 @@ test.before(async () => {
     HTMLElement: browserWindow.HTMLElement,
     Node: browserWindow.Node,
     Event: browserWindow.Event,
+    KeyboardEvent: browserWindow.KeyboardEvent,
     MouseEvent: browserWindow.MouseEvent,
     IS_REACT_ACT_ENVIRONMENT: true,
   })) Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
@@ -82,8 +83,8 @@ test.after(async () => {
   }
 });
 
-function routeShell() {
-  return createElement(Pro7RouteShell, props, createElement("p", null, "Nội dung thật"));
+function routeShell(overrides: Partial<Omit<RouteShellProps, "children">> = {}) {
+  return createElement(Pro7RouteShell, { ...props, ...overrides }, createElement("p", null, "Nội dung thật"));
 }
 
 test("persisted dark theme survives a fresh route-shell hydration without a mismatch", async () => {
@@ -130,6 +131,63 @@ test("persisted dark theme survives a fresh route-shell hydration without a mism
     });
     assert.deepEqual(recoverableErrors, []);
     assert.match(container.innerHTML, /pro7-shell dark/u);
+  } finally {
+    await act(async () => root?.unmount());
+  }
+});
+
+test("compact account menu exposes authorized destinations and returns focus after Escape", async () => {
+  Object.defineProperty(browserWindow, "localStorage", {
+    configurable: true,
+    value: { getItem: () => null, setItem: () => {} },
+  });
+  Object.defineProperty(browserWindow, "matchMedia", { configurable: true, value: () => ({ matches: false }) });
+  Object.assign(globalThis, {
+    __productShellPathname: "/teams/%C4%91%E1%BB%99i%20th%E1%BA%ADt/squad",
+    __productShellBrowserClient: { auth: { signOut: async () => ({ error: null }), getSession: async () => ({ data: { session: null }, error: null }) } },
+  });
+  const withSettings = {
+    ...props,
+    permissions: [...props.permissions, "settings.read"] as RouteShellProps["permissions"],
+  };
+  const element = routeShell(withSettings);
+  const ssr = renderToString(element);
+  browserWindow.document.body.innerHTML = `<div id="root">${ssr}</div>`;
+  const container = browserWindow.document.getElementById("root");
+  assert.ok(container);
+  const recoverableErrors: Error[] = [];
+  let root: Root | undefined;
+  try {
+    await act(async () => {
+      root = hydrateRoot(container, element, { onRecoverableError: (error) => recoverableErrors.push(error) });
+      await Promise.resolve();
+    });
+    assert.deepEqual(recoverableErrors, []);
+    const trigger = container.querySelector<HTMLButtonElement>(".account-menu-trigger");
+    assert.ok(trigger, "phone and tablet need one compact account-menu trigger");
+    assert.equal(trigger.getAttribute("aria-expanded"), "false");
+
+    await act(async () => trigger.click());
+    assert.equal(trigger.getAttribute("aria-expanded"), "true");
+    const menu = container.querySelector<HTMLElement>(".account-menu-popover");
+    assert.ok(menu);
+    assert.match(menu.textContent ?? "", /Hồ sơ/u);
+    assert.match(menu.textContent ?? "", /Cài đặt đội/u);
+    assert.match(menu.textContent ?? "", /Đăng xuất/u);
+
+    await act(async () => {
+      container.ownerDocument.dispatchEvent(new browserWindow.KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    });
+    assert.equal(container.querySelector(".account-menu-popover"), null);
+    assert.equal(container.ownerDocument.activeElement, trigger);
+
+    await act(async () => trigger.click());
+    assert.ok(container.querySelector(".account-menu-popover"));
+    await act(async () => {
+      container.ownerDocument.body.dispatchEvent(new browserWindow.Event("pointerdown", { bubbles: true }));
+      await Promise.resolve();
+    });
+    assert.equal(container.querySelector(".account-menu-popover") === null, true);
   } finally {
     await act(async () => root?.unmount());
   }

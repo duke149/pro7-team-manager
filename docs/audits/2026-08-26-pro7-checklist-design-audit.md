@@ -12,8 +12,9 @@ Phần bảng chi tiết bên dưới ghi lại baseline lúc bắt đầu audit
 
 | Hạng mục ưu tiên | Trạng thái sau sửa | Bằng chứng xác nhận |
 |---|---:|---|
-| Responsive tablet 761–900px | 🟢 | Shell chuyển sang navigation thu gọn tại 900px; scrim chỉ nhận pointer khi menu mở. Đã kiểm tra trực quan ở viewport khoảng 803px, light/dark, không còn header bị cắt hoặc lớp phủ chặn thao tác. |
-| Chữ nhỏ và touch target | 🟢 | Caption/metadata tối thiểu 12px desktop, 13px tablet/mobile; control tương tác chính tối thiểu 44px. |
+| Responsive tablet 768–1023px | 🟢 | Shell dùng header gọn + drawer 270px và ẩn bottom navigation. Browser tại 768px xác nhận nav `display:none`, drawer/scrim hoạt động, Squad giữ lưới hai cột và không tràn ngang. |
+| Chữ nhỏ và touch target | 🟢 | Phone navigation 12px; Profile label 14px; input mobile 16px/48px; Theme, Notification, Account, search và filter đạt tối thiểu 44px. |
+| Header và tài khoản mobile | 🟢 | Theme + notification badge + account menu đều dùng được tại 320–375px. Account menu đưa Hồ sơ/Cài đặt được phép/Đăng xuất vào popover, đóng bằng Escape và trả focus cho trigger. |
 | Admin Settings | 🟢 | Đã có 5 module dữ liệu thật: hồ sơ đội, thành viên & vai trò, thông báo trận đấu, audit log redacted và danger zone có xác nhận tên/slug. Mọi mutation vẫn đi qua RLS/RPC và permission riêng. |
 | Token màu và neon | 🟢 | Bổ sung primitive → semantic → component tokens; loại tên token sai nghĩa và toàn bộ giá trị xanh/neon còn sót. Hai theme chỉ dùng hệ đen–trắng–đỏ/trung tính. |
 | Modal keyboard | 🟢 | Modal Thêm cầu thủ dùng primitive chung có initial focus, Tab/Shift+Tab trap, Escape và trả focus; callback đóng ổn định khi parent re-render. |
@@ -23,6 +24,21 @@ Phần bảng chi tiết bên dưới ghi lại baseline lúc bắt đầu audit
 | Reduced motion | 🟢 | Có `prefers-reduced-motion: reduce` để tắt animation/transition không thiết yếu. |
 
 Các mục còn 🟡/🔴 ở bảng baseline là khuyến nghị dài hạn ngoài lát cắt đã duyệt (ví dụ VoiceOver/NVDA trên thiết bị thật, drag/drop avatar có progress, token governance/changelog đầy đủ và analytics nâng cao); chúng không được tuyên bố đã hoàn thành nếu chưa có bằng chứng tương ứng.
+
+## UI/UX Pro Max responsive re-audit
+
+Đợt kiểm tra bổ sung dùng trực tiếp UI/UX Pro Max cùng phiên browser localhost đã đăng nhập. Viewport được đo tại 320, 375, 414, 768, 1024 và 1440px; kiểm tra light/dark trên Overview và Profile.
+
+| Màn hình | Viewport | Kết quả |
+|---|---:|---|
+| Overview | 375px | Header 72px, ba action 44×44px, notification popover 355px nằm trong viewport, bottom nav cố định 72px và phân bố đều bốn route Member. |
+| Squad | 768px | Không còn bottom nav 138px rơi xuống cuối trang; drawer là navigation duy nhất, grid hai cột 358px và body không overflow. |
+| Matches | 1024px | Sidebar desktop 250px, bottom nav ẩn, content không overflow và RSVP hierarchy giữ nguyên. |
+| Overview | 1440px | Sidebar/content ratios và bốn stat cards giữ nguyên giao diện đã duyệt. |
+| Profile | 375px | Form một cột, input 48px/16px, label 14px; cả light/dark không overflow. |
+| Tactics | 375px | Member empty/applied state nằm gọn trong viewport; bottom navigation không che nội dung. |
+
+Funds và Admin Settings không được tuyên bố browser-verified trong phiên Member vì route authority trả 404 theo đúng permission; CSS responsive của hai module vẫn nằm trong automated contract/build và cần được recheck bằng phiên Admin khi thực hiện lần nghiệm thu cuối.
 
 ## Phát hiện ưu tiên
 

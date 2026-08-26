@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import "./responsive.css";
 
 const title = "PRO7 Team Manager — Quản lý đội bóng 7 người";
 const description = "Điều hành đội hình, trận đấu, chiến thuật và quỹ đội bóng trong một trung tâm chỉ huy hiện đại.";

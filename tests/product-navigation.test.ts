@@ -150,6 +150,28 @@ test("hosted route navigation preserves the five-slot Squad order with route lin
   assert.doesNotMatch(html, /href="\/account\/profile"/u);
 });
 
+test("Admin mobile navigation renders all five authorized routes in the hosted order", () => {
+  const mobile = renderToStaticMarkup(
+    createElement(Pro7RouteNavigation, {
+      team: admin.team,
+      roleName: admin.membership.roleName,
+      email: "admin@example.com",
+      permissions: [...admin.permissions, "players.manage", "tactics.read"],
+      currentPath: "/teams/%C4%91%E1%BB%99i%20b%C3%B3ng/funds",
+      mobile: true,
+    }),
+  );
+
+  assert.deepEqual(destinations(mobile), [
+    "/teams/%C4%91%E1%BB%99i%20b%C3%B3ng/overview",
+    "/teams/%C4%91%E1%BB%99i%20b%C3%B3ng/squad",
+    "/teams/%C4%91%E1%BB%99i%20b%C3%B3ng/matches",
+    "/teams/%C4%91%E1%BB%99i%20b%C3%B3ng/tactics",
+    "/teams/%C4%91%E1%BB%99i%20b%C3%B3ng/funds",
+  ]);
+  assert.match(mobile, /href="\/teams\/%C4%91%E1%BB%99i%20b%C3%B3ng\/funds" class="active"/u);
+});
+
 test("hosted route navigation hides only unauthorized Funds without changing the mobile link order", () => {
   const permissions = ["team.read", "players.read", "matches.read", "tactics.read"] as const;
   const desktop = renderToStaticMarkup(
