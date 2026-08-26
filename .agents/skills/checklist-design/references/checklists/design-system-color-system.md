@@ -35,7 +35,7 @@ A complete parallel set of semantic token values for the opposite mode
 _Tip: It is not as simple as inverting colors of one mode to the other, they require their own system (still using the same primitive colors though)_
 
 ### Brand color integration
-Brand colors mapped into the semantic system in a way that maintains accessibility 
+Brand colors mapped into the semantic system in a way that maintains accessibility
 
 _Tip: Where brand values fall below contrast thresholds, they are restricted to decorative contexts, with accessible token values carrying the text and interactive roles._
 

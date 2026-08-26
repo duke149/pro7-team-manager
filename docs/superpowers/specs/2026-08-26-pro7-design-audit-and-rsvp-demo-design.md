@@ -74,4 +74,3 @@ Live verification sequence:
 - Production build, rendered HTML tests, scoped lint/type checks, and diff checks pass.
 - Browser verification is performed on `http://localhost:3000` using real Admin and Member sessions and the connected Supabase project.
 - Supabase post-apply migration inventory and security/performance advisors are recorded.
-

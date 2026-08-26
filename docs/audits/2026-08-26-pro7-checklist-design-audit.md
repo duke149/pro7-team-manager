@@ -1,7 +1,7 @@
 # PRO7 frontend audit theo Checklist Design
 
-Ngày audit: 2026-08-26  
-Phạm vi: frontend đang render tại `http://localhost:3000`, gồm Login, Overview, Squad, Match, Tactics, Funds, Admin Settings, Account Profile; light/dark theme; source component TSX và `app/globals.css`.  
+Ngày audit: 2026-08-26
+Phạm vi: frontend đang render tại `http://localhost:3000`, gồm Login, Overview, Squad, Match, Tactics, Funds, Admin Settings, Account Profile; light/dark theme; source component TSX và `app/globals.css`.
 Checklist gốc: [Checklist Design](https://www.checklist.design/skill)
 
 Quy ước: 🟢 đạt; 🟡 đạt một phần/cần cải thiện; 🔴 chưa đạt; ⚪ không áp dụng cho MVP hiện tại; ❔ không đủ bằng chứng để xác nhận.

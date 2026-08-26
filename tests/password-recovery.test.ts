@@ -24,4 +24,3 @@ test("password recovery callback is fixed to the local origin", () => {
   assert.throws(() => passwordRecoveryRedirect("https://example.com/path"));
   assert.throws(() => passwordRecoveryRedirect("javascript:alert(1)"));
 });
-

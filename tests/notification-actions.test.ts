@@ -24,4 +24,3 @@ test("mark-read fails closed for malformed IDs, missing callers, or invisible ro
   assert.equal((await markNotificationRead(request(), ID, { ...base, getCurrentUser: async () => null })).status, 401);
   assert.equal((await markNotificationRead(request(), ID, base)).status, 404);
 });
-

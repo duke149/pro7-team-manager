@@ -18,4 +18,3 @@ test("danger-zone delete requires exact team name and slug confirmation", () => 
   assert.equal(validateSettingsMutation({ action: "delete", confirmation: "pro7 fc", slugConfirmation: "pro7-fc" }).ok, true, "target identity is checked against canonical context in the action");
   assert.equal(validateSettingsMutation({ action: "delete", confirmation: "PRO7 FC" }).ok, false);
 });
-

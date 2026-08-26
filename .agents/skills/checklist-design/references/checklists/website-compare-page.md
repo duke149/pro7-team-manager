@@ -14,7 +14,7 @@ _Tip: A compare page that claims superiority on every dimension reads as untrust
 ### Feature comparison table
 A side-by-side table of key features showing what each product includes, with clear tick and cross indicators
 
-_Tip: This table focused on decision-relevant features 
+_Tip: This table focused on decision-relevant features
 
 This table doesn't have to mention every single feature, just the most persuasive and relevant to influencing decision_
 

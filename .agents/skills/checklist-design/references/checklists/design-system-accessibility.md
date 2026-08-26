@@ -34,4 +34,4 @@ Components tested with at least VoiceOver on Safari and NVDA on Chrome before sh
 A shared annotation kit used in design files to specify ARIA labels, roles, reading order, and focus behaviour
 
 ### Accessibility in contribution guidelines
-Ensuring accessibility requirements are part of the component contribution checklist 
+Ensuring accessibility requirements are part of the component contribution checklist

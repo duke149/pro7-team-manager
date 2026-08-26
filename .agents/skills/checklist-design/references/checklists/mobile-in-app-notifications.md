@@ -35,4 +35,4 @@ For when there are no notifications, to indicate they haven’t received any… 
 A direct link from the notifications screen to notification preferences, for users who want to adjust what they receive
 
 ### Notification content
-Information relevant to triggering the notification e.g. the change, author and time it occurred 
+Information relevant to triggering the notification e.g. the change, author and time it occurred

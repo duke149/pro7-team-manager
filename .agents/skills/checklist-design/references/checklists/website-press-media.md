@@ -25,7 +25,7 @@ Downloadable logos, product screenshots, and founder headshots in multiple forma
 _Tip: Light and dark logo versions are both routinely needed by journalists, since a press kit without both creates unnecessary back-and-forth_
 
 ### Key statistics
-Notable numbers that journalists can use to characterise the company e.g. customers, revenue milestones, countries, team size 
+Notable numbers that journalists can use to characterise the company e.g. customers, revenue milestones, countries, team size
 
 ### Recent press releases
 Archived official announcements for journalists researching the company's history
