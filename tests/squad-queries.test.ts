@@ -203,19 +203,16 @@ test("listAssignableSquadRoles returns only same-team non-owner roles without te
   const fixture = clientDouble({
     roles: [response([
       { id: "role-admin", name: "Quản lý", slug: "admin", is_system: true },
+      { id: "role-custom", name: "Đội trưởng", slug: "captain", is_system: false },
       { id: "role-member", name: "Cầu thủ", slug: "member", is_system: true },
       { id: "role-owner", name: "Chủ sở hữu", slug: "owner", is_system: true },
-      { id: "role-custom", name: "Đội trưởng", slug: "captain", is_system: false },
     ])],
     rolePermissions: [response([
-      { role_id: "role-admin", permission_code: "players.manage" },
       { role_id: "role-admin", permission_code: "team.delete" },
-      { role_id: "role-member", permission_code: "players.read" },
-      { role_id: "role-custom", permission_code: "players.read" },
     ])],
   });
 
-  const result = await listAssignableSquadRoles("team-1", { supabase: fixture.client });
+  const result = await listAssignableSquadRoles("team-1", true, { supabase: fixture.client });
 
   assert.deepEqual(result, {
     ok: true,
@@ -230,7 +227,6 @@ test("listAssignableSquadRoles returns only same-team non-owner roles without te
       calls: [
         { method: "select", arguments: ["id,name,slug,is_system"] },
         { method: "eq", arguments: ["team_id", "team-1"] },
-        { method: "order", arguments: ["name", { ascending: true }] },
         { method: "order", arguments: ["id", { ascending: true }] },
         { method: "limit", arguments: [64] },
       ],
@@ -239,9 +235,10 @@ test("listAssignableSquadRoles returns only same-team non-owner roles without te
       table: "role_permissions",
       calls: [
         { method: "select", arguments: ["role_id,permission_code"] },
-        { method: "in", arguments: ["role_id", ["role-admin", "role-member", "role-custom"]] },
+        { method: "in", arguments: ["role_id", ["role-admin", "role-custom", "role-member"]] },
+        { method: "eq", arguments: ["permission_code", "team.delete"] },
         { method: "order", arguments: ["role_id", { ascending: true }] },
-        { method: "limit", arguments: [2048] },
+        { method: "limit", arguments: [4] },
       ],
     },
   ]);
@@ -254,8 +251,47 @@ test("listAssignableSquadRoles fails closed on malformed or inaccessible role pe
   });
 
   assert.deepEqual(
-    await listAssignableSquadRoles("team-1", { supabase: fixture.client }),
+    await listAssignableSquadRoles("team-1", true, { supabase: fixture.client }),
     { ok: false, error: "server" },
+  );
+});
+
+test("listAssignableSquadRoles refuses an RLS-incomplete caller before database access", async () => {
+  const fixture = clientDouble();
+
+  assert.deepEqual(
+    await listAssignableSquadRoles("team-1", false, { supabase: fixture.client }),
+    { ok: false, error: "server" },
+  );
+  assert.deepEqual(fixture.calls, []);
+});
+
+test("listAssignableSquadRoles keyset-pages beyond 64 roles without silent truncation", async () => {
+  const roleRows = Array.from({ length: 65 }, (_, offset) => ({
+    id: `role-${String(offset + 1).padStart(3, "0")}`,
+    name: `Vai trò ${String(offset + 1).padStart(3, "0")}`,
+    slug: `role-${String(offset + 1).padStart(3, "0")}`,
+    is_system: false,
+  }));
+  const fixture = clientDouble({
+    roles: [response(roleRows.slice(0, 64)), response(roleRows.slice(64))],
+    rolePermissions: [response([]), response([])],
+  });
+
+  const result = await listAssignableSquadRoles("team-1", true, { supabase: fixture.client });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.ok ? result.roles.length : 0, 65);
+  assert.equal(result.ok ? result.roles.at(-1)?.id : null, "role-065");
+  assert.deepEqual(
+    fixture.calls.filter(({ table }) => table === "roles")[1]?.query.calls,
+    [
+      { method: "select", arguments: ["id,name,slug,is_system"] },
+      { method: "eq", arguments: ["team_id", "team-1"] },
+      { method: "gt", arguments: ["id", "role-064"] },
+      { method: "order", arguments: ["id", { ascending: true }] },
+      { method: "limit", arguments: [64] },
+    ],
   );
 });
 

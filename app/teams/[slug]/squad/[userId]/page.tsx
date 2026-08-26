@@ -20,6 +20,7 @@ type DetailPageArguments = {
   ) => Promise<SquadDetailResult>;
   listAssignableSquadRoles: (
     teamId: string,
+    canReadRoles: boolean,
   ) => Promise<SquadAssignableRolesResult>;
   denied: () => unknown;
 };
@@ -70,7 +71,10 @@ export async function renderSquadPlayerPage(arguments_: DetailPageArguments) {
     && result.player.membershipStatus === "active"
     && !isOwner;
   const rolesResult = isActiveManageTarget
-    ? await arguments_.listAssignableSquadRoles(context.team.id)
+    ? await arguments_.listAssignableSquadRoles(
+      context.team.id,
+      hasPermission(context, "roles.read"),
+    )
     : { ok: true as const, roles: [] };
   const hasCurrentRole = rolesResult.ok
     && rolesResult.roles.some((role) => role.id === result.player.role.id);

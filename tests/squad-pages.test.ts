@@ -42,7 +42,7 @@ type DetailPageModule = {
       userId: string,
       includeAdminNotes: boolean,
     ) => Promise<SquadDetailResult>;
-    listAssignableSquadRoles: (teamId: string) => Promise<SquadAssignableRolesResult>;
+    listAssignableSquadRoles: (teamId: string, canReadRoles: boolean) => Promise<SquadAssignableRolesResult>;
     denied: () => unknown;
   }): Promise<unknown>;
 };
@@ -80,6 +80,7 @@ const ADMIN_CONTEXT: TeamAccessContext = {
     "players.read",
     "players.manage",
     "members.manage",
+    "roles.read",
   ],
 };
 
@@ -420,6 +421,28 @@ test("Dual manager detail fails closed when assignable roles cannot be loaded", 
 
   assert.match(markup, /Không thể tải quyền quản trị cầu thủ/u);
   assert.doesNotMatch(markup, /Chỉnh sửa thông tin đội|name="roleId"|Không được đưa vào form khi role query lỗi/u);
+});
+
+test("Dual manager without roles.read locks role mutation before an RLS-incomplete query", async () => {
+  let canReadRoles: boolean | undefined;
+  const output = await detailPage.renderSquadPlayerPage({
+    params: Promise.resolve({ slug: "pro7-fc", userId: PLAYER.userId }),
+    requireTeamPermission: async () => memberContext([
+      "players.read",
+      "players.manage",
+      "members.manage",
+    ]),
+    getSquadPlayer: async () => ({ ok: true, player: DETAIL }),
+    listAssignableSquadRoles: async (_teamId, canRead) => {
+      canReadRoles = canRead;
+      return { ok: false, error: "server" };
+    },
+    denied: () => "SAFE_DENIAL",
+  });
+
+  assert.equal(canReadRoles, false);
+  assert.match(html(output), /Không thể tải quyền quản trị cầu thủ/u);
+  assert.doesNotMatch(html(output), /name="roleId"|Chỉnh sửa thông tin đội/u);
 });
 
 test("Squad loading and error boundaries preserve the roster surface with honest text", () => {

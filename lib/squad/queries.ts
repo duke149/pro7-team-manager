@@ -230,57 +230,77 @@ async function resolveClient(
 
 export async function listAssignableSquadRoles(
   teamId: string,
+  canReadRoles: boolean,
   dependencies: QueryDependencies = {},
 ): Promise<SquadAssignableRolesResult> {
+  if (!canReadRoles) return { ok: false, error: "server" };
   try {
     const client = await resolveClient(dependencies.supabase);
-    const rolesResult = await client
-      .from("roles")
-      .select("id,name,slug,is_system")
-      .eq("team_id", teamId)
-      .order("name", { ascending: true })
-      .order("id", { ascending: true })
-      .limit(64);
-    if (
-      rolesResult.error ||
-      !Array.isArray(rolesResult.data) ||
-      !rolesResult.data.every(isRoleRow)
-    ) {
-      return { ok: false, error: "server" };
+    const assignableRows: RoleRow[] = [];
+    let cursor: string | null = null;
+    while (true) {
+      let query = client
+        .from("roles")
+        .select("id,name,slug,is_system")
+        .eq("team_id", teamId);
+      if (cursor) query = query.gt("id", cursor);
+      const rolesResult = await query
+        .order("id", { ascending: true })
+        .limit(64);
+      if (
+        rolesResult.error ||
+        !Array.isArray(rolesResult.data) ||
+        !rolesResult.data.every(isRoleRow)
+      ) {
+        return { ok: false, error: "server" };
+      }
+      if (rolesResult.data.length === 0) break;
+      if (rolesResult.data.some((role, index) => (
+        (cursor !== null && role.id <= cursor) ||
+        (index > 0 && role.id <= rolesResult.data[index - 1].id)
+      ))) {
+        return { ok: false, error: "server" };
+      }
+
+      const nonOwnerRoles = rolesResult.data.filter(
+        (role) => !(role.is_system && role.slug === "owner"),
+      );
+      if (nonOwnerRoles.length > 0) {
+        const permissionsResult = await client
+          .from("role_permissions")
+          .select("role_id,permission_code")
+          .in("role_id", nonOwnerRoles.map((role) => role.id))
+          .eq("permission_code", "team.delete")
+          .order("role_id", { ascending: true })
+          .limit(nonOwnerRoles.length + 1);
+        if (
+          permissionsResult.error ||
+          !Array.isArray(permissionsResult.data) ||
+          permissionsResult.data.length > nonOwnerRoles.length ||
+          !permissionsResult.data.every(isRolePermissionRow)
+        ) {
+          return { ok: false, error: "server" };
+        }
+        const rolesWithTeamDelete = new Set(
+          permissionsResult.data.map((permission) => permission.role_id),
+        );
+        assignableRows.push(...nonOwnerRoles.filter(
+          (role) => !rolesWithTeamDelete.has(role.id),
+        ));
+      }
+
+      cursor = rolesResult.data.at(-1)?.id ?? null;
+      if (rolesResult.data.length < 64) break;
     }
 
-    const nonOwnerRoles = rolesResult.data.filter(
-      (role) => !(role.is_system && role.slug === "owner"),
-    );
-    if (nonOwnerRoles.length === 0) return { ok: true, roles: [] };
-
-    const permissionsResult = await client
-      .from("role_permissions")
-      .select("role_id,permission_code")
-      .in("role_id", nonOwnerRoles.map((role) => role.id))
-      .order("role_id", { ascending: true })
-      .limit(2048);
-    if (
-      permissionsResult.error ||
-      !Array.isArray(permissionsResult.data) ||
-      !permissionsResult.data.every(isRolePermissionRow)
-    ) {
-      return { ok: false, error: "server" };
-    }
-
-    const rolesWithTeamDelete = new Set(
-      permissionsResult.data
-        .filter((permission) => permission.permission_code === "team.delete")
-        .map((permission) => permission.role_id),
-    );
-    const roles: SquadAssignableRole[] = nonOwnerRoles
-      .filter((role) => !rolesWithTeamDelete.has(role.id))
+    const roles: SquadAssignableRole[] = assignableRows
       .map((role) => Object.freeze({
         id: role.id,
         name: role.name,
         slug: role.slug,
         isSystem: role.is_system,
-      }));
+      }))
+      .sort((left, right) => compareText(left.name, right.name) || compareText(left.id, right.id));
     return { ok: true, roles: Object.freeze(roles) };
   } catch {
     return { ok: false, error: "server" };
