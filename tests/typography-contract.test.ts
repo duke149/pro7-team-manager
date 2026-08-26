@@ -46,3 +46,16 @@ test("form controls inherit the product font and phone inputs remain 16px", asyn
   assert.match(css, /input,\s*select,\s*textarea[\s\S]*font-size:\s*var\(--type-input\)/iu);
   assert.equal((await stat(fontPath)).isFile(), true);
 });
+
+test("shell and authentication surfaces use semantic readable typography", async () => {
+  const css = await readFile(typographyPath, "utf8");
+  assert.match(css, /\.page-heading h1[\s\S]*font-size:\s*var\(--type-title-lg\)/u);
+  assert.match(css, /\.main-nav :is\(a, button\)[\s\S]*font-size:\s*var\(--type-control\)/u);
+  assert.match(css, /\.mobile-nav a[\s\S]*font-size:\s*var\(--type-caption\)/u);
+  assert.match(css, /\.account-menu-popover :is\(a, button\)[\s\S]*font-size:\s*var\(--type-control\)/u);
+  assert.match(css, /\.login-copy h1[\s\S]*font-size:\s*var\(--type-title-lg\)/u);
+  assert.match(css, /\.login-form label[\s\S]*font-size:\s*var\(--type-label\)/u);
+  assert.match(css, /\.login-form input[\s\S]*font-size:\s*var\(--type-input\)/u);
+  assert.match(css, /\.login-form button[\s\S]*font-size:\s*var\(--type-control\)/u);
+  assert.match(css, /\.login-error[\s\S]*font-size:\s*var\(--type-body-sm\)/u);
+});

@@ -91,6 +91,109 @@ h6 {
   font-variant-numeric: tabular-nums;
 }
 
+/* Product shell, account controls, and authentication */
+.logo > div,
+.login-brand > div,
+.account-profile-brand,
+.page-heading,
+.main-nav,
+.mobile-nav,
+.account-menu,
+.login-shell {
+  font-family: var(--font-sans);
+}
+
+.logo small,
+.team-picker > span,
+.nav-label,
+.page-heading > span,
+.login-brand small,
+.login-copy p {
+  font-size: var(--type-label);
+  font-weight: var(--weight-bold);
+  line-height: var(--leading-control);
+  letter-spacing: var(--tracking-caps);
+}
+
+.page-heading h1 {
+  font-size: var(--type-title-lg);
+  font-weight: var(--weight-bold);
+  line-height: var(--leading-heading);
+  letter-spacing: var(--tracking-tight);
+}
+
+.page-heading p,
+.account-menu-summary span,
+.account-menu-identity span {
+  font-size: var(--type-body-sm);
+  line-height: var(--leading-body);
+}
+
+.main-nav :is(a, button) {
+  font-size: var(--type-control);
+  font-weight: var(--weight-semibold);
+  line-height: var(--leading-control);
+}
+
+.mobile-nav a {
+  font-size: var(--type-caption);
+  font-weight: var(--weight-semibold);
+  line-height: var(--leading-control);
+  white-space: normal;
+  text-wrap: balance;
+}
+
+.account-menu-popover :is(a, button) {
+  font-size: var(--type-control);
+  font-weight: var(--weight-semibold);
+  line-height: var(--leading-control);
+}
+
+.login-copy h1 {
+  font-size: var(--type-title-lg);
+  font-weight: var(--weight-bold);
+  line-height: var(--leading-heading);
+  letter-spacing: var(--tracking-tight);
+}
+
+.login-copy span,
+.login-footnote,
+.login-success {
+  font-size: var(--type-body-sm);
+  line-height: var(--leading-relaxed);
+  letter-spacing: var(--tracking-normal);
+}
+
+.login-form label {
+  font-size: var(--type-label);
+  font-weight: var(--weight-semibold);
+  line-height: var(--leading-control);
+  letter-spacing: var(--tracking-normal);
+}
+
+.login-form input {
+  font-size: var(--type-input);
+  font-weight: var(--weight-regular);
+  line-height: var(--leading-body);
+}
+
+.login-form button,
+.password-visibility,
+.login-secondary-link,
+.logout-button,
+.profile-button,
+.theme-button {
+  font-size: var(--type-control);
+  font-weight: var(--weight-bold);
+  line-height: var(--leading-control);
+}
+
+.login-error {
+  font-size: var(--type-body-sm);
+  font-weight: var(--weight-regular);
+  line-height: var(--leading-relaxed);
+}
+
 @media (max-width: 767px) {
   :root {
     --type-label: 13px;
