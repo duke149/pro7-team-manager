@@ -59,4 +59,8 @@ test("member dues enforce month periods, due dates, lifecycle shape, and optimis
   assert.deepEqual(validateMemberDuePayload({ action: "voidPayment", dueId: ENTRY_ID, reason: "  Chuyển khoản nhầm  ", expectedUpdatedAt: UPDATED_AT }), {
     ok: true, value: { action: "voidPayment", dueId: ENTRY_ID, reason: "Chuyển khoản nhầm", expectedUpdatedAt: UPDATED_AT },
   });
+  assert.deepEqual(validateMemberDuePayload({ action: "waive", dueId: ENTRY_ID, expectedUpdatedAt: UPDATED_AT }), {
+    ok: true, value: { action: "waive", dueId: ENTRY_ID, expectedUpdatedAt: UPDATED_AT },
+  });
+  assert.deepEqual(validateMemberDuePayload({ action: "waive", dueId: ENTRY_ID, expectedUpdatedAt: UPDATED_AT, note: "injected" }), { ok: false, kind: "malformed" });
 });

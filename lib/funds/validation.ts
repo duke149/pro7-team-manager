@@ -23,6 +23,7 @@ export type FinanceEntryMutationPayload = Readonly<{
 export type MemberDuePayload =
   | Readonly<{ action: "create"; userId: string; periodStart: string; amountVnd: number; dueDate: string }>
   | Readonly<{ action: "pay"; dueId: string; note: string | null; expectedUpdatedAt: string }>
+  | Readonly<{ action: "waive"; dueId: string; expectedUpdatedAt: string }>
   | Readonly<{ action: "voidPayment"; dueId: string; reason: string; expectedUpdatedAt: string }>;
 
 function record(value: unknown): value is Record<string, unknown> {
@@ -93,6 +94,13 @@ export function validateMemberDuePayload(value: unknown): { ok: true; value: Mem
     if (value.note !== null && !note) errors.note = "Ghi chú phải từ 1 đến 300 ký tự.";
     if (!isIsoTimestamp(value.expectedUpdatedAt)) errors.expectedUpdatedAt = "Phiên bản dữ liệu không hợp lệ.";
     return Object.keys(errors).length > 0 ? validation(errors) : { ok: true, value: Object.freeze({ action: "pay", dueId: value.dueId as string, note, expectedUpdatedAt: value.expectedUpdatedAt as string }) };
+  }
+  if (value.action === "waive") {
+    if (!exactKeys(value, ["action", "dueId", "expectedUpdatedAt"])) return { ok: false, kind: "malformed" };
+    const errors: Record<string, string> = {};
+    if (!isUuid(value.dueId)) errors.dueId = "Khoản phí không hợp lệ.";
+    if (!isIsoTimestamp(value.expectedUpdatedAt)) errors.expectedUpdatedAt = "Phiên bản dữ liệu không hợp lệ.";
+    return Object.keys(errors).length > 0 ? validation(errors) : { ok: true, value: Object.freeze({ action: "waive", dueId: value.dueId as string, expectedUpdatedAt: value.expectedUpdatedAt as string }) };
   }
   if (value.action === "voidPayment") {
     if (!exactKeys(value, ["action", "dueId", "reason", "expectedUpdatedAt"])) return { ok: false, kind: "malformed" };

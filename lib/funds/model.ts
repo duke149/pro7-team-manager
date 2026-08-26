@@ -28,6 +28,11 @@ export type MemberDue = Readonly<{
   updatedAt: string;
 }>;
 
+export type DueCandidate = Readonly<{
+  userId: string;
+  displayName: string;
+}>;
+
 export type FundsData = Readonly<{
   periodStart: string;
   balanceVnd: number;
@@ -40,6 +45,7 @@ export type FundsData = Readonly<{
   paidDuesCount: number;
   totalDuesCount: number;
   dues: readonly MemberDue[];
+  dueCandidates: readonly DueCandidate[];
   recentEntries: readonly FinanceEntry[];
 }>;
 

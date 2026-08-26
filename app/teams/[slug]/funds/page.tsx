@@ -17,6 +17,7 @@ function currentPeriod() {
 export async function renderFundsPage(
   arguments_: {
     params: Promise<{ slug: string }>;
+    searchParams?: Promise<Record<string, string | string[] | undefined>>;
     requireTeamPermission: (slug: string, permission: PermissionCode) => Promise<TeamAccessContext | null>;
     getFunds?: (teamId: string, periodStart: string) => Promise<FundsResult>;
     denied: () => unknown;
@@ -31,14 +32,17 @@ export async function renderFundsPage(
   const context = await arguments_.requireTeamPermission(slug, "finance.read");
   if (!context) return arguments_.denied();
   const periodStart = arguments_.periodStart ?? currentPeriod();
-  const result = arguments_.getFunds ? await arguments_.getFunds(context.team.id, periodStart) : { ok: true as const, data: { periodStart, balanceVnd: 0, monthIncomeVnd: 0, monthIncomeCount: 0, monthExpenseVnd: 0, monthExpenseCount: 0, pendingDuesVnd: 0, pendingDuesCount: 0, paidDuesCount: 0, totalDuesCount: 0, dues: [], recentEntries: [] } };
-  return <FundsView team={context.team} permissions={context.permissions} result={result} />;
+  const result = arguments_.getFunds ? await arguments_.getFunds(context.team.id, periodStart) : { ok: true as const, data: { periodStart, balanceVnd: 0, monthIncomeVnd: 0, monthIncomeCount: 0, monthExpenseVnd: 0, monthExpenseCount: 0, pendingDuesVnd: 0, pendingDuesCount: 0, paidDuesCount: 0, totalDuesCount: 0, dues: [], dueCandidates: [], recentEntries: [] } };
+  const search = arguments_.searchParams ? await arguments_.searchParams : {};
+  return <FundsView team={context.team} permissions={context.permissions} result={result} initialDialog={search.add === "expense" ? "entry" : undefined} />;
 }
 
 export default async function FundsPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ slug: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  return renderFundsPage({ params, requireTeamPermission, getFunds, denied: notFound });
+  return renderFundsPage({ params, searchParams, requireTeamPermission, getFunds, denied: notFound });
 }

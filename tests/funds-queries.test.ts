@@ -23,7 +23,7 @@ const dues = [
 
 function dependencies(overrides: { entries?: unknown[]; dues?: unknown[]; profiles?: unknown[]; failTable?: string } = {}) {
   const calls: Array<{ table: string; operation: string; args: unknown[] }> = [];
-  const rows: Record<string, unknown[]> = { finance_entries: overrides.entries ?? entries, member_dues: overrides.dues ?? dues, profiles: overrides.profiles ?? [{ id: USER_A, display_name: "Nguyễn An" }, { id: USER_B, display_name: "Trần Bình" }] };
+  const rows: Record<string, unknown[]> = { finance_entries: overrides.entries ?? entries, member_dues: overrides.dues ?? dues, memberships: [{ user_id: USER_A }, { user_id: USER_B }, { user_id: "00000000-0000-4000-8000-000000000004" }], profiles: overrides.profiles ?? [{ id: USER_A, display_name: "Nguyễn An" }, { id: USER_B, display_name: "Trần Bình" }, { id: "00000000-0000-4000-8000-000000000004", display_name: "Lê Cường" }] };
   function query(table: string) {
     const state = { gt: null as string | null };
     const chain = {
@@ -50,6 +50,7 @@ test("fund queries explicitly exclude voids and derive authoritative balance/mon
       { id: DUE_A, userId: USER_A, displayName: "Nguyễn An", periodStart: "2026-10-01", amountVnd: 500_000, dueDate: "2026-10-10", status: "paid", paidAt: "2026-10-18T08:00:00.000Z", financeEntryId: entries[2]!.id, updatedAt: "2026-10-18T08:00:00.000Z" },
       { id: DUE_B, userId: USER_B, displayName: "Trần Bình", periodStart: "2026-10-01", amountVnd: 500_000, dueDate: "2026-10-10", status: "pending", paidAt: null, financeEntryId: null, updatedAt: "2026-10-01T08:00:00.000Z" },
     ],
+    dueCandidates: [{ userId: "00000000-0000-4000-8000-000000000004", displayName: "Lê Cường" }],
     recentEntries: [
       { id: ENTRY_B, direction: "expense", amountVnd: 750_000, category: "equipment", occurredOn: "2026-10-24", description: "Mua bóng", createdAt: "2026-10-24T08:00:00.000Z", updatedAt: "2026-10-24T08:00:00.000Z" },
       { id: entries[2]!.id, direction: "income", amountVnd: 500_000, category: "member_due", occurredOn: "2026-10-18", description: "Phí tháng 10", createdAt: "2026-10-18T08:00:00.000Z", updatedAt: "2026-10-18T08:00:00.000Z" },
@@ -58,6 +59,7 @@ test("fund queries explicitly exclude voids and derive authoritative balance/mon
   } });
   assert.ok(state.calls.some((call) => call.table === "finance_entries" && call.operation === "is" && call.args[0] === "voided_at" && call.args[1] === null));
   assert.ok(state.calls.some((call) => call.table === "member_dues" && call.operation === "eq" && call.args[0] === "period_start" && call.args[1] === "2026-10-01"));
+  assert.ok(state.calls.some((call) => call.table === "memberships" && call.operation === "eq" && call.args[0] === "status" && call.args[1] === "active"));
 });
 
 test("fund queries fail closed on malformed VND, due lifecycle, identity, or database results", async () => {

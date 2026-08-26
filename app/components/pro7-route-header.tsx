@@ -17,6 +17,13 @@ export type Pro7RouteHeaderProps = {
   onOpenMenu: () => void;
 };
 
+function isTeamRoute(pathname: string, slug: string, route: string) {
+  const normalized = pathname.replace(/\/$/u, "").split(/[?#]/u, 1)[0];
+  const encoded = `/teams/${encodeURIComponent(slug)}/${route}`;
+  const decoded = `/teams/${slug}/${route}`;
+  return normalized === encoded || normalized === decoded || normalized.startsWith(`${encoded}/`) || normalized.startsWith(`${decoded}/`);
+}
+
 function squadHeading(teamName: string) {
   return {
     eyebrow: `${teamName.toLocaleUpperCase("vi-VN")} • ĐỘI HÌNH`,
@@ -34,12 +41,20 @@ export function Pro7RouteHeader({
   onThemeChange,
   onOpenMenu,
 }: Pro7RouteHeaderProps) {
-  const heading = pathname.includes("/squad")
+  const onSquad = isTeamRoute(pathname, team.slug, "squad");
+  const onFunds = isTeamRoute(pathname, team.slug, "funds");
+  const heading = onSquad
     ? squadHeading(team.name)
     : { eyebrow: team.name.toLocaleUpperCase("vi-VN"), title: team.name, description: "PRO7 Team Manager" };
   const canManagePlayers = hasPermission({ permissions }, "players.manage")
     && hasPermission({ permissions }, "members.manage");
   const squadHref = `/teams/${encodeURIComponent(team.slug)}/squad?add=player`;
+  const fundsHref = `/teams/${encodeURIComponent(team.slug)}/funds?add=expense`;
+  const contextualAction = onFunds && hasPermission({ permissions }, "finance.manage")
+    ? { href: fundsHref, label: "Thêm khoản chi" }
+    : onSquad && canManagePlayers
+      ? { href: squadHref, label: "Thêm cầu thủ" }
+      : null;
 
   return (
     <header className="app-header">
@@ -60,7 +75,7 @@ export function Pro7RouteHeader({
           {theme === "light" ? <Moon size={19} /> : <Sun size={19} />}
         </button>
         <button className="icon-button notification" type="button" aria-label="Thông báo"><Bell size={20} /></button>
-        {canManagePlayers && <a className="primary-button header-cta" href={squadHref}><Plus size={18} />Thêm cầu thủ</a>}
+        {contextualAction && <a className="primary-button header-cta" href={contextualAction.href}><Plus size={18} />{contextualAction.label}</a>}
         <AccountMenu email={email} />
       </div>
     </header>

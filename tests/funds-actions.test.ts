@@ -76,6 +76,23 @@ test("dues paid and payment-void correction map to exact atomic RPC lifecycle ac
   }
 });
 
+test("waive is same-origin, Admin-only, preserves the due token, and maps stable failures", async () => {
+  const denied = fixture({ context: null });
+  const payload = { action: "waive", dueId: DUE_ID, expectedUpdatedAt: UPDATED_AT };
+  assert.equal((await mutateMemberDue(request("/api/teams/pro7-fc/funds/dues", payload), { slug: "pro7-fc" }, denied.dependencies)).status, 403);
+  assert.deepEqual(denied.calls, [{ permission: "finance.manage" }]);
+
+  const state = fixture({ rpcData: DUE_ID });
+  const response = await mutateMemberDue(request("/api/teams/pro7-fc/funds/dues", payload), { slug: "pro7-fc" }, state.dependencies);
+  assert.equal(response.status, 200);
+  assert.deepEqual(state.calls.at(-1), { name: "manage_member_due", args: { p_action: "waive", p_team_id: TEAM_ID, p_due_id: DUE_ID, p_user_id: null, p_period_start: null, p_amount_vnd: null, p_due_date: null, p_note: null, p_expected_updated_at: UPDATED_AT } });
+
+  const stale = fixture({ rpcError: { code: "40001" } });
+  const staleResponse = await mutateMemberDue(request("/api/teams/pro7-fc/funds/dues", payload), { slug: "pro7-fc" }, stale.dependencies);
+  assert.equal(staleResponse.status, 409);
+  assert.equal((await staleResponse.json()).code, "stale");
+});
+
 test("fund actions map stale, lifecycle, constraint, permission, not-found, and server RPC errors", async () => {
   for (const [code, status, publicCode] of [["40001", 409, "stale"], ["23505", 409, "conflict"], ["55000", 409, "lifecycle"], ["23514", 422, "validation"], ["23503", 422, "validation"], ["22023", 422, "validation"], ["42501", 403, "forbidden"], ["P0002", 404, "not_found"], ["XX000", 500, "server"]] as const) {
     const state = fixture({ rpcError: { code } });
