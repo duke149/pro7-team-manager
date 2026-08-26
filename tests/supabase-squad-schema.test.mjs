@@ -186,8 +186,10 @@ test("manager RPC is a hardened transactional authorization boundary", async () 
   assert.ok(functionSql, "missing manage_team_player function");
   assert.match(functionSql, /language plpgsql security definer set search_path = ''/);
   assert.match(functionSql, /v_actor_user_id uuid := \(select auth\.uid\(\)\)/);
-  assert.match(functionSql, /private\.has_team_permission\(p_team_id, 'players\.manage'\)/);
-  assert.match(functionSql, /private\.has_team_permission\(p_team_id, 'members\.manage'\)/);
+  assert.match(
+    functionSql,
+    /if not private\.has_team_permission\(p_team_id, 'players\.manage'\) or not private\.has_team_permission\(p_team_id, 'members\.manage'\) then/,
+  );
   assert.match(functionSql, /t\.owner_user_id = p_user_id/);
   assert.match(functionSql, /target_role\.is_system and target_role\.slug = 'owner'/);
   assert.match(functionSql, /rp\.permission_code = 'team\.delete'/);
@@ -217,8 +219,10 @@ test("admin notes are available only through the dual-permission detail RPC", as
   assert.match(functionSql, /returns table \(admin_notes text\)/);
   assert.match(functionSql, /language plpgsql stable security definer set search_path = ''/);
   assert.match(functionSql, /v_actor_user_id uuid := \(select auth\.uid\(\)\)/);
-  assert.match(functionSql, /private\.has_team_permission\(p_team_id, 'players\.manage'\)/);
-  assert.match(functionSql, /private\.has_team_permission\(p_team_id, 'members\.manage'\)/);
+  assert.match(
+    functionSql,
+    /if not private\.has_team_permission\(p_team_id, 'players\.manage'\) or not private\.has_team_permission\(p_team_id, 'members\.manage'\) then/,
+  );
   assert.match(sql, /alter function public\.get_team_player_admin_detail\(uuid, uuid\) owner to postgres;/);
   assert.match(
     sql,

@@ -14,13 +14,22 @@ declare
   v_attach_two constant uuid := '00000000-0000-4000-8000-000000007106';
   v_attach_three constant uuid := '00000000-0000-4000-8000-000000007107';
   v_other_owner constant uuid := '00000000-0000-4000-8000-000000007108';
+  v_players_only constant uuid := '00000000-0000-4000-8000-000000007109';
+  v_members_only constant uuid := '00000000-0000-4000-8000-000000007110';
+  v_attach_four constant uuid := '00000000-0000-4000-8000-000000007111';
+  v_attach_five constant uuid := '00000000-0000-4000-8000-000000007112';
   v_team constant uuid := '00000000-0000-4000-8000-000000007201';
   v_other_team constant uuid := '00000000-0000-4000-8000-000000007202';
+  v_prebackfill_user constant uuid := '00000000-0000-4000-8000-000000007001';
+  v_prebackfill_team constant uuid := '00000000-0000-4000-8000-000000007002';
   v_owner_role uuid;
   v_admin_role uuid;
   v_member_role uuid;
   v_other_member_role uuid;
   v_unsafe_role uuid;
+  v_players_only_role uuid;
+  v_members_only_role uuid;
+  v_actor uuid;
   v_count integer;
   v_rows integer;
   v_failed boolean;
@@ -156,6 +165,26 @@ begin
     raise exception 'squad live verification: membership sync trigger is overprivileged';
   end if;
 
+  select pg_catalog.count(*) into v_count
+  from public.memberships as membership
+  join public.team_player_profiles as player
+    on player.team_id = membership.team_id
+   and player.user_id = membership.user_id
+  where membership.team_id = v_prebackfill_team
+    and membership.user_id = v_prebackfill_user
+    and membership.status = 'active'
+    and player.join_date = date '2024-01-15';
+
+  if v_count <> 1 or (
+    select pg_catalog.count(*)
+    from public.team_player_profiles
+    where team_id = v_prebackfill_team
+       or user_id = v_prebackfill_user
+  ) <> 1 then
+    raise exception
+      'squad live verification: committed pre-migration membership was not backfilled exactly once';
+  end if;
+
   insert into auth.users (
     id,
     email,
@@ -176,7 +205,11 @@ begin
       (v_attach_one, 'squad-attach-one@example.test', 'Attach One'),
       (v_attach_two, 'squad-attach-two@example.test', 'Attach Two'),
       (v_attach_three, 'squad-attach-three@example.test', 'Attach Three'),
-      (v_other_owner, 'squad-other-owner@example.test', 'Other Owner')
+      (v_other_owner, 'squad-other-owner@example.test', 'Other Owner'),
+      (v_players_only, 'squad-players-only@example.test', 'Players Only'),
+      (v_members_only, 'squad-members-only@example.test', 'Members Only'),
+      (v_attach_four, 'squad-attach-four@example.test', 'Attach Four'),
+      (v_attach_five, 'squad-attach-five@example.test', 'Attach Five')
   ) as fixture(id, email, display_name);
 
   insert into public.teams (id, name, slug, owner_user_id)
@@ -205,10 +238,53 @@ begin
   from public.roles
   where team_id = v_other_team and slug = 'member';
 
+  insert into public.roles (
+    id,
+    team_id,
+    slug,
+    name,
+    description,
+    is_system
+  )
+  values (
+    extensions.gen_random_uuid(),
+    v_team,
+    'players-only',
+    'Players Only',
+    'exactly players.manage for dual-permission verification',
+    false
+  )
+  returning id into v_players_only_role;
+
+  insert into public.roles (
+    id,
+    team_id,
+    slug,
+    name,
+    description,
+    is_system
+  )
+  values (
+    extensions.gen_random_uuid(),
+    v_team,
+    'members-only',
+    'Members Only',
+    'exactly members.manage for dual-permission verification',
+    false
+  )
+  returning id into v_members_only_role;
+
+  insert into public.role_permissions (role_id, permission_code)
+  values
+    (v_players_only_role, 'players.manage'),
+    (v_members_only_role, 'members.manage');
+
   insert into public.memberships (team_id, user_id, role_id)
   values
     (v_team, v_admin, v_admin_role),
-    (v_team, v_member, v_member_role);
+    (v_team, v_member, v_member_role),
+    (v_team, v_players_only, v_players_only_role),
+    (v_team, v_members_only, v_members_only_role);
 
   if (
     select pg_catalog.count(*)
@@ -218,6 +294,71 @@ begin
   ) <> 3 then
     raise exception 'squad live verification: active-membership trigger missed a player row';
   end if;
+
+  if (
+    select pg_catalog.count(*)
+    from public.team_player_profiles
+    where team_id = v_team
+      and user_id = any (array[v_players_only, v_members_only]::uuid[])
+  ) <> 2 then
+    raise exception 'squad live verification: one-permission fixtures missed player rows';
+  end if;
+
+  foreach v_actor in array array[v_players_only, v_members_only]::uuid[] loop
+    perform pg_catalog.set_config('request.jwt.claim.sub', v_actor::text, true);
+    perform pg_catalog.set_config(
+      'request.jwt.claims',
+      pg_catalog.jsonb_build_object(
+        'sub', v_actor,
+        'role', 'authenticated'
+      )::text,
+      true
+    );
+    execute 'set local role authenticated';
+
+    v_failed := false;
+    v_state := null;
+    begin
+      perform public.manage_team_player(
+        v_team,
+        v_member,
+        v_member_role,
+        18::smallint,
+        'ATT',
+        'available',
+        current_date - 100,
+        null,
+        false
+      );
+    exception
+      when insufficient_privilege then
+        v_failed := true;
+        v_state := sqlstate;
+    end;
+    if not v_failed or v_state <> '42501' then
+      raise exception
+        'squad live verification: one-permission actor invoked manager RPC: %',
+        v_actor;
+    end if;
+
+    v_failed := false;
+    v_state := null;
+    begin
+      perform detail.admin_notes
+      from public.get_team_player_admin_detail(v_team, v_member) as detail;
+    exception
+      when insufficient_privilege then
+        v_failed := true;
+        v_state := sqlstate;
+    end;
+    if not v_failed or v_state <> '42501' then
+      raise exception
+        'squad live verification: one-permission actor read admin detail: %',
+        v_actor;
+    end if;
+
+    execute 'set local role postgres';
+  end loop;
 
   update public.team_player_profiles
   set
@@ -287,7 +428,7 @@ begin
   select pg_catalog.count(*) into v_count
   from public.team_player_profiles
   where team_id = v_team;
-  if v_count <> 3 then
+  if v_count <> 5 then
     raise exception 'squad live verification: Member safe squad read returned % rows', v_count;
   end if;
 
@@ -904,6 +1045,54 @@ begin
   v_state := null;
   begin
     perform public.attach_team_member(
+      v_players_only,
+      v_team,
+      v_attach_four,
+      'Attach Four',
+      false,
+      v_member_role,
+      null::smallint,
+      null::text,
+      current_date
+    );
+  exception
+    when insufficient_privilege then
+      v_failed := true;
+      v_state := sqlstate;
+  end;
+  if not v_failed or v_state <> '42501' then
+    raise exception
+      'squad live verification: players-only service actor attached a member';
+  end if;
+
+  v_failed := false;
+  v_state := null;
+  begin
+    perform public.attach_team_member(
+      v_members_only,
+      v_team,
+      v_attach_five,
+      'Attach Five',
+      false,
+      v_member_role,
+      null::smallint,
+      null::text,
+      current_date
+    );
+  exception
+    when insufficient_privilege then
+      v_failed := true;
+      v_state := sqlstate;
+  end;
+  if not v_failed or v_state <> '42501' then
+    raise exception
+      'squad live verification: members-only service actor attached a member';
+  end if;
+
+  v_failed := false;
+  v_state := null;
+  begin
+    perform public.attach_team_member(
       v_admin,
       v_team,
       v_attach_two,
@@ -1050,7 +1239,11 @@ declare
     '00000000-0000-4000-8000-000000007105'::uuid,
     '00000000-0000-4000-8000-000000007106'::uuid,
     '00000000-0000-4000-8000-000000007107'::uuid,
-    '00000000-0000-4000-8000-000000007108'::uuid
+    '00000000-0000-4000-8000-000000007108'::uuid,
+    '00000000-0000-4000-8000-000000007109'::uuid,
+    '00000000-0000-4000-8000-000000007110'::uuid,
+    '00000000-0000-4000-8000-000000007111'::uuid,
+    '00000000-0000-4000-8000-000000007112'::uuid
   ];
   v_fixture_teams constant uuid[] := array[
     '00000000-0000-4000-8000-000000007201'::uuid,
