@@ -69,6 +69,20 @@ Ruling: Browser security policy prevents submitting account-creation flows, so t
 
 Task 6 local artifact phase: complete (seed/cleanup SQL, disposable-PG17 safety harness, Owner/Admin/Member route matrix; remote apply/import and browser QA intentionally remain with the controller)
 
+Task 6: fix round 1/5 (sparse applied tactic, exact due marker lineage, parser integration, truthful injured deferral; commits e27976e..d0c53e2)
+
+Task 6: fix round 2/5 (seven-starter board readiness, optional eighth-player bench, truthful sparse bench deferral; commits d0c53e2..59ac598)
+
+Task 6: complete locally (commits d4757a4..59ac598, independent review ALL_ADDRESSED; focused disposable-PG17/parser/route verification 10/10)
+
+Provisioning QA checkpoint: direct browser-to-Edge CORS failed because the deployed environment had no custom `ALLOWED_ORIGINS`. Commit d4757a4 moves the unchanged modal transport to the same-origin team API, retains Edge JWT + dual-permission verification, adds exact localhost/hosted fallbacks, and reconciles generated relationship cardinality. Independent review found no Critical/Important issue; focused tests, scoped lint, and production build passed. `provision-team-member` v2 and `change-temporary-password` v1 are ACTIVE with `verify_jwt=true`; allowed localhost preflights return 204/204.
+
+Ruling: The in-app browser security policy explicitly blocks account-creation submission, so do not inspect cookies/JWTs, write `auth.users`, or use an indirect browser bypass. Supersede the earlier seven-member provisioning assumption for this checkpoint: seed against the one existing active membership, report tactic bench/injury coverage as deferred, and retain full seven/eight-player behavior in PG/parser tests until demo-only members are created through a trusted user-controlled flow — cost if wrong: live tactic save/apply and live Member-role browser checks remain unexercised even though their server/UI contracts are covered by passing tests.
+
+Remote demo checkpoint: `pro7-demo-seed.sql` executed twice successfully and returned the same `{marker: PRO7-DEMO, player_count: 1, starter_count: 1, bench_count: 0, bench_coverage: deferred, injured_coverage: deferred}`. Remote marked inventory is 3 matches, 3 attendance, 5 events, 2 news, 2 tactics, 2 slots, 3 finance entries, 3 exact due snapshots, and 2 notifications; `auth.users` remains 1. Demo data is intentionally retained for user review; cleanup has not been run.
+
+Localhost browser QA: Owner route load is clean for Overview, Squad, Matches, Tactics, Funds; live RSVP, match edit, invite retry, finance void, and due-payment void mutations completed without alerts. The seed safety guard correctly refused to overwrite the intentionally changed due; controller deleted exactly that deterministic due through its `PRO7-DEMO-DUE-SNAPSHOT`, then reran seed successfully to restore the review baseline. Dark/light toggle changed `pro7-shell light` ↔ `pro7-shell dark`; mobile screenshots preserve the hosted black/white/red PRO7 hierarchy with no neon or overflow. With one player, Tactics honestly disables save/apply and renders the seven-player requirement instead of inventing lineup data.
+
 Task 6: fix round 1/5 (sparse applied invariant, separate-draft bench coverage, truthful injured deferral, actual route parser integration, and exact per-due marker lineage addressed; local fix committed)
 
 Task 6: fix round 2/5 (eight-player selection, seven-starter readiness for both tactics, eighth-only bench, explicit starter/bench coverage output, and parsed board-readiness contract addressed; local fix committed)
