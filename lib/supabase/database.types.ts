@@ -1091,7 +1091,6 @@ export type Database = {
         Args: {
           p_match_id: string
           p_team_id: string
-          p_user_ids: string[]
         }
         Returns: number
       }

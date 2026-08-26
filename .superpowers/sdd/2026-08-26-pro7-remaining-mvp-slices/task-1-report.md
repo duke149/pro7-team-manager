@@ -171,3 +171,56 @@ The live verifier also pins the prerequisite foundation role mappings without mo
 1. Pinned Supabase CLI v2.55.8 again forced TLS when pointed at the non-TLS Homebrew PostgreSQL 17 listener, so `db lint` could not inspect that disposable database. Fresh PostgreSQL execution plus explicit catalog RLS/ACL/function/FK-index probes passed; no remote advisor was invoked.
 2. Existing whole-repository TypeScript baseline issues remain outside Task 1. Focused types, full unit tests, and the production build pass.
 3. No remote mutation/apply/deploy occurred; all database writes were confined to disposable local PostgreSQL 17 databases. `supabase/.temp/` remains untouched.
+
+## Review fix round 3/5 — 2026-08-26
+
+Status: `DONE_WITH_CONCERNS`
+
+### Locked full-set reminder correction
+
+- Replaced `remind_match_attendance(uuid,uuid,uuid[])` with the narrow `remind_match_attendance(uuid,uuid)` contract. Callers can no longer supply, omit, truncate, or stale-read a recipient set.
+- The RPC authenticates and checks `matches.manage`, locks the tenant-scoped parent match with `SELECT ... FOR UPDATE`, rejects missing (`P0002`), completed, or cancelled (`55000`) matches, and only then derives every active same-team pending attendance row inside the same transaction.
+- Reminder upserts are ordered by `attendance.user_id` for deterministic notification-row lock acquisition. This uses the same parent-match serialization boundary as invitation and lifecycle mutations: an invitation committed before the reminder obtains the parent lock is visible to the subsequent recipient statement.
+- A scheduled match with no pending attendance returns `0` without writing an audit row. Non-pending attendance is excluded, every successful non-empty full-set write is audited once, and no attendance row or RSVP optimistic token is mutated.
+- Preserved invitation/reminder notification uniqueness, local target paths, own-user RLS, column-only client `read_at` updates, and explicit RPC ACLs.
+- Added the missing `(team_id, user_id)` notification index for the composite membership foreign key after the catalog regression exposed it; all Task 1 foreign keys are now index-covered.
+
+### Round 3 RED → GREEN evidence
+
+- RED static contract: `node --test tests/supabase-remaining-mvp-schema.test.mjs` returned `8 pass / 2 fail`; failures proved the old three-argument ACL/signature and caller-controlled `p_user_ids`/`unnest` implementation remained.
+- RED PostgreSQL 17 behavior: the two-argument live verifier against the round-2 disposable applied database failed with `42883` because `remind_match_attendance(uuid,uuid)` did not exist.
+- RED notification FK-index regression: after adding the expected composite index contract, the static suite returned `9 pass / 1 fail` until the migration created it.
+- GREEN static contract: `10 pass / 0 fail`.
+- GREEN fresh PostgreSQL 17 harness on `pro7_remaining_fix3b_20260826` returned all three sentinels:
+  - `remaining_mvp_live_transaction_rollback_ok`
+  - `remaining_mvp_live_fixture_counts_zero`
+  - `remaining_mvp_live_harness_ok`
+- Live coverage now includes Admin full-set reminders, a newly invited pending member immediately before the reminder serialization boundary, deterministic retry cardinality, exclusion of a newly non-pending RSVP, zero-pending scheduled no-op/no-audit, missing/cancelled/completed rejection, Member denial, cross-team Admin denial, unchanged attendance timestamps, and preserved own-notification controls.
+- Controlled pending/applied pre-apply verification: `3 pass / 0 fail / 0 skip`.
+
+### Round 3 files and migration identity
+
+- `supabase/migrations/20260826043803_pro7_remaining_mvp.sql`
+- `tests/supabase-remaining-mvp-schema.test.mjs`
+- `tests/supabase-remaining-mvp-live-verification.sql`
+- `tests/supabase-remaining-mvp-pre-apply.sql`
+- `lib/supabase/database.types.ts`
+- `.superpowers/sdd/2026-08-26-pro7-remaining-mvp-slices/task-1-report.md`
+- Final SHA-256: `e332b46729fc3176c011634d22997d1dcc4a00ca618fc46f6973f8435a7d980c`.
+
+### Round 3 final verification
+
+- Focused static + controlled pre-apply: `13 pass / 0 fail / 0 skip`.
+- PostgreSQL 17 fresh apply/live: exit `0`, three sentinels above, rollback and zero fixture residue confirmed.
+- Full unit suite: `332 pass / 0 fail / 5 skip` (`337` total).
+- Focused provisional-type compile: exit `0`.
+- Scoped Task 1 ESLint: exit `0`.
+- Production build: exit `0`.
+- `git diff --check` and checksum assertion: exit `0`.
+- Catalog probes: `rls_tables=11`, `hardened_rpcs=9`, `unexpected_rpc_acl=0`, `unindexed_fks=0`; authenticated notification access remains table `SELECT` plus column `read_at:UPDATE` only.
+
+### Round 3 concerns / boundaries
+
+1. The Task 3 overview action still carries the former caller-provided recipient list and pre-reads pending attendance. Per parent coordination, those application files were intentionally left outside this Task 1 commit and will be changed immediately after this schema commit to call only `(team_id, match_id)`.
+2. Full-repository `npm run lint` remains red on pre-existing/out-of-scope a11y findings in `app/pro7-app.tsx` plus generated ignored bundles under `work/`: `479 errors / 1 warning`. Scoped Task 1 ESLint passes.
+3. The earlier pinned Supabase CLI TLS limitation against the non-TLS Homebrew PostgreSQL listener remains. Fresh PostgreSQL 17 execution, catalog probes, and all local verification above passed; no remote advisor, mutation, migration apply, or deployment occurred. `supabase/.temp/` was preserved.

@@ -88,6 +88,7 @@ test("notifications are bounded, tenant-safe, idempotent, and local-path only", 
     /constraint notifications_user_type_source_key unique \(user_id, type, source_entity, source_id\)/,
     /create index notifications_user_created_at_idx on public\.notifications \(user_id, created_at desc\)/,
     /create index notifications_source_team_idx on public\.notifications \(source_id, team_id\)/,
+    /create index notifications_team_user_idx on public\.notifications \(team_id, user_id\)/,
   ]) {
     assert.match(sql, clause);
   }
@@ -207,7 +208,7 @@ test("all narrow RPCs are hardened, owned, and explicitly ACLed", async () => {
     apply_match_tactic: "uuid, uuid, timestamptz",
     manage_finance_entry: "text, uuid, uuid, text, bigint, text, date, text, text, timestamptz",
     manage_member_due: "text, uuid, uuid, uuid, date, bigint, date, text, timestamptz",
-    remind_match_attendance: "uuid, uuid, uuid[]",
+    remind_match_attendance: "uuid, uuid",
   };
 
   for (const [name, signature] of Object.entries(signatures)) {
@@ -245,13 +246,21 @@ test("RPCs enforce permission, concurrency, lifecycle, lineup, void, and audit b
   const remind = extractFunction(sql, "public.remind_match_attendance");
   assert.match(remind, /private\.has_team_permission\(p_team_id, 'matches\.manage'\)/);
   assert.match(remind, /where m\.id = p_match_id and m\.team_id = p_team_id for update/);
+  assert.doesNotMatch(remind, /p_user_ids|unnest\(/);
+  assert.match(remind, /from public\.match_attendance as attendance/);
+  assert.match(remind, /join public\.memberships as membership/);
   assert.match(remind, /attendance\.status = 'pending'/);
   assert.match(remind, /membership\.status = 'active'/);
+  assert.match(remind, /order by attendance\.user_id/);
   assert.match(remind, /on conflict \(user_id, type, source_entity, source_id\) do update/);
   assert.match(remind, /read_at = null/);
   assert.match(remind, /if v_written_count > 0 then/);
   assert.match(remind, /insert into private\.audit_events/);
   assert.doesNotMatch(remind, /update public\.match_attendance/);
+  assert.ok(
+    remind.indexOf("for update") < remind.indexOf("from public.match_attendance as attendance"),
+    "the match row must be locked before reminder recipients are derived",
+  );
 
   const respond = extractFunction(sql, "public.respond_match_attendance");
   assert.match(respond, /v_actor_user_id <> p_user_id/);

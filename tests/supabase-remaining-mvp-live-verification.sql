@@ -20,6 +20,7 @@ declare
   v_member_role uuid;
   v_match_id uuid;
   v_cancelled_match_id uuid;
+  v_zero_pending_match_id uuid;
   v_tactic_id uuid;
   v_second_tactic_id uuid;
   v_entry_id uuid;
@@ -115,6 +116,10 @@ begin
     'create', v_team, null, 'FC Cancel', pg_catalog.now() + interval '11 days',
     null, false, pg_catalog.now() + interval '6 days', null, null, null
   ) into v_cancelled_match_id;
+  select public.manage_match(
+    'create', v_team, null, 'FC Zero Pending', pg_catalog.now() + interval '12 days',
+    null, false, pg_catalog.now() + interval '7 days', null, null, null
+  ) into v_zero_pending_match_id;
 
   execute 'reset role';
   select updated_at into strict v_updated_at from public.matches where id = v_cancelled_match_id;
@@ -151,10 +156,63 @@ begin
     pg_catalog.jsonb_build_object('sub', v_admin, 'role', 'authenticated')::text,
     true
   );
+
+  execute 'reset role';
+  select count(*) into v_audit_count
+  from private.audit_events
+  where team_id = v_team and table_name = 'notifications'
+    and action = 'UPDATE';
+  execute 'set local role authenticated';
+  select public.remind_match_attendance(v_team, v_zero_pending_match_id) into v_count;
+  execute 'reset role';
+  if v_count <> 0 or (
+    select count(*) from private.audit_events
+    where team_id = v_team and table_name = 'notifications' and action = 'UPDATE'
+  ) <> v_audit_count then
+    raise exception 'remaining MVP live: zero-pending scheduled reminder was not a no-op (%)', v_count;
+  end if;
+
+  execute 'set local role authenticated';
+  v_failed := false;
+  begin
+    perform public.remind_match_attendance(v_team, v_cancelled_match_id);
+  exception when others then
+    v_failed := true;
+    v_state := sqlstate;
+  end;
+  if not v_failed or v_state <> '55000' then
+    raise exception 'remaining MVP live: cancelled match accepted reminders (state=%)', v_state;
+  end if;
+
+  v_failed := false;
+  begin
+    perform public.remind_match_attendance(
+      v_team,
+      '00000000-0000-4000-8000-000000008299'::uuid
+    );
+  exception when others then
+    v_failed := true;
+    v_state := sqlstate;
+  end;
+  if not v_failed or v_state <> 'P0002' then
+    raise exception 'remaining MVP live: nonexistent match accepted reminders (state=%)', v_state;
+  end if;
+
+  v_failed := false;
+  begin
+    perform public.remind_match_attendance(v_other_team, v_match_id);
+  exception when others then
+    v_failed := true;
+    v_state := sqlstate;
+  end;
+  if not v_failed or v_state <> '42501' then
+    raise exception 'remaining MVP live: cross-team Admin sent reminders (state=%)', v_state;
+  end if;
+
   perform public.invite_match_attendance(
     v_team,
     v_match_id,
-    array[v_owner, v_admin, v_member, v_player4, v_player5, v_player6, v_player7]
+    array[v_owner, v_admin, v_member, v_player4, v_player5, v_player6]
   );
   execute 'reset role';
   select invited_at, updated_at
@@ -167,7 +225,7 @@ begin
     and type = 'match_invitation'
     and source_entity = 'match'
     and source_id = v_match_id;
-  if (select count(*) from public.notifications where source_id = v_match_id) <> 7
+  if (select count(*) from public.notifications where source_id = v_match_id) <> 6
     or exists (
       select 1 from public.notifications
       where source_id = v_match_id
@@ -186,12 +244,12 @@ begin
   perform public.invite_match_attendance(
     v_team,
     v_match_id,
-    array[v_owner, v_admin, v_member, v_player4, v_player5, v_player6, v_player7]
+    array[v_owner, v_admin, v_member, v_player4, v_player5, v_player6]
   );
   execute 'reset role';
 
   select count(*) into v_count from public.match_attendance where match_id = v_match_id;
-  if v_count <> 7 then
+  if v_count <> 6 then
     raise exception 'remaining MVP live: invitation retry was not idempotent (%)', v_count;
   end if;
   if exists (
@@ -209,11 +267,25 @@ begin
     where user_id = v_member and type = 'match_invitation'
       and source_entity = 'match' and source_id = v_match_id
   ) is distinct from v_notification_created_at
-    or (select count(*) from public.notifications where source_id = v_match_id) <> 7 then
+    or (select count(*) from public.notifications where source_id = v_match_id) <> 6 then
     raise exception 'remaining MVP live: exact invitation retry changed token, timestamps, or audit';
   end if;
   if exists (select 1 from public.match_attendance where match_id = v_match_id and status <> 'pending') then
     raise exception 'remaining MVP live: new invitation status differs';
+  end if;
+
+  execute 'set local role authenticated';
+  perform public.invite_match_attendance(v_team, v_match_id, array[v_player7]);
+  execute 'reset role';
+  if not exists (
+    select 1 from public.match_attendance
+    where team_id = v_team and match_id = v_match_id and user_id = v_player7 and status = 'pending'
+  ) or not exists (
+    select 1 from public.notifications
+    where team_id = v_team and source_id = v_match_id and user_id = v_player7
+      and type = 'match_invitation'
+  ) then
+    raise exception 'remaining MVP live: newly pending attendance setup failed';
   end if;
 
   select updated_at into strict v_updated_at
@@ -225,9 +297,9 @@ begin
     and row_key = pg_catalog.jsonb_build_object('match_id', v_match_id);
 
   execute 'set local role authenticated';
-  select public.remind_match_attendance(v_team, v_match_id, array[v_member]) into v_count;
-  if v_count <> 1 then
-    raise exception 'remaining MVP live: reminder count differs (%)', v_count;
+  select public.remind_match_attendance(v_team, v_match_id) into v_count;
+  if v_count <> 7 then
+    raise exception 'remaining MVP live: full pending set, including the newest invite, was not reminded (%)', v_count;
   end if;
   execute 'reset role';
   select created_at into strict v_reminder_created_at
@@ -241,7 +313,7 @@ begin
   end if;
 
   execute 'set local role authenticated';
-  perform public.remind_match_attendance(v_team, v_match_id, array[v_member]);
+  perform public.remind_match_attendance(v_team, v_match_id);
   execute 'reset role';
   if (select count(*) from public.notifications where user_id = v_member and type = 'match_reminder' and source_id = v_match_id) <> 1
     or (select created_at from public.notifications where user_id = v_member and type = 'match_reminder' and source_id = v_match_id) <= v_reminder_created_at
@@ -253,19 +325,7 @@ begin
         and action = 'UPDATE'
         and row_key = pg_catalog.jsonb_build_object('match_id', v_match_id)
     ) <> v_audit_count + 2 then
-    raise exception 'remaining MVP live: reminder retry was not one-row, token-safe, and once-audited per write';
-  end if;
-
-  execute 'set local role authenticated';
-  v_failed := false;
-  begin
-    perform public.remind_match_attendance(v_team, v_match_id, array[v_unrelated]);
-  exception when others then
-    v_failed := true;
-    v_state := sqlstate;
-  end;
-  if not v_failed or v_state <> '23503' then
-    raise exception 'remaining MVP live: cross-team reminder was not denied (state=%)', v_state;
+    raise exception 'remaining MVP live: full-set reminder retry was not idempotent, token-safe, and once-audited per write';
   end if;
 
   execute 'set local role authenticated';
@@ -288,7 +348,7 @@ begin
   );
   v_failed := false;
   begin
-    perform public.remind_match_attendance(v_team, v_match_id, array[v_member]);
+    perform public.remind_match_attendance(v_team, v_match_id);
   exception when others then
     v_failed := true;
     v_state := sqlstate;
@@ -368,17 +428,24 @@ begin
     pg_catalog.jsonb_build_object('sub', v_admin, 'role', 'authenticated')::text,
     true
   );
-  v_failed := false;
-  begin
-    perform public.remind_match_attendance(v_team, v_match_id, array[v_member]);
-  exception when others then
-    v_failed := true;
-    v_state := sqlstate;
-  end;
-  if not v_failed or v_state <> '55000' then
-    raise exception 'remaining MVP live: non-pending attendance was reminded (state=%)', v_state;
+  execute 'reset role';
+  select updated_at into strict v_updated_at
+  from public.match_attendance where match_id = v_match_id and user_id = v_member;
+  select created_at into strict v_reminder_created_at
+  from public.notifications
+  where user_id = v_member and type = 'match_reminder' and source_id = v_match_id;
+  execute 'set local role authenticated';
+  select public.remind_match_attendance(v_team, v_match_id) into v_count;
+  execute 'reset role';
+  if v_count <> 6
+    or (select updated_at from public.match_attendance where match_id = v_match_id and user_id = v_member)
+      is distinct from v_updated_at
+    or (select created_at from public.notifications where user_id = v_member and type = 'match_reminder' and source_id = v_match_id)
+      is distinct from v_reminder_created_at then
+    raise exception 'remaining MVP live: full-set reminder did not exclude a non-pending RSVP (%)', v_count;
   end if;
 
+  execute 'set local role authenticated';
   perform pg_catalog.set_config('request.jwt.claim.sub', v_member::text, true);
   perform pg_catalog.set_config(
     'request.jwt.claims',
@@ -637,6 +704,16 @@ begin
     'complete', v_team, v_match_id, null, null, null, null, null,
     3::smallint, 2::smallint, v_updated_at
   );
+  v_failed := false;
+  begin
+    perform public.remind_match_attendance(v_team, v_match_id);
+  exception when others then
+    v_failed := true;
+    v_state := sqlstate;
+  end;
+  if not v_failed or v_state <> '55000' then
+    raise exception 'remaining MVP live: completed match accepted reminders (state=%)', v_state;
+  end if;
   execute 'reset role';
   select updated_at into strict v_original_analysis_updated_at from public.matches where id = v_match_id;
   execute 'set local role authenticated';

@@ -401,6 +401,8 @@ create index notifications_user_created_at_idx
   on public.notifications (user_id, created_at desc);
 create index notifications_source_team_idx
   on public.notifications (source_id, team_id);
+create index notifications_team_user_idx
+  on public.notifications (team_id, user_id);
 
 create or replace function private.set_monotonic_updated_at()
 returns trigger
@@ -824,8 +826,7 @@ grant execute on function public.invite_match_attendance( uuid, uuid, uuid[] ) t
 
 create or replace function public.remind_match_attendance(
   p_team_id uuid,
-  p_match_id uuid,
-  p_user_ids uuid[]
+  p_match_id uuid
 )
 returns integer
 language plpgsql
@@ -835,9 +836,6 @@ as $function$
 declare
   v_actor_user_id uuid := (select auth.uid());
   v_match public.matches%rowtype;
-  v_requested_count integer;
-  v_valid_count integer;
-  v_pending_count integer;
   v_written_count integer;
   v_team_slug text;
 begin
@@ -846,9 +844,6 @@ begin
   end if;
   if not private.has_team_permission(p_team_id, 'matches.manage') then
     raise exception using errcode = '42501', message = 'Match management permission required';
-  end if;
-  if p_user_ids is null or cardinality(p_user_ids) = 0 or array_position(p_user_ids, null) is not null then
-    raise exception using errcode = '22023', message = 'At least one reminder recipient is required';
   end if;
 
   select m.* into v_match
@@ -866,54 +861,28 @@ begin
   from public.teams as team
   where team.id = p_team_id;
 
-  select count(distinct requested.user_id)
-  into v_requested_count
-  from unnest(p_user_ids) as requested(user_id);
-
-  select count(*) into v_valid_count
-  from (
-    select distinct requested.user_id
-    from unnest(p_user_ids) as requested(user_id)
-  ) as requested
-  join public.memberships as membership
-    on membership.team_id = p_team_id
-   and membership.user_id = requested.user_id
-   and membership.status = 'active';
-  if v_valid_count <> v_requested_count then
-    raise exception using errcode = '23503', message = 'Reminder recipient is not an active team member';
-  end if;
-
-  select count(*) into v_pending_count
-  from (
-    select distinct requested.user_id
-    from unnest(p_user_ids) as requested(user_id)
-  ) as requested
-  join public.match_attendance as attendance
-    on attendance.match_id = p_match_id
-   and attendance.team_id = p_team_id
-   and attendance.user_id = requested.user_id
-   and attendance.status = 'pending';
-  if v_pending_count <> v_requested_count then
-    raise exception using errcode = '55000', message = 'Only pending attendance can be reminded';
-  end if;
-
   with written as (
     insert into public.notifications (
       team_id, user_id, type, source_entity, source_id, title, body, target_path
     )
     select
       p_team_id,
-      requested.user_id,
+      attendance.user_id,
       'match_reminder',
       'match',
       p_match_id,
       'Nhắc xác nhận tham gia trận đấu',
       'Vui lòng xác nhận tham gia trận gặp ' || v_match.opponent || '.',
       '/teams/' || v_team_slug || '/matches/' || p_match_id::text
-    from (
-      select distinct requested_user.user_id
-      from unnest(p_user_ids) as requested_user(user_id)
-    ) as requested
+    from public.match_attendance as attendance
+    join public.memberships as membership
+      on membership.team_id = attendance.team_id
+     and membership.user_id = attendance.user_id
+     and membership.status = 'active'
+    where attendance.match_id = p_match_id
+      and attendance.team_id = p_team_id
+      and attendance.status = 'pending'
+    order by attendance.user_id
     on conflict (user_id, type, source_entity, source_id) do update
     set title = excluded.title,
         body = excluded.body,
@@ -946,10 +915,10 @@ begin
 end;
 $function$;
 
-alter function public.remind_match_attendance( uuid, uuid, uuid[] ) owner to postgres;
-revoke execute on function public.remind_match_attendance( uuid, uuid, uuid[] )
+alter function public.remind_match_attendance( uuid, uuid ) owner to postgres;
+revoke execute on function public.remind_match_attendance( uuid, uuid )
 from public, anon, authenticated, service_role;
-grant execute on function public.remind_match_attendance( uuid, uuid, uuid[] ) to authenticated;
+grant execute on function public.remind_match_attendance( uuid, uuid ) to authenticated;
 
 create or replace function public.respond_match_attendance(
   p_team_id uuid,
