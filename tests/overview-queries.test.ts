@@ -72,6 +72,8 @@ test("loadOverview uses bounded explicit queries and returns only published curr
     team_news: [{ data: [
       { id: "00000000-0000-4000-8000-000000000201", title: "Tin mới", body: "Nội dung thật", status: "published", published_at: "2026-10-09T09:00:00.000Z" },
       { id: "00000000-0000-4000-8000-000000000200", title: "Tin cũ", body: "Nội dung cũ", status: "published", published_at: "2026-10-08T09:00:00.000Z" },
+      { id: "00000000-0000-4000-8000-000000000199", title: "Tin thứ ba", body: "Nội dung ba", status: "published", published_at: "2026-10-07T09:00:00.000Z" },
+      { id: "00000000-0000-4000-8000-000000000198", title: "Tin thứ tư", body: "Nội dung bốn", status: "published", published_at: "2026-10-06T09:00:00.000Z" },
     ], error: null }],
     profiles: [{ data: [
       { id: PLAYER_A, display_name: "Bình" },
@@ -87,7 +89,7 @@ test("loadOverview uses bounded explicit queries and returns only published curr
 
   assert.deepEqual(matchCalls, [["team-1", USER_ID]]);
   assert.equal(result.ok, true);
-  assert.deepEqual(result.ok ? result.data.news.map(({ title }) => title) : [], ["Tin mới", "Tin cũ"]);
+  assert.deepEqual(result.ok ? result.data.news.map(({ title }) => title) : [], ["Tin mới", "Tin cũ", "Tin thứ ba", "Tin thứ tư"]);
   assert.deepEqual(result.ok ? result.data.statistics.topScorer : null, { userId: PLAYER_B, displayName: "An", goals: 2 });
   assert.equal(result.ok ? result.data.nextMatch?.id : null, UPCOMING.id);
   assert.deepEqual(fixture.calls.map(({ table, query }) => ({ table, calls: query.calls })), [
@@ -105,7 +107,7 @@ test("loadOverview uses bounded explicit queries and returns only published curr
       { method: "lte", arguments: ["published_at", NOW] },
       { method: "order", arguments: ["published_at", { ascending: false }] },
       { method: "order", arguments: ["id", { ascending: false }] },
-      { method: "limit", arguments: [3] },
+      { method: "limit", arguments: [25] },
     ] },
     { table: "profiles", calls: [
       { method: "select", arguments: ["id,display_name"] },

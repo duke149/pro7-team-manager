@@ -17,7 +17,7 @@ import type { OverviewGoalRow, OverviewNewsPost, OverviewResult } from "./model"
 import "../matches/server-only";
 
 const MAX_STAT_ROWS = 1000;
-const NEWS_LIMIT = 3;
+const NEWS_LIMIT = 25;
 const PROFILE_PAGE_SIZE = 100;
 
 type Dependencies = {

@@ -36,7 +36,7 @@ export async function renderOverviewPage(
         calendar: [],
       },
     } as const);
-  return <OverviewView context={context} result={result} />;
+  return <OverviewView context={context} result={result} serverNow={now} />;
 }
 
 export default async function OverviewPage({

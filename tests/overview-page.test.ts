@@ -52,7 +52,12 @@ const READY: OverviewResult = {
       recentPoints: 8,
       topScorer: { userId: "00000000-0000-4000-8000-000000000020", displayName: "Nguyễn An", goals: 7 },
     },
-    news: [{ id: "00000000-0000-4000-8000-000000000201", title: "Họp chiến thuật", body: "Toàn đội tập trung trước trận.", publishedAt: "2026-10-09T09:00:00.000Z" }],
+    news: [
+      { id: "00000000-0000-4000-8000-000000000204", title: "Họp chiến thuật", body: "Toàn đội tập trung trước trận.", publishedAt: "2026-10-09T09:00:00.000Z" },
+      { id: "00000000-0000-4000-8000-000000000203", title: "Tin đội hai", body: "Nội dung hai.", publishedAt: "2026-10-08T09:00:00.000Z" },
+      { id: "00000000-0000-4000-8000-000000000202", title: "Tin đội ba", body: "Nội dung ba.", publishedAt: "2026-10-07T09:00:00.000Z" },
+      { id: "00000000-0000-4000-8000-000000000201", title: "Tin đội bốn", body: "Nội dung bốn.", publishedAt: "2026-10-06T09:00:00.000Z" },
+    ],
     calendar: [NEXT_MATCH],
   },
 };
@@ -102,16 +107,16 @@ function html(value: unknown): string {
   return renderToStaticMarkup(value as React.ReactElement);
 }
 
-async function render(context: TeamAccessContext, result: OverviewResult) {
+async function render(context: TeamAccessContext, result: OverviewResult, expectedNow = "2026-10-10T00:00:00.000Z") {
   return overview.renderOverviewPage({
     params: Promise.resolve({ slug: "pro7-fc" }),
     requireTeamPermission: async () => context,
-    loadOverview: async (teamId, userId, now) => {
-      assert.deepEqual([teamId, userId, now], ["team-1", USER_ID, "2026-10-10T00:00:00.000Z"]);
+    loadOverview: async (teamId, userId, actualNow) => {
+      assert.deepEqual([teamId, userId, actualNow], ["team-1", USER_ID, expectedNow]);
       return result;
     },
     denied: () => "SAFE_DENIAL",
-    now: "2026-10-10T00:00:00.000Z",
+    now: expectedNow,
   });
 }
 
@@ -135,7 +140,7 @@ test("Overview preserves hosted card/control order with live data and real entit
   const markup = html(await render(ADMIN, READY));
 
   assert.match(markup, /dashboard-view[^>]*data-state="ready"/u);
-  assert.match(markup, /match-hero[\s\S]*availability-card[\s\S]*stats-grid[\s\S]*TỈ LỆ THẮNG[\s\S]*PHONG ĐỘ GẦN ĐÂY[\s\S]*VUA PHÁ LƯỚI[\s\S]*THỨ HẠNG[\s\S]*Tin mới[\s\S]*Sắp diễn ra/u);
+  assert.match(markup, /match-hero[\s\S]*availability-card[\s\S]*stats-grid[\s\S]*TỈ LỆ THẮNG[\s\S]*PHONG ĐỘ GẦN ĐÂY[\s\S]*VUA PHÁ LƯỚI[\s\S]*THỨ HẠNG[\s\S]*Tin mới[\s\S]*Xem tất cả[\s\S]*Sắp diễn ra[\s\S]*Mở lịch/u);
   assert.match(markup, /PRO7 FC[\s\S]*Metro City[\s\S]*Riverside Turf/u);
   assert.match(markup, /10\/15[\s\S]*10[\s\S]*Sẵn sàng[\s\S]*3[\s\S]*Chờ trả lời[\s\S]*2[\s\S]*Vắng mặt/u);
   assert.match(markup, /50%[\s\S]*3 thắng • 2 hòa • 1 thua/u);
@@ -143,7 +148,9 @@ test("Overview preserves hosted card/control order with live data and real entit
   assert.match(markup, /Họp chiến thuật[\s\S]*Toàn đội tập trung trước trận/u);
   assert.match(markup, new RegExp(`href="/teams/pro7-fc/tactics/${MATCH_ID}"[^>]*>[\\s\\S]*Chốt đội hình`, "u"));
   assert.match(markup, new RegExp(`href="/teams/pro7-fc/matches/${MATCH_ID}"[^>]*>Chi tiết trận`, "u"));
-  assert.match(markup, new RegExp(`href="/teams/pro7-fc/matches/${MATCH_ID}\\?tab=attendance"[^>]*>[\\s\\S]*Nhắc người chưa trả lời`, "u"));
+  assert.match(markup, /<button[^>]*>[\s\S]*Nhắc người chưa trả lời<\/button>/u);
+  assert.match(markup, new RegExp(`<time[^>]*dateTime="${NEXT_MATCH.startsAt}"`, "u"));
+  assert.doesNotMatch(markup, /Tin đội bốn/u);
   assert.doesNotMatch(markup, /FC Spartans|J\. Davis|Northside FC|68%|12 thắng/u);
 });
 
@@ -151,8 +158,23 @@ test("Overview never exposes reminder/manage controls to members", async () => {
   const markup = html(await render(MEMBER, READY));
 
   assert.doesNotMatch(markup, /Nhắc người chưa trả lời/u);
-  assert.doesNotMatch(markup, /tab=attendance/u);
   assert.match(markup, new RegExp(`href="/teams/pro7-fc/matches/${MATCH_ID}"[^>]*>[\\s\\S]*Xác nhận tham gia`, "u"));
+
+  const closedMarkup = html(await render(MEMBER, READY, "2026-10-18T12:30:00.001Z"));
+  assert.doesNotMatch(closedMarkup, /Xác nhận tham gia/u);
+  assert.match(closedMarkup, /Đã hết hạn xác nhận/u);
+});
+
+test("Overview renders denied match and tactics destinations as non-interactive content", async () => {
+  const context: TeamAccessContext = {
+    ...MEMBER,
+    permissions: ["team.read", "news.read"],
+  };
+  const markup = html(await render(context, READY));
+
+  assert.match(markup, /Chốt đội hình[\s\S]*Chi tiết trận/u);
+  assert.doesNotMatch(markup, /href="\/teams\/pro7-fc\/(?:matches|tactics)/u);
+  assert.match(markup, /Mở lịch/u);
 });
 
 test("Overview empty and error states do not invent statistics, news, opponents, or counts", async () => {
