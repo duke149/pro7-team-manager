@@ -72,14 +72,13 @@ export function SquadToolbar({
   return (
     <section className="squad-toolbar card" aria-label="Tìm và lọc cầu thủ">
       <form className="search-box" action={action} method="get" onSubmit={navigate}>
-        <Search size={19} />
+        <button className="search-submit" type="submit" aria-label="Tìm kiếm" disabled={disabled}><Search size={19} /></button>
         <label className="sr-only" htmlFor="squad-search">Tìm theo tên cầu thủ</label>
         <input id="squad-search" name="q" defaultValue={filters.q} placeholder="Tìm theo tên cầu thủ..." disabled={disabled} />
         <input type="hidden" name="position" value={filters.position} />
         <input type="hidden" name="status" value={filters.status} />
         <input type="hidden" name="sort" value={filters.sort} />
         <input type="hidden" name="direction" value={filters.direction} />
-        <button className="sr-only" type="submit">Tìm kiếm</button>
       </form>
       {disabled ? (
         <div className="filter-row" aria-hidden="true">

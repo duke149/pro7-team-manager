@@ -123,6 +123,25 @@ test("search submit uses client navigation and preserves every active filter", a
   await act(async () => view.root.unmount());
 });
 
+test("magnifying-glass control is a visible semantic submit target", async () => {
+  const view = await mounted();
+  const form = view.container.querySelector("form.search-box") as HTMLFormElement;
+  const submitButton = form.querySelector('button.search-submit[type="submit"][aria-label="Tìm kiếm"]') as HTMLButtonElement | null;
+
+  assert.ok(submitButton);
+  assert.ok(submitButton.querySelector("svg"));
+  assert.equal(submitButton.classList.contains("sr-only"), false);
+  await act(async () => {
+    change(form.elements.namedItem("q") as HTMLInputElement, "Bình");
+    submitButton.click();
+  });
+
+  assert.deepEqual(globalThis.__squadToolbarPushes, [
+    "/teams/pro7-fc/squad?q=B%C3%ACnh&position=GK&status=active&sort=name&direction=asc",
+  ]);
+  await act(async () => view.root.unmount());
+});
+
 test("filter submit uses client navigation and preserves search and position", async () => {
   const view = await mounted();
   const form = view.container.querySelector("details.squad-filter-panel form") as HTMLFormElement;
