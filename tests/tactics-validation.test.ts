@@ -73,13 +73,16 @@ test("save validation requires seven unique starters, one goalkeeper, unique use
   }
 });
 
-test("save validation couples optimistic version and timestamp to existing versus new drafts", () => {
+test("save validation preserves bounded proposed versions for new drafts and couples only their null token", () => {
   const newDraft = validateTacticsPayload(save({ tacticId: null, version: 1, expectedUpdatedAt: null }));
   assert.equal(newDraft.ok, true);
+  const forkedDraft = validateTacticsPayload(save({ tacticId: null, version: 2, expectedUpdatedAt: null }));
+  assert.equal(forkedDraft.ok, true);
+  if (forkedDraft.ok && forkedDraft.value.action === "save") assert.equal(forkedDraft.value.version, 2);
   for (const payload of [
     save({ tacticId: null }),
     save({ tacticId: null, version: 1 }),
-    save({ tacticId: null, version: 2, expectedUpdatedAt: null }),
+    save({ tacticId: null, version: 32768, expectedUpdatedAt: null }),
     save({ expectedUpdatedAt: null }),
     save({ version: 0 }),
     save({ expectedUpdatedAt: "2026-02-31T00:00:00Z" }),

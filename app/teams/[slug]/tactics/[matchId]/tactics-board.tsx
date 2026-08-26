@@ -22,6 +22,7 @@ function playerName(player: TacticsPlayer | undefined) { return player?.displayN
 function initials(value: string) { return value.trim().split(/\s+/u).slice(-2).map((part) => part[0]?.toLocaleUpperCase("vi-VN")).join("") || "CT"; }
 function clamp(value: number) { return Math.round(Math.min(100, Math.max(0, value)) * 100) / 100; }
 function apiMessage(value: unknown, fallback: string) { return typeof value === "object" && value !== null && "message" in value && typeof value.message === "string" ? value.message : fallback; }
+function nextVersion(version: number) { return Number.isSafeInteger(version) && version >= 1 && version < 32767 ? version + 1 : null; }
 function savedTactic(value: unknown) {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
   const outer = value as Record<string, unknown>;
@@ -42,12 +43,15 @@ function defaultSlots(players: readonly TacticsPlayer[], formation: TacticFormat
   return Object.freeze([...starters, ...bench]);
 }
 
-function draftFor(mode: DisplayMode, detail: TacticsDetail): Draft {
+function draftFor(mode: DisplayMode, detail: TacticsDetail): Draft | null {
   const rows = detail.tactics.filter((tactic) => tactic.mode === mode);
   const draft = rows.find((tactic) => tactic.status === "draft");
   if (draft) return { id: draft.id, mode, formation: draft.formation, instructions: draft.instructions, version: draft.version, pressing: draft.pressing, defensiveLine: draft.defensiveLine, updatedAt: draft.updatedAt, slots: draft.slots, expectedUpdatedAt: draft.updatedAt };
   const applied = rows.find((tactic) => tactic.status === "applied");
-  if (applied) return { id: null, mode, formation: applied.formation, instructions: applied.instructions, version: 1, pressing: applied.pressing, defensiveLine: applied.defensiveLine, updatedAt: detail.match.updatedAt, slots: applied.slots, expectedUpdatedAt: null };
+  if (applied) {
+    const proposedVersion = nextVersion(applied.version);
+    return proposedVersion === null ? null : { id: null, mode, formation: applied.formation, instructions: applied.instructions, version: proposedVersion, pressing: applied.pressing, defensiveLine: applied.defensiveLine, updatedAt: detail.match.updatedAt, slots: applied.slots, expectedUpdatedAt: null };
+  }
   const legacy = mode === "attacking" ? detail.tactics.find((tactic) => tactic.mode === "balanced" && tactic.status === "draft") ?? detail.tactics.find((tactic) => tactic.mode === "balanced" && tactic.status === "applied") : null;
   if (legacy) return { id: null, mode, formation: legacy.formation, instructions: legacy.instructions, version: 1, pressing: legacy.pressing, defensiveLine: legacy.defensiveLine, updatedAt: legacy.updatedAt, slots: legacy.slots, expectedUpdatedAt: null };
   return { id: null, mode, formation: "2-3-1", instructions: null, version: 1, pressing: "medium", defensiveLine: "medium", updatedAt: detail.match.updatedAt, slots: defaultSlots(detail.players, "2-3-1"), expectedUpdatedAt: null };
@@ -77,7 +81,8 @@ export function TacticsBoard({ slug, teamName, detail, canManage }: { slug: stri
   const router = useRouter();
   const firstMode: DisplayMode = canManage || detail.tactics.some((tactic) => tactic.mode === "attacking" || tactic.mode === "balanced") ? "attacking" : "defensive";
   const [mode, setMode] = useState<DisplayMode>(firstMode);
-  const [drafts, setDrafts] = useState<Partial<Record<DisplayMode, Draft>>>(() => canManage ? Object.fromEntries(DISPLAY_MODES.map((entry) => [entry.mode, draftFor(entry.mode, detail)])) : Object.fromEntries(DISPLAY_MODES.flatMap((entry) => { const tactic = memberTactic(entry.mode, detail); return tactic ? [[entry.mode, tactic]] : []; })));
+  const [drafts, setDrafts] = useState<Partial<Record<DisplayMode, Draft>>>(() => canManage ? Object.fromEntries(DISPLAY_MODES.flatMap((entry) => { const tactic = draftFor(entry.mode, detail); return tactic ? [[entry.mode, tactic]] : []; })) : Object.fromEntries(DISPLAY_MODES.flatMap((entry) => { const tactic = memberTactic(entry.mode, detail); return tactic ? [[entry.mode, tactic]] : []; })));
+  const [versionBlocked, setVersionBlocked] = useState<Partial<Record<DisplayMode, boolean>>>(() => Object.fromEntries(DISPLAY_MODES.map((entry) => [entry.mode, canManage && !detail.tactics.some((tactic) => tactic.mode === entry.mode && tactic.status === "draft") && detail.tactics.some((tactic) => tactic.mode === entry.mode && tactic.status === "applied" && nextVersion(tactic.version) === null)])));
   const [dirty, setDirty] = useState<Partial<Record<DisplayMode, boolean>>>({});
   const [state, setState] = useState({ pending: false, message: "", error: false });
   const [selectedSlotKey, setSelectedSlotKey] = useState<string | null>(null);
@@ -174,14 +179,22 @@ export function TacticsBoard({ slug, teamName, detail, canManage }: { slug: stri
         if (!authoritative) { setState({ pending: false, message: "Máy chủ trả về bản nháp không hợp lệ.", error: true }); return; }
         setDrafts((current) => ({ ...current, [mode]: { ...(current[mode] as Draft), id: authoritative.id, version: authoritative.version, updatedAt: authoritative.updatedAt, expectedUpdatedAt: authoritative.updatedAt } }));
       } else {
-        setDrafts((current) => ({ ...current, [mode]: { ...(current[mode] as Draft), id: null, version: 1, updatedAt: detail.match.updatedAt, expectedUpdatedAt: null } }));
+        const proposedVersion = nextVersion(draft.version);
+        if (proposedVersion === null) {
+          setDrafts((current) => ({ ...current, [mode]: undefined }));
+          setVersionBlocked((current) => ({ ...current, [mode]: true }));
+        } else {
+          setDrafts((current) => ({ ...current, [mode]: { ...(current[mode] as Draft), id: null, version: proposedVersion, updatedAt: detail.match.updatedAt, expectedUpdatedAt: null } }));
+        }
       }
       setState({ pending: false, message: action === "save" ? "Đã lưu bản nháp." : "Đã áp dụng đội hình.", error: false });
       setDirty((current) => ({ ...current, [mode]: false })); router.refresh();
     } catch { setState({ pending: false, message: "Không thể cập nhật chiến thuật.", error: true }); }
   }
 
-  if (!draft) return <div className="view-stack tactics-view" data-state="empty"><section className="card tactics-state"><h2>Chưa có chiến thuật đã áp dụng</h2><p>Không có đội hình công khai ở chế độ này.</p></section></div>;
+  if (!draft) return versionBlocked[mode]
+    ? <div className="view-stack tactics-view" data-state="error"><section className="card tactics-state"><h2>Không thể tạo phiên bản chiến thuật mới</h2><p>Chiến thuật đã đạt giới hạn phiên bản. Vui lòng liên hệ quản trị hệ thống.</p></section></div>
+    : <div className="view-stack tactics-view" data-state="empty"><section className="card tactics-state"><h2>Chưa có chiến thuật đã áp dụng</h2><p>Không có đội hình công khai ở chế độ này.</p></section></div>;
   const ready = starters.length === 7 && starters.filter((slot) => slot.roleLabel === "GK").length === 1;
   const legacyMode = mode === "attacking" && !detail.tactics.some((tactic) => tactic.mode === "attacking") && detail.tactics.some((tactic) => tactic.mode === "balanced");
   return <div className="view-stack tactics-view" data-state={ready ? "ready" : "empty"}>

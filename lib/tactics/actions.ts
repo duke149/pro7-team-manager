@@ -48,6 +48,7 @@ async function defaults(): Promise<TacticsActionDependencies> {
 function rpcFailure(error: { code?: string }) {
   switch (error.code) {
     case "40001": return failure(409, "stale", "Chiến thuật đã thay đổi. Vui lòng tải lại.");
+    case "23505": return failure(409, "stale", "Chiến thuật đã thay đổi. Vui lòng tải lại.");
     case "55000": return failure(409, "lifecycle", "Trận đấu hoặc chiến thuật không còn ở trạng thái cho phép.");
     case "42501": case "28000": return failure(403, "forbidden", "Bạn không có quyền quản lý chiến thuật.");
     case "P0002": return failure(404, "not_found", "Không tìm thấy trận đấu hoặc chiến thuật.");
@@ -97,7 +98,7 @@ function parseSavedTactic(value: unknown) {
   return row;
 }
 function savedRowMatches(row: Record<string, unknown>, expectedId: string, teamId: string, matchId: string, payload: SaveTacticPayload) {
-  const expectedVersion = payload.tacticId === null ? 1 : payload.version + 1;
+  const expectedVersion = payload.tacticId === null ? payload.version : payload.version + 1;
   if (row.id !== expectedId || row.team_id !== teamId || row.match_id !== matchId || row.mode !== payload.mode
     || row.formation !== payload.formation || row.instructions !== payload.instructions || row.version !== expectedVersion
     || row.pressing !== payload.pressing || row.defensive_line !== payload.defensiveLine || row.status !== "draft") return false;

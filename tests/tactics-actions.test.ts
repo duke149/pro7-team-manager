@@ -132,6 +132,26 @@ test("new save accepts only the authoritative version-one row", async () => {
   assert.deepEqual(await response.json(), { ok: true, tactic: { id: TACTIC_ID, version: 1, updatedAt: "2026-10-02T00:00:00.000Z" } });
 });
 
+test("fork save preserves a submitted proposed version and requires that exact authoritative version", async () => {
+  const creating = { ...payload(), tacticId: null, version: 2, expectedUpdatedAt: null };
+  const fixture = dependencies({ savedRow: savedRow({ version: 2 }) });
+  const response = await mutateTactics(request(creating), { slug: "pro7-fc", matchId: MATCH_ID }, fixture.deps);
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { ok: true, tactic: { id: TACTIC_ID, version: 2, updatedAt: "2026-10-02T00:00:00.000Z" } });
+  const rpc = fixture.calls.find((call) => call.kind === "rpc");
+  assert.ok(rpc && rpc.kind === "rpc");
+  assert.equal((rpc.args as { p_version: number }).p_version, 2);
+});
+
+test("a concurrent duplicate proposed version maps to a stable conflict", async () => {
+  const creating = { ...payload(), tacticId: null, version: 2, expectedUpdatedAt: null };
+  const fixture = dependencies({ rpcError: { code: "23505" } });
+  const response = await mutateTactics(request(creating), { slug: "pro7-fc", matchId: MATCH_ID }, fixture.deps);
+  assert.equal(response.status, 409);
+  assert.deepEqual(await response.json(), { ok: false, code: "stale", message: "Chiến thuật đã thay đổi. Vui lòng tải lại." });
+  assert.equal(fixture.calls.filter((call) => call.kind === "from" && call.table === "match_tactics").length, 0);
+});
+
 test("save fails closed before RPC when any player is inactive or belongs to another team", async () => {
   const fixture = dependencies({ activeIds: PLAYER_IDS.slice(0, -1) });
   const response = await mutateTactics(request(payload()), { slug: "pro7-fc", matchId: MATCH_ID }, fixture.deps);

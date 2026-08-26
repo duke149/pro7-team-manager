@@ -227,7 +227,7 @@ test("a newly saved draft reconciles before apply and the post-apply fork adopts
     const body = JSON.parse(String(init?.body));
     if (body.action === "save") {
       saveCount += 1;
-      return Response.json({ ok: true, tactic: { id: saveCount === 1 ? createdId : forkId, version: 1, updatedAt: `2026-10-0${saveCount + 2}T00:00:00.000Z` } });
+      return Response.json({ ok: true, tactic: { id: saveCount === 1 ? createdId : forkId, version: saveCount, updatedAt: `2026-10-0${saveCount + 2}T00:00:00.000Z` } });
     }
     return Response.json({ ok: true });
   }) as typeof fetch;
@@ -242,8 +242,9 @@ test("a newly saved draft reconciles before apply and the post-apply fork adopts
   await act(async () => { find("Áp dụng cho đội")?.click(); await new Promise((resolve) => setTimeout(resolve, 0)); });
   assert.deepEqual(calls.map((call) => JSON.parse(String(call.body))).map((body) => body.action), ["save", "apply", "save", "apply"]);
   assert.equal(JSON.parse(String(calls[0].body)).mode, "attacking");
+  assert.equal(JSON.parse(String(calls[0].body)).version, 1);
   assert.deepEqual(JSON.parse(String(calls[1].body)), { action: "apply", tacticId: createdId, expectedUpdatedAt: "2026-10-03T00:00:00.000Z" });
-  assert.equal(JSON.parse(String(calls[2].body)).version, 1);
+  assert.equal(JSON.parse(String(calls[2].body)).version, 2);
   assert.equal(JSON.parse(String(calls[2].body)).tacticId, null);
   assert.equal(JSON.parse(String(calls[2].body)).expectedUpdatedAt, null);
   assert.deepEqual(JSON.parse(String(calls[3].body)), { action: "apply", tacticId: forkId, expectedUpdatedAt: "2026-10-04T00:00:00.000Z" });
@@ -275,7 +276,7 @@ test("apply forks an unsaved editable draft so duplicate apply stays disabled an
     calls.push({ body: init?.body });
     const body = JSON.parse(String(init?.body));
     return body.action === "save"
-      ? Response.json({ ok: true, tactic: { id: "00000000-0000-4000-8000-000000000401", version: 1, updatedAt: "2026-10-04T00:00:00.000Z" } })
+      ? Response.json({ ok: true, tactic: { id: "00000000-0000-4000-8000-000000000401", version: 3, updatedAt: "2026-10-04T00:00:00.000Z" } })
       : Response.json({ ok: true });
   }) as typeof fetch;
   const view = await mounted();
@@ -288,21 +289,29 @@ test("apply forks an unsaved editable draft so duplicate apply stays disabled an
   assert.deepEqual(calls.map((call) => JSON.parse(String(call.body))).map((body) => body.action), ["apply", "save"]);
   const saved = JSON.parse(String(calls[1].body));
   assert.equal(saved.tacticId, null);
-  assert.equal(saved.version, 1);
+  assert.equal(saved.version, 3);
   assert.equal(saved.expectedUpdatedAt, null);
   assert.equal(saved.slots.find((slot: { userId: string }) => slot.userId === USER_IDS[1]).x, 27);
   await act(async () => view.root.unmount());
 });
 
-test("an Admin reload with only an applied tactic also seeds a valid version-one create payload", async () => {
+test("an Admin reload with only applied version N seeds proposed version N plus one", async () => {
   const calls: { body?: BodyInit | null }[] = [];
-  globalThis.fetch = (async (_input: string | URL | Request, init?: RequestInit) => { calls.push({ body: init?.body }); return Response.json({ ok: true, tactic: { id: "00000000-0000-4000-8000-000000000402", version: 1, updatedAt: "2026-10-04T00:00:00.000Z" } }); }) as typeof fetch;
+  globalThis.fetch = (async (_input: string | URL | Request, init?: RequestInit) => { calls.push({ body: init?.body }); return Response.json({ ok: true, tactic: { id: "00000000-0000-4000-8000-000000000402", version: 3, updatedAt: "2026-10-04T00:00:00.000Z" } }); }) as typeof fetch;
   const applied: TacticsDetail = { ...DETAIL, tactics: DETAIL.tactics.map((tactic) => ({ ...tactic, status: "applied", appliedAt: "2026-10-03T00:00:00.000Z" })) };
   const view = await mounted(true, applied);
   const save = [...view.container.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("Lưu bản nháp")); assert.ok(save);
   await act(async () => { save.click(); await new Promise((resolve) => setTimeout(resolve, 0)); });
   const payload = JSON.parse(String(calls[0].body));
-  assert.deepEqual({ tacticId: payload.tacticId, version: payload.version, expectedUpdatedAt: payload.expectedUpdatedAt }, { tacticId: null, version: 1, expectedUpdatedAt: null });
+  assert.deepEqual({ tacticId: payload.tacticId, version: payload.version, expectedUpdatedAt: payload.expectedUpdatedAt }, { tacticId: null, version: 3, expectedUpdatedAt: null });
+  await act(async () => view.root.unmount());
+});
+
+test("an applied maximum version fails closed instead of allocating an overflowing draft", async () => {
+  const overflow: TacticsDetail = { ...DETAIL, tactics: DETAIL.tactics.map((tactic) => ({ ...tactic, version: 32767, status: "applied", appliedAt: "2026-10-03T00:00:00.000Z" })) };
+  const view = await mounted(true, overflow);
+  assert.match(view.container.textContent ?? "", /Không thể tạo phiên bản chiến thuật mới/u);
+  assert.equal([...view.container.querySelectorAll<HTMLButtonElement>("button")].some((button) => /Lưu bản nháp|Áp dụng cho đội/u.test(button.textContent ?? "")), false);
   await act(async () => view.root.unmount());
 });
 

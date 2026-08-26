@@ -76,7 +76,7 @@ function validateSave(value: Record<string, unknown>): { ok: true; value: SaveTa
   const existing = isUuid(value.tacticId);
   const creating = value.tacticId === null;
   if (!existing && !creating) errors.tacticId = "Mã chiến thuật không hợp lệ.";
-  if (creating && (value.version !== 1 || value.expectedUpdatedAt !== null)) errors.version = "Bản nháp mới phải bắt đầu ở phiên bản 1.";
+  if (creating && value.expectedUpdatedAt !== null) errors.expectedUpdatedAt = "Bản nháp mới không được có phiên bản dữ liệu đã lưu.";
   if (existing && !isIsoTimestamp(value.expectedUpdatedAt)) errors.expectedUpdatedAt = "Phiên bản dữ liệu không hợp lệ.";
 
   const slots = Array.isArray(value.slots) ? value.slots.map(parseSlot) : [];

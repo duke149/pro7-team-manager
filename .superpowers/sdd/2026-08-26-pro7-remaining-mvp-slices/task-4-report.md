@@ -135,3 +135,30 @@ Status: `DONE_WITH_CONCERNS`
 - Changed-file ESLint and `git diff --check`: exit 0.
 - Whole-repository `npm run lint`: unchanged baseline of 479 errors and 1 warning in pre-existing/generated files.
 - No UI redesign, remote operation, migration edit/apply, deployment, or `supabase/.temp/` mutation occurred.
+
+---
+
+## Fix round 3/5 — monotonic applied-draft versions
+
+Status: `DONE_WITH_CONCERNS`
+
+### Changes
+
+- An Admin fork created after applying a tactic, or after reloading an applied-only tactic, now proposes the bounded next version (`applied.version + 1`) instead of resetting to version one. A truly first-ever tactic still starts at version one.
+- New-draft validation preserves any submitted proposed version from 1 through the database `smallint` ceiling of 32767 while continuing to require a null optimistic timestamp. The save RPC receives that exact proposed version, and authoritative readback must return the same exact version and submitted content before the client adopts the ID/token.
+- A concurrent insert of the same next `(match, mode, version)` tuple (`23505`) now maps to the stable `409 stale` response and never performs or adopts a post-save readback.
+- Applied version 32767 fails closed in the editor with an explicit version-limit state and no Save/Apply controls. No migration change was required because the existing RPC already accepts `p_version` on create and the existing unique index arbitrates concurrent proposed versions.
+
+### Fix-round TDD evidence
+
+- Action/validation RED: proposed version-two creates were rejected as 422, the duplicate-version fixture could not reach the RPC conflict path, and validation discarded the fork version. GREEN: version two is retained through validation, RPC arguments, and exact authoritative readback; `23505` returns `409 stale`; version 32768 remains rejected.
+- Mounted RED: save v1 → apply → fork sent version one again; applied version N reload also reset to one; and a max-version applied tactic still exposed editing controls. GREEN: the consecutive flow sends versions 1 then 2, applied version 2 reload/fork sends version 3, and version 32767 renders the closed limit state.
+
+### Fresh verification
+
+- Focused tactics suite: 35 passed, 0 failed.
+- Full `npm run test:unit`: 373 total; 368 passed, 0 failed, 5 optional live-database skips.
+- `npm test`: production build succeeded and rendered HTML/browser-boundary checks passed 7/7.
+- Changed-file ESLint and `git diff --check`: exit 0.
+- Whole-repository `npm run lint`: unchanged baseline of 479 errors and 1 warning in pre-existing/generated files.
+- No remote operation, migration edit/apply, deployment, or `supabase/.temp/` mutation occurred.
