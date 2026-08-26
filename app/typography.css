@@ -307,6 +307,87 @@ h6 {
   line-height: var(--leading-control);
 }
 
+/* Matches and tactics */
+.confirmed-strip,
+.analysis-score > :is(span, small),
+.tactics-toolbar label {
+  font-size: var(--type-label);
+  font-weight: var(--weight-bold);
+  line-height: var(--leading-control);
+  letter-spacing: var(--tracking-caps);
+}
+
+.confirmed-body > p,
+.match-meta,
+.roster-progress > span,
+.compare-row,
+.tactics-state p,
+.tactics-muted {
+  font-size: var(--type-body);
+  line-height: var(--leading-body);
+}
+
+.rsvp-options :is(button, span) {
+  font-size: var(--type-control);
+  font-weight: var(--weight-semibold);
+  line-height: var(--leading-control);
+}
+
+.event-row,
+.motm :is(b, small),
+.tactics-match-row small,
+.tactics-readonly :is(b, small),
+.tactics-message {
+  font-size: var(--type-body-sm);
+  line-height: var(--leading-body);
+}
+
+.score-board strong,
+.countdown-row b,
+.roster-progress strong {
+  font-family: var(--font-numeric);
+  font-variant-numeric: tabular-nums;
+}
+
+.mode-toggle button,
+.tactics-toolbar select {
+  font-size: var(--type-control);
+  font-weight: var(--weight-semibold);
+  line-height: var(--leading-control);
+}
+
+.instruction-card textarea {
+  font-size: var(--type-body);
+  font-weight: var(--weight-regular);
+  line-height: var(--leading-relaxed);
+}
+
+.instruction-card > label,
+.pitch-caption {
+  font-size: var(--type-label);
+  font-weight: var(--weight-semibold);
+  line-height: var(--leading-control);
+}
+
+.pitch-player span {
+  font-size: var(--type-caption);
+  font-weight: var(--weight-bold);
+  line-height: var(--leading-control);
+}
+
+.pitch-player b {
+  font-family: var(--font-numeric);
+  font-size: var(--type-control);
+  font-variant-numeric: tabular-nums;
+}
+
+.bench-player,
+.bench-player > :is(b, span) {
+  font-size: var(--type-body-sm);
+  font-weight: var(--weight-semibold);
+  line-height: var(--leading-control);
+}
+
 @media (max-width: 767px) {
   :root {
     --type-label: 13px;

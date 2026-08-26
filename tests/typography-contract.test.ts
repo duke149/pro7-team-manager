@@ -72,3 +72,16 @@ test("overview, squad, and profile surfaces map copy and data to semantic roles"
   assert.match(css, /\.account-profile-fields input[\s\S]*font-size:\s*var\(--type-input\)/u);
   assert.match(css, /\.account-profile-message[\s\S]*font-size:\s*var\(--type-body-sm\)/u);
 });
+
+test("matches and tactics keep readable labels with stable numerals", async () => {
+  const css = await readFile(typographyPath, "utf8");
+  assert.match(css, /\.confirmed-strip[\s\S]*font-size:\s*var\(--type-label\)/u);
+  assert.match(css, /\.confirmed-body > p[\s\S]*font-size:\s*var\(--type-body\)/u);
+  assert.match(css, /\.rsvp-options :is\(button, span\)[\s\S]*font-size:\s*var\(--type-control\)/u);
+  assert.match(css, /\.event-row[\s\S]*font-size:\s*var\(--type-body-sm\)/u);
+  assert.match(css, /\.score-board strong[\s\S]*font-variant-numeric:\s*tabular-nums/u);
+  assert.match(css, /\.mode-toggle button[\s\S]*font-size:\s*var\(--type-control\)/u);
+  assert.match(css, /\.instruction-card textarea[\s\S]*font-size:\s*var\(--type-body\)/u);
+  assert.match(css, /\.pitch-player[\s\S]*font-size:\s*var\(--type-caption\)/u);
+  assert.match(css, /\.bench-player[\s\S]*font-size:\s*var\(--type-body-sm\)/u);
+});
