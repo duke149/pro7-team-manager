@@ -15,18 +15,27 @@ declare
   v_unrelated constant uuid := '00000000-0000-4000-8000-000000008108';
   v_team constant uuid := '00000000-0000-4000-8000-000000008201';
   v_other_team constant uuid := '00000000-0000-4000-8000-000000008202';
+  v_owner_role uuid;
   v_admin_role uuid;
   v_member_role uuid;
   v_match_id uuid;
   v_cancelled_match_id uuid;
   v_tactic_id uuid;
+  v_second_tactic_id uuid;
   v_entry_id uuid;
+  v_other_entry_id uuid;
   v_due_id uuid;
   v_updated_at timestamptz;
+  v_original_analysis_updated_at timestamptz;
+  v_analysis_updated_at timestamptz;
+  v_invited_at timestamptz;
+  v_invite_updated_at timestamptz;
   v_count integer;
+  v_audit_count integer;
   v_failed boolean;
   v_state text;
   v_slots jsonb;
+  v_actual text[];
 begin
   insert into auth.users (id, email, email_confirmed_at, raw_user_meta_data)
   select user_id, email, pg_catalog.now(), '{}'::jsonb
@@ -45,8 +54,40 @@ begin
     (v_team, 'Remaining MVP Team', 'remaining-mvp-team-20260826', v_owner),
     (v_other_team, 'Remaining Other Team', 'remaining-other-team-20260826', v_unrelated);
 
+  select id into strict v_owner_role from public.roles where team_id = v_team and slug = 'owner';
   select id into strict v_admin_role from public.roles where team_id = v_team and slug = 'admin';
   select id into strict v_member_role from public.roles where team_id = v_team and slug = 'member';
+
+  select pg_catalog.array_agg(permission_code order by permission_code)
+  into v_actual from public.role_permissions where role_id = v_owner_role;
+  if v_actual is distinct from array[
+    'finance.manage', 'finance.read', 'matches.manage', 'matches.read', 'matches.respond',
+    'members.invite', 'members.manage', 'members.read', 'news.manage', 'news.read',
+    'players.manage', 'players.read', 'roles.manage', 'roles.read', 'settings.read',
+    'settings.update', 'tactics.manage', 'tactics.read', 'team.delete', 'team.read', 'team.update'
+  ]::text[] then
+    raise exception 'remaining MVP live: prerequisite Owner permission mapping differs: %', v_actual;
+  end if;
+
+  select pg_catalog.array_agg(permission_code order by permission_code)
+  into v_actual from public.role_permissions where role_id = v_admin_role;
+  if v_actual is distinct from array[
+    'finance.manage', 'finance.read', 'matches.manage', 'matches.read', 'matches.respond',
+    'members.invite', 'members.manage', 'members.read', 'news.manage', 'news.read',
+    'players.manage', 'players.read', 'roles.manage', 'roles.read', 'settings.read',
+    'settings.update', 'tactics.manage', 'tactics.read', 'team.read', 'team.update'
+  ]::text[] then
+    raise exception 'remaining MVP live: prerequisite Admin permission mapping differs: %', v_actual;
+  end if;
+
+  select pg_catalog.array_agg(permission_code order by permission_code)
+  into v_actual from public.role_permissions where role_id = v_member_role;
+  if v_actual is distinct from array[
+    'matches.read', 'matches.respond', 'members.read', 'news.read',
+    'players.read', 'roles.read', 'tactics.read', 'team.read'
+  ]::text[] then
+    raise exception 'remaining MVP live: prerequisite Member permission mapping differs: %', v_actual;
+  end if;
 
   insert into public.memberships (team_id, user_id, role_id, status) values
     (v_team, v_admin, v_admin_role, 'active'),
@@ -113,6 +154,19 @@ begin
     v_match_id,
     array[v_owner, v_admin, v_member, v_player4, v_player5, v_player6, v_player7]
   );
+  execute 'reset role';
+  select invited_at, updated_at
+  into strict v_invited_at, v_invite_updated_at
+  from public.match_attendance
+  where match_id = v_match_id and user_id = v_member;
+  select count(*) into v_audit_count
+  from private.audit_events
+  where team_id = v_team
+    and table_name = 'match_attendance'
+    and action = 'INSERT'
+    and row_key = pg_catalog.jsonb_build_object('match_id', v_match_id);
+
+  execute 'set local role authenticated';
   perform public.invite_match_attendance(
     v_team,
     v_match_id,
@@ -123,6 +177,19 @@ begin
   select count(*) into v_count from public.match_attendance where match_id = v_match_id;
   if v_count <> 7 then
     raise exception 'remaining MVP live: invitation retry was not idempotent (%)', v_count;
+  end if;
+  if exists (
+    select 1 from public.match_attendance
+    where match_id = v_match_id and user_id = v_member
+      and (invited_at is distinct from v_invited_at or updated_at is distinct from v_invite_updated_at)
+  ) or (
+    select count(*) from private.audit_events
+    where team_id = v_team
+      and table_name = 'match_attendance'
+      and action = 'INSERT'
+      and row_key = pg_catalog.jsonb_build_object('match_id', v_match_id)
+  ) <> v_audit_count then
+    raise exception 'remaining MVP live: exact invitation retry changed token, timestamps, or audit';
   end if;
   if exists (select 1 from public.match_attendance where match_id = v_match_id and status <> 'pending') then
     raise exception 'remaining MVP live: new invitation status differs';
@@ -237,7 +304,50 @@ begin
     true
   );
   select updated_at into strict v_updated_at from public.match_tactics where id = v_tactic_id;
+  v_failed := false;
+  begin
+    perform public.save_match_tactic(
+      v_team, v_match_id, v_tactic_id, 'balanced', '2-3-1', 'Must not clear', 1::smallint,
+      'medium', 'medium', null, v_updated_at
+    );
+  exception when others then
+    v_failed := true;
+    v_state := sqlstate;
+  end;
+  if not v_failed or v_state <> '22023'
+    or (select count(*) from public.lineup_slots where tactic_id = v_tactic_id) <> 7 then
+    raise exception 'remaining MVP live: NULL lineup was not rejected atomically (state=%)', v_state;
+  end if;
+
+  select public.save_match_tactic(
+    v_team, v_match_id, v_tactic_id, 'balanced', '2-3-1', 'Keep shape updated', 1::smallint,
+    'high', 'medium', v_slots, v_updated_at
+  ) into v_tactic_id;
+  select updated_at into strict v_updated_at from public.match_tactics where id = v_tactic_id;
   perform public.apply_match_tactic(v_team, v_tactic_id, v_updated_at);
+
+  select public.save_match_tactic(
+    v_team, v_match_id, null, 'balanced', '2-3-1', 'Second option', 3::smallint,
+    'medium', 'high', v_slots, null
+  ) into v_second_tactic_id;
+  select updated_at into strict v_updated_at
+  from public.match_tactics where id = v_second_tactic_id;
+  perform public.apply_match_tactic(v_team, v_second_tactic_id, v_updated_at);
+
+  execute 'reset role';
+  if (select count(*) from private.audit_events where team_id = v_team and table_name = 'match_tactics') <> 6 then
+    raise exception 'remaining MVP live: tactic create/update/apply/demotion audit count differs';
+  end if;
+  if exists (
+    select 1 from private.audit_events
+    where team_id = v_team and table_name = 'match_tactics'
+      and (
+        coalesce(old_data, '{}'::jsonb) ?| array['instructions', 'slots', 'slot_key', 'user_id', 'x', 'y']
+        or coalesce(new_data, '{}'::jsonb) ?| array['instructions', 'slots', 'slot_key', 'user_id', 'x', 'y']
+      )
+  ) then
+    raise exception 'remaining MVP live: tactic audit payload contains lineup or instruction data';
+  end if;
 
   perform pg_catalog.set_config('request.jwt.claim.sub', v_member::text, true);
   perform pg_catalog.set_config(
@@ -245,8 +355,11 @@ begin
     pg_catalog.jsonb_build_object('sub', v_member, 'role', 'authenticated')::text,
     true
   );
-  select count(*) into v_count from public.match_tactics where id = v_tactic_id and status = 'applied';
-  if v_count <> 1 or (select count(*) from public.lineup_slots where tactic_id = v_tactic_id) <> 7 then
+  execute 'set local role authenticated';
+  select count(*) into v_count from public.match_tactics where id = v_second_tactic_id and status = 'applied';
+  if v_count <> 1
+    or exists (select 1 from public.match_tactics where id = v_tactic_id)
+    or (select count(*) from public.lineup_slots where tactic_id = v_second_tactic_id) <> 7 then
     raise exception 'remaining MVP live: applied tactic/lineup not visible to Member';
   end if;
 
@@ -308,7 +421,50 @@ begin
     raise exception 'remaining MVP live: paid due did not create authoritative income';
   end if;
 
+  select finance_entry_id, updated_at
+  into strict v_entry_id, v_updated_at
+  from public.member_dues
+  where id = v_due_id;
+  v_failed := false;
+  begin
+    perform public.manage_finance_entry(
+      'void', v_team, v_entry_id, null, null, null, null, null,
+      'Must use due correction',
+      (select updated_at from public.finance_entries where id = v_entry_id)
+    );
+  exception when others then
+    v_failed := true;
+    v_state := sqlstate;
+  end;
+  if not v_failed or v_state <> '55000' then
+    raise exception 'remaining MVP live: due income allowed unsafe direct void (state=%)', v_state;
+  end if;
+
+  perform public.manage_member_due(
+    'void_payment', v_team, v_due_id, null, null, null, null,
+    'Payment recorded in error', v_updated_at
+  );
   execute 'reset role';
+  if not exists (
+    select 1 from public.member_dues
+    where id = v_due_id and status = 'pending' and paid_at is null and finance_entry_id is null
+  ) or not exists (
+    select 1 from public.finance_entries
+    where id = v_entry_id and voided_at is not null and void_reason = 'Payment recorded in error'
+  ) or not exists (
+    select 1 from private.audit_events
+    where team_id = v_team and table_name = 'finance_entries'
+      and row_key = pg_catalog.jsonb_build_object('id', v_entry_id)
+      and new_data ->> 'source' = 'member_due'
+  ) or not exists (
+    select 1 from private.audit_events
+    where team_id = v_team and table_name = 'member_dues'
+      and row_key = pg_catalog.jsonb_build_object('id', v_due_id)
+      and new_data ->> 'operation' = 'void_payment'
+  ) then
+    raise exception 'remaining MVP live: due payment correction is not consistent and audited';
+  end if;
+
   select updated_at into strict v_updated_at from public.matches where id = v_match_id;
   perform pg_catalog.set_config('request.jwt.claim.sub', v_admin::text, true);
   perform pg_catalog.set_config(
@@ -322,9 +478,9 @@ begin
     3::smallint, 2::smallint, v_updated_at
   );
   execute 'reset role';
-  select updated_at into strict v_updated_at from public.matches where id = v_match_id;
+  select updated_at into strict v_original_analysis_updated_at from public.matches where id = v_match_id;
   execute 'set local role authenticated';
-  perform public.manage_match_analysis(
+  select public.manage_match_analysis(
     v_team,
     v_match_id,
     '[{"minute":10,"sequence_no":1,"event_type":"goal","team_side":"team"}]'::jsonb,
@@ -335,14 +491,165 @@ begin
       )
     ),
     '{"possession":{"team":55,"opponent":45},"shots":{"team":8,"opponent":6}}'::jsonb,
-    v_updated_at
-  );
+    v_original_analysis_updated_at
+  ) into v_analysis_updated_at;
+
+  if v_analysis_updated_at is null or v_analysis_updated_at <= v_original_analysis_updated_at
+    or (select updated_at from public.matches where id = v_match_id) is distinct from v_analysis_updated_at then
+    raise exception 'remaining MVP live: analysis did not return and advance authoritative token';
+  end if;
+
+  v_failed := false;
+  begin
+    perform public.manage_match_analysis(
+      v_team, v_match_id,
+      '[{"minute":20,"sequence_no":1,"event_type":"goal","team_side":"opponent"}]'::jsonb,
+      '[]'::jsonb,
+      '{}'::jsonb,
+      v_original_analysis_updated_at
+    );
+  exception when others then
+    v_failed := true;
+    v_state := sqlstate;
+  end;
+  if not v_failed or v_state <> '40001'
+    or (select count(*) from public.match_events where match_id = v_match_id) <> 1
+    or (select count(*) from public.match_player_stats where match_id = v_match_id) <> 1 then
+    raise exception 'remaining MVP live: stale analysis token overwrote data (state=%)', v_state;
+  end if;
+
+  v_failed := false;
+  begin
+    perform public.manage_match_analysis(
+      v_team, v_match_id, null,
+      '[]'::jsonb, '{}'::jsonb, v_analysis_updated_at
+    );
+  exception when others then
+    v_failed := true;
+    v_state := sqlstate;
+  end;
+  if not v_failed or v_state <> '22023'
+    or (select count(*) from public.match_events where match_id = v_match_id) <> 1 then
+    raise exception 'remaining MVP live: NULL events were not rejected atomically (state=%)', v_state;
+  end if;
+
+  v_failed := false;
+  begin
+    perform public.manage_match_analysis(
+      v_team, v_match_id, '[]'::jsonb,
+      null, '{}'::jsonb, v_analysis_updated_at
+    );
+  exception when others then
+    v_failed := true;
+    v_state := sqlstate;
+  end;
+  if not v_failed or v_state <> '22023'
+    or (select count(*) from public.match_player_stats where match_id = v_match_id) <> 1 then
+    raise exception 'remaining MVP live: NULL player stats were not rejected atomically (state=%)', v_state;
+  end if;
+
+  select updated_at into strict v_updated_at
+  from public.match_attendance where match_id = v_match_id and user_id = v_member;
+  v_failed := false;
+  begin
+    perform public.respond_match_attendance(
+      v_team, v_match_id, v_member, 'available', 'Too late', v_updated_at
+    );
+  exception when others then
+    v_failed := true;
+    v_state := sqlstate;
+  end;
+  if not v_failed or v_state <> '55000' then
+    raise exception 'remaining MVP live: RSVP escaped completed lifecycle (state=%)', v_state;
+  end if;
+
+  v_failed := false;
+  begin
+    perform public.save_match_tactic(
+      v_team, v_match_id, null, 'attacking', '2-3-1', null, 1::smallint,
+      'high', 'high', v_slots, null
+    );
+  exception when others then
+    v_failed := true;
+    v_state := sqlstate;
+  end;
+  if not v_failed or v_state <> '55000' then
+    raise exception 'remaining MVP live: tactic save escaped completed lifecycle (state=%)', v_state;
+  end if;
+
+  select updated_at into strict v_updated_at from public.match_tactics where id = v_tactic_id;
+  v_failed := false;
+  begin
+    perform public.apply_match_tactic(v_team, v_tactic_id, v_updated_at);
+  exception when others then
+    v_failed := true;
+    v_state := sqlstate;
+  end;
+  if not v_failed or v_state <> '55000' then
+    raise exception 'remaining MVP live: tactic apply escaped completed lifecycle (state=%)', v_state;
+  end if;
   execute 'reset role';
 
   if (select count(*) from public.match_events where match_id = v_match_id) <> 1
     or (select count(*) from public.match_player_stats where match_id = v_match_id) <> 1
     or (select count(*) from public.match_team_stats where match_id = v_match_id) <> 1 then
     raise exception 'remaining MVP live: completed-match analysis did not persist relationally';
+  end if;
+
+  v_failed := false;
+  begin
+    insert into public.match_attendance (
+      match_id, team_id, user_id, status, invited_by_user_id
+    ) values (
+      v_match_id, v_other_team, v_unrelated, 'pending', v_owner
+    );
+  exception when others then
+    v_failed := true;
+    v_state := sqlstate;
+  end;
+  if not v_failed or v_state <> '23503' then
+    raise exception 'remaining MVP live: privileged attendance composite-FK mismatch state=%', v_state;
+  end if;
+
+  insert into public.finance_entries (
+    team_id, direction, amount_vnd, category, occurred_on, description, created_by_user_id
+  ) values (
+    v_other_team, 'income', 1, 'fk_probe', current_date, 'Composite FK probe', v_unrelated
+  ) returning id into v_other_entry_id;
+  v_failed := false;
+  begin
+    insert into public.member_dues (
+      team_id, user_id, period_start, amount_vnd, due_date, finance_entry_id,
+      status, paid_at, created_by_user_id
+    ) values (
+      v_team, v_owner,
+      (date_trunc('month', current_date) + interval '1 month')::date,
+      1,
+      (date_trunc('month', current_date) + interval '1 month')::date,
+      v_other_entry_id,
+      'paid', pg_catalog.now(), v_owner
+    );
+  exception when others then
+    v_failed := true;
+    v_state := sqlstate;
+  end;
+  if not v_failed or v_state <> '23503' then
+    raise exception 'remaining MVP live: privileged due/entry composite-FK mismatch state=%', v_state;
+  end if;
+
+  v_failed := false;
+  begin
+    update public.lineup_slots
+    set team_id = v_other_team
+    where id = (
+      select id from public.lineup_slots where tactic_id = v_second_tactic_id order by id limit 1
+    );
+  exception when others then
+    v_failed := true;
+    v_state := sqlstate;
+  end;
+  if not v_failed or v_state <> '23503' then
+    raise exception 'remaining MVP live: privileged lineup composite-FK mismatch state=%', v_state;
   end if;
 
   perform pg_catalog.set_config('request.jwt.claim.sub', v_unrelated::text, true);

@@ -1000,7 +1000,7 @@ export type Database = {
           p_team_id: string
           p_team_metrics: Json
         }
-        Returns: undefined
+        Returns: string
       }
       manage_member_due: {
         Args: {

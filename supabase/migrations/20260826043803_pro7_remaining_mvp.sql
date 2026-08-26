@@ -360,6 +360,25 @@ create index member_dues_finance_entry_team_idx
 create index member_dues_created_by_user_id_idx
   on public.member_dues (created_by_user_id);
 
+create or replace function private.set_monotonic_updated_at()
+returns trigger
+language plpgsql
+security invoker
+set search_path = ''
+as $function$
+begin
+  new.updated_at := greatest(
+    pg_catalog.clock_timestamp(),
+    old.updated_at + interval '1 microsecond'
+  );
+  return new;
+end;
+$function$;
+
+alter function private.set_monotonic_updated_at() owner to postgres;
+revoke execute on function private.set_monotonic_updated_at()
+from public, anon, authenticated, service_role;
+
 do $triggers$
 declare
   v_table text;
@@ -369,7 +388,7 @@ begin
     'team_news', 'match_tactics', 'lineup_slots', 'finance_entries', 'member_dues'
   ] loop
     execute pg_catalog.format(
-      'create trigger %I before update on public.%I for each row execute function private.set_updated_at()',
+      'create trigger %I before update on public.%I for each row execute function private.set_monotonic_updated_at()',
       'trg_' || v_table || '_set_updated_at',
       v_table
     );
@@ -649,6 +668,7 @@ declare
   v_match public.matches%rowtype;
   v_requested_count integer;
   v_valid_count integer;
+  v_inserted_count integer;
 begin
   if v_actor_user_id is null then
     raise exception using errcode = '28000', message = 'Authentication required';
@@ -695,17 +715,19 @@ begin
   )
   select p_match_id, p_team_id, requested.user_id, 'pending', pg_catalog.now(), v_actor_user_id
   from (select distinct unnest(p_user_ids) as user_id) as requested
-  on conflict (match_id, user_id) do update
-  set invited_at = excluded.invited_at,
-      invited_by_user_id = excluded.invited_by_user_id;
+  on conflict (match_id, user_id) do nothing;
 
-  insert into private.audit_events (
-    actor_user_id, team_id, table_name, action, row_key, old_data, new_data, request_id
-  ) values (
-    v_actor_user_id, p_team_id, 'match_attendance', 'INSERT',
-    pg_catalog.jsonb_build_object('match_id', p_match_id), null,
-    pg_catalog.jsonb_build_object('invitee_count', v_requested_count), null
-  );
+  get diagnostics v_inserted_count = row_count;
+
+  if v_inserted_count > 0 then
+    insert into private.audit_events (
+      actor_user_id, team_id, table_name, action, row_key, old_data, new_data, request_id
+    ) values (
+      v_actor_user_id, p_team_id, 'match_attendance', 'INSERT',
+      pg_catalog.jsonb_build_object('match_id', p_match_id), null,
+      pg_catalog.jsonb_build_object('invitee_count', v_inserted_count), null
+    );
+  end if;
 
   return v_requested_count;
 end;
@@ -751,7 +773,8 @@ begin
 
   select m.* into v_match
   from public.matches as m
-  where m.id = p_match_id and m.team_id = p_team_id;
+  where m.id = p_match_id and m.team_id = p_team_id
+  for update;
   if not found or v_match.status <> 'scheduled' or pg_catalog.now() > v_match.rsvp_deadline then
     raise exception using errcode = '55000', message = 'RSVP window is closed';
   end if;
@@ -800,7 +823,7 @@ create or replace function public.manage_match_analysis(
   p_team_metrics jsonb,
   p_expected_updated_at timestamptz
 )
-returns void
+returns timestamptz
 language plpgsql
 security definer
 set search_path = ''
@@ -808,6 +831,7 @@ as $function$
 declare
   v_actor_user_id uuid := (select auth.uid());
   v_match public.matches%rowtype;
+  v_updated_at timestamptz;
 begin
   if v_actor_user_id is null then
     raise exception using errcode = '28000', message = 'Authentication required';
@@ -815,9 +839,9 @@ begin
   if not private.has_team_permission(p_team_id, 'matches.manage') then
     raise exception using errcode = '42501', message = 'Match management permission required';
   end if;
-  if jsonb_typeof(p_events) <> 'array' or jsonb_array_length(p_events) > 200
-    or jsonb_typeof(p_player_stats) <> 'array' or jsonb_array_length(p_player_stats) > 100
-    or jsonb_typeof(p_team_metrics) <> 'object' or pg_column_size(p_team_metrics) > 4096
+  if p_events is null or jsonb_typeof(p_events) <> 'array' or jsonb_array_length(p_events) > 200
+    or p_player_stats is null or jsonb_typeof(p_player_stats) <> 'array' or jsonb_array_length(p_player_stats) > 100
+    or p_team_metrics is null or jsonb_typeof(p_team_metrics) <> 'object' or pg_column_size(p_team_metrics) > 4096
     or p_team_metrics - array['possession', 'shots', 'shots_on_target', 'corners'] <> '{}'::jsonb then
     raise exception using errcode = '22023', message = 'Invalid match analysis';
   end if;
@@ -885,6 +909,13 @@ begin
       'schema_version', 1
     ), null
   );
+
+  update public.matches
+  set updated_at = updated_at
+  where id = p_match_id and team_id = p_team_id
+  returning updated_at into v_updated_at;
+
+  return v_updated_at;
 end;
 $function$;
 
@@ -933,7 +964,7 @@ begin
     or p_pressing not in ('low', 'medium', 'high')
     or p_defensive_line not in ('low', 'medium', 'high')
     or p_version is null or p_version <= 0
-    or jsonb_typeof(p_slots) <> 'array' or jsonb_array_length(p_slots) > 30
+    or p_slots is null or jsonb_typeof(p_slots) <> 'array' or jsonb_array_length(p_slots) > 30
     or (p_instructions is not null and (
       p_instructions <> pg_catalog.btrim(p_instructions)
       or pg_catalog.char_length(p_instructions) not between 1 and 2000
@@ -943,7 +974,8 @@ begin
 
   select m.* into v_match
   from public.matches as m
-  where m.id = p_match_id and m.team_id = p_team_id;
+  where m.id = p_match_id and m.team_id = p_team_id
+  for update;
   if not found or v_match.status <> 'scheduled' then
     raise exception using errcode = '55000', message = 'Tactics require a scheduled match';
   end if;
@@ -1041,6 +1073,29 @@ begin
     (slot ->> 'y')::numeric(5,2)
   from jsonb_array_elements(p_slots) as slot;
 
+  insert into private.audit_events (
+    actor_user_id, team_id, table_name, action, row_key, old_data, new_data, request_id
+  ) values (
+    v_actor_user_id,
+    p_team_id,
+    'match_tactics',
+    case when p_tactic_id is null then 'INSERT' else 'UPDATE' end,
+    pg_catalog.jsonb_build_object('id', v_tactic_id),
+    case when p_tactic_id is null then null else pg_catalog.jsonb_build_object(
+      'status', v_tactic.status,
+      'mode', v_tactic.mode,
+      'formation', v_tactic.formation,
+      'version', v_tactic.version
+    ) end,
+    pg_catalog.jsonb_build_object(
+      'status', 'draft',
+      'mode', p_mode,
+      'formation', p_formation,
+      'version', case when p_tactic_id is null then p_version else p_version + 1 end
+    ),
+    null
+  );
+
   return v_tactic_id;
 end;
 $function$;
@@ -1068,6 +1123,8 @@ as $function$
 declare
   v_actor_user_id uuid := (select auth.uid());
   v_tactic public.match_tactics%rowtype;
+  v_match_id uuid;
+  v_match_status text;
   v_starter_count integer;
   v_goalkeeper_count integer;
 begin
@@ -1078,11 +1135,30 @@ begin
     raise exception using errcode = '42501', message = 'Tactics management permission required';
   end if;
 
+  select tactic.match_id into v_match_id
+  from public.match_tactics as tactic
+  where tactic.id = p_tactic_id and tactic.team_id = p_team_id;
+  if not found then
+    raise exception using errcode = 'P0002', message = 'Draft tactic not found';
+  end if;
+
+  select m.status into v_match_status
+  from public.matches as m
+  where m.id = v_match_id and m.team_id = p_team_id
+  for update;
+  if not found then
+    raise exception using errcode = 'P0002', message = 'Match not found';
+  end if;
+  if v_match_status <> 'scheduled' then
+    raise exception using errcode = '55000', message = 'Tactics require a scheduled match';
+  end if;
+
   select tactic.* into v_tactic
   from public.match_tactics as tactic
-  join public.matches as m on m.id = tactic.match_id and m.team_id = tactic.team_id
-  where tactic.id = p_tactic_id and tactic.team_id = p_team_id and m.status = 'scheduled'
-  for update of tactic;
+  where tactic.id = p_tactic_id
+    and tactic.team_id = p_team_id
+    and tactic.match_id = v_match_id
+  for update;
   if not found then
     raise exception using errcode = 'P0002', message = 'Draft tactic not found';
   end if;
@@ -1116,11 +1192,28 @@ begin
     raise exception using errcode = '23514', message = 'Applied tactic requires seven active unique starters and one goalkeeper';
   end if;
 
-  update public.match_tactics
-  set status = 'draft', applied_at = null, applied_by_user_id = null
-  where match_id = v_tactic.match_id
-    and mode = v_tactic.mode
-    and status = 'applied';
+  with demoted as (
+    update public.match_tactics
+    set status = 'draft', applied_at = null, applied_by_user_id = null
+    where match_id = v_tactic.match_id
+      and mode = v_tactic.mode
+      and status = 'applied'
+      and id <> p_tactic_id
+    returning id, version
+  )
+  insert into private.audit_events (
+    actor_user_id, team_id, table_name, action, row_key, old_data, new_data, request_id
+  )
+  select
+    v_actor_user_id,
+    p_team_id,
+    'match_tactics',
+    'UPDATE',
+    pg_catalog.jsonb_build_object('id', demoted.id),
+    pg_catalog.jsonb_build_object('status', 'applied', 'version', demoted.version),
+    pg_catalog.jsonb_build_object('status', 'draft', 'version', demoted.version),
+    null
+  from demoted;
 
   update public.match_tactics
   set status = 'applied', applied_at = pg_catalog.now(), applied_by_user_id = v_actor_user_id
@@ -1267,6 +1360,7 @@ as $function$
 declare
   v_actor_user_id uuid := (select auth.uid());
   v_due public.member_dues%rowtype;
+  v_entry public.finance_entries%rowtype;
   v_due_id uuid;
   v_entry_id uuid;
 begin
@@ -1276,7 +1370,7 @@ begin
   if not private.has_team_permission(p_team_id, 'finance.manage') then
     raise exception using errcode = '42501', message = 'Finance management permission required';
   end if;
-  if p_action not in ('create', 'pay', 'waive') then
+  if p_action not in ('create', 'pay', 'waive', 'void_payment') then
     raise exception using errcode = '22023', message = 'Invalid member due action';
   end if;
 
@@ -1310,11 +1404,17 @@ begin
     if not found then
       raise exception using errcode = 'P0002', message = 'Member due not found';
     end if;
-    if v_due.status <> 'pending' then
-      raise exception using errcode = '55000', message = 'Only pending dues can change';
-    end if;
     if p_expected_updated_at is distinct from v_due.updated_at then
       raise exception using errcode = '40001', message = 'Member due changed; refresh and retry';
+    end if;
+
+    if p_action in ('pay', 'waive') and v_due.status <> 'pending' then
+      raise exception using errcode = '55000', message = 'Only pending dues can be paid or waived';
+    end if;
+    if p_action = 'void_payment' and (
+      v_due.status <> 'paid' or v_due.finance_entry_id is null
+    ) then
+      raise exception using errcode = '55000', message = 'Only paid dues can have their payment voided';
     end if;
 
     if p_action = 'pay' then
@@ -1333,10 +1433,42 @@ begin
       update public.member_dues
       set status = 'paid', paid_at = pg_catalog.now(), finance_entry_id = v_entry_id
       where id = p_due_id and team_id = p_team_id;
-    else
+    elsif p_action = 'waive' then
       update public.member_dues
       set status = 'waived'
       where id = p_due_id and team_id = p_team_id;
+    else
+      if p_note is null or p_note <> pg_catalog.btrim(p_note)
+        or pg_catalog.char_length(p_note) not between 1 and 300 then
+        raise exception using errcode = '22023', message = 'Payment void reason is required';
+      end if;
+
+      select entry.* into v_entry
+      from public.finance_entries as entry
+      where entry.id = v_due.finance_entry_id and entry.team_id = p_team_id
+      for update;
+      if not found or v_entry.voided_at is not null then
+        raise exception using errcode = '55000', message = 'Due payment entry cannot be voided';
+      end if;
+
+      v_entry_id := v_due.finance_entry_id;
+      update public.finance_entries
+      set voided_at = pg_catalog.now(), voided_by_user_id = v_actor_user_id, void_reason = p_note
+      where id = v_entry_id and team_id = p_team_id;
+
+      update public.member_dues
+      set status = 'pending', paid_at = null, finance_entry_id = null
+      where id = p_due_id and team_id = p_team_id;
+
+      insert into private.audit_events (
+        actor_user_id, team_id, table_name, action, row_key, old_data, new_data, request_id
+      ) values (
+        v_actor_user_id, p_team_id, 'finance_entries', 'UPDATE',
+        pg_catalog.jsonb_build_object('id', v_entry_id),
+        pg_catalog.jsonb_build_object('voided', false, 'source', 'member_due'),
+        pg_catalog.jsonb_build_object('voided', true, 'source', 'member_due', 'void_reason', p_note),
+        null
+      );
     end if;
     v_due_id := p_due_id;
   end if;

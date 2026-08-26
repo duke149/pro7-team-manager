@@ -42,7 +42,7 @@ migration_history as (
   select
     '20260826043803'::text as expected_version,
     'pro7_remaining_mvp'::text as expected_name,
-    'ae4f256b44c0c20a53fee11e0f70a457cc24f7eb5a923bc489988fa18d2af1ab'::text as source_sha256,
+    '7b98a63b474b36d1f6cfdf39987f6ce5d599eaf09f396761a9773db53f13dc5e'::text as source_sha256,
     (migration.version is not null) as is_applied,
     migration.name as recorded_name,
     pg_catalog.md5(coalesce(pg_catalog.array_to_string(migration.statements, E'\n'), '')) as recorded_statements_md5

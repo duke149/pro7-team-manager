@@ -208,7 +208,8 @@ test("RPCs enforce permission, concurrency, lifecycle, lineup, void, and audit b
 
   const invite = extractFunction(sql, "public.invite_match_attendance");
   assert.match(invite, /private\.has_team_permission\(p_team_id, 'matches\.manage'\)/);
-  assert.match(invite, /on conflict \(match_id, user_id\) do update/);
+  assert.match(invite, /on conflict \(match_id, user_id\) do nothing/);
+  assert.match(invite, /if v_inserted_count > 0 then/);
   assert.match(invite, /v_match\.status <> 'scheduled'/);
 
   const respond = extractFunction(sql, "public.respond_match_attendance");
@@ -218,16 +219,30 @@ test("RPCs enforce permission, concurrency, lifecycle, lineup, void, and audit b
   assert.match(respond, /p_expected_updated_at is distinct from v_attendance\.updated_at/);
   assert.match(respond, /status = p_status/);
   assert.match(respond, /insert into private\.audit_events/);
+  assert.match(respond, /where m\.id = p_match_id and m\.team_id = p_team_id for update/);
 
   const analysis = extractFunction(sql, "public.manage_match_analysis");
   assert.match(analysis, /private\.has_team_permission\(p_team_id, 'matches\.manage'\)/);
+  assert.match(analysis, /p_events is null/);
+  assert.match(analysis, /p_player_stats is null/);
+  assert.match(analysis, /p_team_metrics is null/);
   assert.match(analysis, /v_match\.status <> 'completed'/);
+  assert.match(analysis, /update public\.matches set updated_at = updated_at where id = p_match_id and team_id = p_team_id returning updated_at into v_updated_at/);
+  assert.match(analysis, /return v_updated_at/);
   assert.match(analysis, /insert into private\.audit_events/);
 
   const saveTactic = extractFunction(sql, "public.save_match_tactic");
   assert.match(saveTactic, /private\.has_team_permission\(p_team_id, 'tactics\.manage'\)/);
+  assert.match(saveTactic, /p_slots is null/);
+  assert.match(saveTactic, /where m\.id = p_match_id and m\.team_id = p_team_id for update/);
   assert.match(saveTactic, /jsonb_array_elements\(p_slots\)/);
   assert.match(saveTactic, /count\(distinct slot ->> 'user_id'\)/);
+  assert.match(saveTactic, /insert into private\.audit_events/);
+  assert.doesNotMatch(
+    saveTactic.slice(saveTactic.indexOf("insert into private.audit_events")),
+    /p_slots|p_instructions/,
+  );
+  assert.match(saveTactic, /jsonb_build_object\( 'status', 'draft', 'mode', p_mode, 'formation', p_formation, 'version'/);
 
   const applyTactic = extractFunction(sql, "public.apply_match_tactic");
   assert.match(applyTactic, /count\(\*\) filter \(where slot_kind = 'starter'\)/);
@@ -235,6 +250,9 @@ test("RPCs enforce permission, concurrency, lifecycle, lineup, void, and audit b
   assert.match(applyTactic, /v_starter_count <> 7/);
   assert.match(applyTactic, /v_goalkeeper_count <> 1/);
   assert.match(applyTactic, /status = 'applied'/);
+  assert.match(applyTactic, /where m\.id = v_match_id and m\.team_id = p_team_id for update/);
+  assert.match(applyTactic, /with demoted as \( update public\.match_tactics/);
+  assert.match(applyTactic, /from demoted/);
   assert.match(applyTactic, /insert into private\.audit_events/);
 
   const finance = extractFunction(sql, "public.manage_finance_entry");
@@ -244,6 +262,19 @@ test("RPCs enforce permission, concurrency, lifecycle, lineup, void, and audit b
 
   const dues = extractFunction(sql, "public.manage_member_due");
   assert.match(dues, /private\.has_team_permission\(p_team_id, 'finance\.manage'\)/);
+  assert.match(dues, /p_action not in \('create', 'pay', 'waive', 'void_payment'\)/);
   assert.match(dues, /status = 'paid'/);
+  assert.match(dues, /set voided_at = pg_catalog\.now\(\), voided_by_user_id = v_actor_user_id, void_reason = p_note/);
+  assert.match(dues, /set status = 'pending', paid_at = null, finance_entry_id = null/);
   assert.match(dues, /insert into private\.audit_events/);
+});
+
+test("new-table timestamps are monotonic inside one transaction", async () => {
+  const sql = normalizeSql(await readMigration());
+  const helper = extractFunction(sql, "private.set_monotonic_updated_at");
+
+  assert.ok(helper, "missing monotonic updated_at trigger helper");
+  assert.match(helper, /new\.updated_at := greatest\( pg_catalog\.clock_timestamp\(\), old\.updated_at \+ interval '1 microsecond' \)/);
+  assert.match(sql, /execute function private\.set_monotonic_updated_at\(\)/);
+  assert.match(sql, /revoke execute on function private\.set_monotonic_updated_at\(\) from public, anon, authenticated, service_role/);
 });
