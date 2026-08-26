@@ -11,6 +11,7 @@ type Arguments = {
   requireTeamPermission: (slug: string, permission: PermissionCode) => Promise<TeamAccessContext | null>;
   getMatchDetail: (teamId: string, matchId: string, userId: string, includeInvites: boolean) => Promise<MatchDetailResult>;
   denied: () => unknown;
+  now?: string;
 };
 
 export async function renderMatchDetailPage(arguments_: Arguments) {
@@ -20,7 +21,7 @@ export async function renderMatchDetailPage(arguments_: Arguments) {
   const canManage = hasPermission(context, "matches.manage");
   const result = await arguments_.getMatchDetail(context.team.id, matchId, context.userId, canManage);
   if (!result.ok && result.error === "not_found") return arguments_.denied();
-  return <MatchDetail slug={context.team.slug} teamName={context.team.name} userId={context.userId} detail={result.ok ? result.detail : null} canManage={canManage} canRespond={hasPermission(context, "matches.respond")} />;
+  return <MatchDetail slug={context.team.slug} teamName={context.team.name} userId={context.userId} detail={result.ok ? result.detail : null} canManage={canManage} canRespond={hasPermission(context, "matches.respond")} now={arguments_.now ?? new Date().toISOString()} />;
 }
 
 export default async function MatchPage({ params }: { params: Promise<{ slug: string; matchId: string }> }) {

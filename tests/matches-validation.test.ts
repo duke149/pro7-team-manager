@@ -39,6 +39,19 @@ test("create validation bounds opponent and venue and requires ordered canonical
   }
 });
 
+test("timestamp validation rejects impossible calendar dates instead of JavaScript normalization", () => {
+  for (const [field, value] of [
+    ["startsAt", "2026-02-31T12:30:00.000Z"],
+    ["startsAt", "2025-02-29T12:30:00+07:00"],
+    ["rsvpDeadline", "2026-13-01T12:30:00.000Z"],
+    ["rsvpDeadline", "2026-10-18T24:00:00.000Z"],
+  ] as const) {
+    const result = validateCreateMatchPayload({ ...CREATE, [field]: value });
+    assert.equal(result.ok, false, `${field}: ${value}`);
+    assert.ok(!result.ok && result.kind === "validation" && field in result.fieldErrors);
+  }
+});
+
 test("match mutation validation enforces action-specific keys and score/status consistency", () => {
   assert.deepEqual(validateMatchMutationPayload({
     action: "complete",
@@ -102,6 +115,15 @@ test("attendance validation bounds notes and permits only invite or own response
     "note",
     "status",
   ]);
+});
+
+test("attendance validation accepts more than one RPC batch without exceeding the safe request cap", () => {
+  const userIds = Array.from({ length: 201 }, (_, index) => `00000000-0000-4000-8000-${(index + 1).toString(16).padStart(12, "0")}`);
+  const result = validateAttendancePayload({ action: "invite", userIds });
+  assert.equal(result.ok, true);
+  assert.equal(result.ok && result.value.action === "invite" ? result.value.userIds.length : 0, 201);
+  const overflow = validateAttendancePayload({ action: "invite", userIds: Array.from({ length: 401 }, (_, index) => `00000000-0000-4000-8000-${(index + 1).toString(16).padStart(12, "0")}`) });
+  assert.equal(overflow.ok, false);
 });
 
 test("mutation validation accepts the offset ISO stale tokens emitted by Supabase", () => {

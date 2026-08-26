@@ -32,7 +32,7 @@ function request(path: string, body: unknown, headers: Record<string, string> = 
 function dependencies(options: {
   context?: TeamAccessContext | null;
   rpcError?: { code?: string } | null;
-  rpcData?: unknown;
+  rpcData?: unknown | unknown[];
 } = {}) {
   const calls: { permission: PermissionCode; name?: string; args?: unknown }[] = [];
   const deps: MatchActionDependencies = {
@@ -43,7 +43,8 @@ function dependencies(options: {
     supabase: {
       rpc: (async (name: string, args: unknown) => {
         calls.push({ permission: "matches.read", name, args });
-        return { data: options.rpcData ?? MATCH_ID, error: options.rpcError ?? null };
+        const data = Array.isArray(options.rpcData) ? options.rpcData.shift() : options.rpcData;
+        return { data: data ?? MATCH_ID, error: options.rpcError ?? null };
       }) as never,
     },
   };
@@ -123,5 +124,18 @@ test("attendance invite is Admin-only while response targets the authenticated u
       p_team_id: TEAM_ID, p_match_id: MATCH_ID, p_user_id: USER_ID,
       p_status: "unavailable", p_note: null, p_expected_updated_at: UPDATED_AT,
     } },
+  ]);
+});
+
+test("attendance invitation batches 201 members through the idempotent RPC and sums requested counts", async () => {
+  const userIds = Array.from({ length: 201 }, (_, index) => `00000000-0000-4000-8000-${(index + 1).toString(16).padStart(12, "0")}`);
+  const fixture = dependencies({ rpcData: [200, 1] });
+  const response = await mutateMatchAttendance(request("/attendance", { action: "invite", userIds }), { slug: "pro7-fc", matchId: MATCH_ID }, fixture.deps);
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { ok: true, invited: 201 });
+  assert.deepEqual(fixture.calls, [
+    { permission: "matches.manage" },
+    { permission: "matches.read", name: "invite_match_attendance", args: { p_team_id: TEAM_ID, p_match_id: MATCH_ID, p_user_ids: userIds.slice(0, 200) } },
+    { permission: "matches.read", name: "invite_match_attendance", args: { p_team_id: TEAM_ID, p_match_id: MATCH_ID, p_user_ids: userIds.slice(200) } },
   ]);
 });

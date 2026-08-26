@@ -5,6 +5,9 @@ type ValidationError =
   | Readonly<{ ok: false; kind: "malformed" }>
   | Readonly<{ ok: false; kind: "validation"; fieldErrors: FieldErrors }>;
 
+export const MAX_INVITE_USER_IDS = 400;
+export const INVITE_RPC_BATCH_SIZE = 200;
+
 export type CreateMatchPayload = Readonly<{
   opponent: string;
   startsAt: string;
@@ -31,13 +34,23 @@ function exactKeys(value: Record<string, unknown>, keys: readonly string[]): boo
   return actual.length === keys.length && keys.every((key) => actual.includes(key));
 }
 
-function isIsoTimestamp(value: unknown): value is string {
-  if (
-    typeof value !== "string" ||
-    !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|[+-]\d{2}:\d{2})$/u.test(value)
-  ) return false;
-  const parsed = new Date(value);
-  return !Number.isNaN(parsed.valueOf());
+export function isIsoTimestamp(value: unknown): value is string {
+  if (typeof value !== "string") return false;
+  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d{1,6})?(Z|([+-])(\d{2}):(\d{2}))$/u.exec(value);
+  if (!match) return false;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const hour = Number(match[4]);
+  const minute = Number(match[5]);
+  const second = Number(match[6]);
+  const offsetHour = match[9] === undefined ? 0 : Number(match[9]);
+  const offsetMinute = match[10] === undefined ? 0 : Number(match[10]);
+  const leap = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+  const daysInMonth = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+  if (year < 1 || month < 1 || month > 12 || day < 1 || day > (daysInMonth[month - 1] ?? 0)) return false;
+  if (hour > 23 || minute > 59 || second > 59 || offsetHour > 14 || offsetMinute > 59 || (offsetHour === 14 && offsetMinute !== 0)) return false;
+  return !Number.isNaN(Date.parse(value));
 }
 
 function normalizedText(value: unknown, min: number, max: number): string | null {
@@ -122,8 +135,8 @@ export function validateAttendancePayload(value: unknown): { ok: true; value: At
   if (!isRecord(value) || typeof value.action !== "string") return { ok: false, kind: "malformed" };
   if (value.action === "invite") {
     if (!exactKeys(value, ["action", "userIds"])) return { ok: false, kind: "malformed" };
-    if (!Array.isArray(value.userIds) || value.userIds.length === 0 || value.userIds.length > 200 || !value.userIds.every(isUuid)) {
-      return { ok: false, kind: "validation", fieldErrors: { userIds: "Chọn từ 1 đến 200 thành viên hợp lệ." } };
+    if (!Array.isArray(value.userIds) || value.userIds.length === 0 || value.userIds.length > MAX_INVITE_USER_IDS || !value.userIds.every(isUuid)) {
+      return { ok: false, kind: "validation", fieldErrors: { userIds: `Chọn từ 1 đến ${MAX_INVITE_USER_IDS} thành viên hợp lệ.` } };
     }
     return { ok: true, value: Object.freeze({ action: "invite", userIds: Object.freeze([...new Set(value.userIds)]) }) };
   }

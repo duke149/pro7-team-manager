@@ -106,3 +106,52 @@ Connected the hosted PRO7 Matches surface to the Task 1 `matches`, `match_attend
 - Whole-repository `npx tsc --noEmit` remains red on pre-existing non-Task-2 errors in account/Squad/Cloudflare/test harness files. No TypeScript diagnostic remains in Task 2 production files, and the configured production build succeeds.
 - Test runs emit existing Node `module.register()` and Vinext middleware deprecation warnings. Parallel Vite suites also occasionally log that HMR port `24678` is already in use; all affected tests still completed successfully.
 - Live hosted CRUD was not exercised because this task explicitly prohibited remote mutation. RPC/RLS authority is covered by the already-passing Task 1 schema/live-harness tests and the new injected action tests.
+
+## Independent review round 1 fixes
+
+### Outcome
+
+- Match, attendance, event, and player-stat result parsing now mirrors the database UUID, timestamp, trimmed-text, smallint, lifecycle, response-state, uniqueness, and rating contracts. Invalid database results fail closed to the existing honest error UI.
+- ISO validation now rejects impossible calendar dates such as `2026-02-31T12:30:00Z`, including invalid leap days, clock values, and timezone offsets.
+- Match list reads use 100-row UUID keyset pages through an explicit 1,000-row safe bound. Rows above that bound produce an error rather than a partial list, so the next scheduled and latest completed match are never silently omitted.
+- Active invite candidates use 100-row `user_id` keyset pages, profile reads use 100-ID batches, and the default-all selection covers all candidates through the explicit 400-member/request-size bound. Candidate overflow fails explicitly.
+- Attendance invite requests accept up to 400 unique IDs and call the existing idempotent authority RPC in batches of 200, summing its requested counts. A retry after a later-batch failure is safe because the RPC uses `on conflict do nothing`.
+- List RSVP success now clears local pending state before refreshing authoritative route data. List and detail RSVP buttons are disabled after the injected server time passes the deadline, while the RPC remains final authority.
+- The existing create-match dialog retains its hosted classes/layout and now provides initial opponent focus, wraparound Tab/Shift+Tab containment, Escape close, and focus restoration.
+
+### RED evidence
+
+- Backend regression command: `node --import tsx --test tests/matches-validation.test.ts tests/matches-queries.test.ts tests/matches-actions.test.ts`
+  - Initial result: 20 tests; 13 passed; 7 failed. Product failures demonstrated impossible-date acceptance, the 200-invite truncation contract, lack of invite RPC batching, and permissive row parsing. Three pagination/detail cases initially also exposed a test fixture constant typo; that fixture was corrected before GREEN.
+- Mounted regression command: `node --import tsx --test tests/matches-mounted.test.ts`
+  - Failures demonstrated list RSVP remaining disabled after success and expired RSVP controls remaining open. The newly added dialog keyboard test also failed against the pre-fix component because it had no focus management or Escape handler.
+- Additional contract cases were added for 1,001-match and 401-candidate explicit overflow, duplicate attendance/event/stat identities, event sequence uniqueness, match cancellation/result lifecycle, and 201-member batching.
+
+### GREEN and final verification
+
+- Focused Matches command: 32 tests; 32 passed; 0 failed; 0 skipped.
+- Full `npm run test:unit`: 306 tests; 301 passed; 0 failed; 5 optional live-environment tests skipped.
+- `npm test`: production build succeeded; rendered HTML/browser-boundary suite 7 passed, 0 failed.
+- Scoped ESLint: 0 errors, 0 warnings.
+- Scoped TypeScript diagnostic filter: no Task 2 production or test diagnostics.
+- `git diff --check`: clean.
+
+### Files changed in review round 1
+
+- `lib/matches/validation.ts`
+- `lib/matches/queries.ts`
+- `lib/matches/actions.ts`
+- `app/teams/[slug]/matches/matches-view.tsx`
+- `app/teams/[slug]/matches/[matchId]/match-detail.tsx`
+- `app/teams/[slug]/matches/[matchId]/page.tsx`
+- `tests/matches-validation.test.ts`
+- `tests/matches-queries.test.ts`
+- `tests/matches-actions.test.ts`
+- `tests/matches-mounted.test.ts`
+- `tests/fixtures/matches-mounted-entry.ts`
+
+### Review-round concerns
+
+- The 400-member cap is chosen to remain below the existing 16 KiB JSON request limit (a 400-ID invite body is 15,631 bytes). Teams above that active-member bound receive an explicit load error instead of a partial default-all selection.
+- Multi-batch invitation is not one cross-call transaction. If a later RPC batch fails, earlier batches may already be committed; the existing RPC's idempotent conflict handling makes the whole selection safe to retry.
+- No remote data was mutated, as required. Whole-repository TypeScript remains red only on the previously documented out-of-scope account/Squad/Cloudflare/test-harness diagnostics; the production build and Task 2 scoped diagnostics are clean.
