@@ -1,5 +1,9 @@
 # PRO7 foundation slice — local handoff checkpoint
 
+## 2026-08-26 remote-state addendum
+
+This addendum supersedes this historical checkpoint's remote-pending statements. Project `pficsujapinkmqsyvcfw` now records the exact ordered migration history `20260824170300_supabase_mvp_core`, `20260824183536_rls_mutation_visibility`, `20260825013307_pro7_foundation_permissions`, and `20260825091904_pro7_squad_profiles`; the authorized Squad post-apply verification was GREEN. Remote-generated types have replaced the provisional file at `lib/supabase/database.types.ts` (PostgREST `14.17`, 541 lines, SHA-256 `82919e9c7b62a67b937d2408a7377ecf07653caf5daf1883d238e82d27e95e9d`). The current migration hashes, remote table/RLS inventory, advisor rulings, and remaining project-setting concern are recorded in `docs/supabase-mvp-handoff.md`.
+
 ## Scope and state
 
 This handoff records local-only evidence for the PRO7 foundation routing and

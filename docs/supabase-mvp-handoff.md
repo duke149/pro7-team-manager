@@ -1,5 +1,22 @@
 # Supabase MVP handoff
 
+## 2026-08-26 PRO7 Squad remote checkpoint
+
+This checkpoint supersedes the older remote-pending, database-inventory, generated-type, advisor, and remote-boundary statements below; those sections are retained as historical evidence. The authorized remote apply to project `pficsujapinkmqsyvcfw` completed and the post-apply verification was GREEN. Remote migration history is now exactly:
+
+| Version | Name | Checked-in SHA-256 |
+| --- | --- | --- |
+| `20260824170300` | `supabase_mvp_core` | `b0c13b47538e07c02666672fc9e83b13a49167c0590deed782bb50596e7cf363` |
+| `20260824183536` | `rls_mutation_visibility` | `2c2b1ca30529b1ddc0d0dc66a899384d118ec763ef94f7222ba669b39fbe605b` |
+| `20260825013307` | `pro7_foundation_permissions` | `a319ee4e03bc94973063bb5568e542a98b9eaa4afae4b26cf38431f416d9ca83` |
+| `20260825091904` | `pro7_squad_profiles` | `098b2aab0089113811aae6fc4990847cf54f660267f919a9364469d575cbcede` |
+
+Read-only remote inspection after the apply found all nine `public` tables with RLS enabled, including the new `team_player_profiles` table and the six Squad columns on `profiles`. The six current public RPCs are `accept_team_invitation`, `attach_team_member`, `create_team`, `get_current_team_access_contexts`, `get_team_player_admin_detail`, and `manage_team_player`; `attach_team_member` remains service-role-only. `lib/supabase/database.types.ts` was then regenerated mechanically from the remote project: 541 lines, 15,412 bytes, PostgREST `14.17`, SHA-256 `82919e9c7b62a67b937d2408a7377ecf07653caf5daf1883d238e82d27e95e9d`.
+
+The security advisor reports six WARNs: five are the intentionally authenticated, internally authorized `SECURITY DEFINER` RPCs (`accept_team_invitation`, `create_team`, `get_current_team_access_contexts`, `get_team_player_admin_detail`, and `manage_team_player`); [Leaked Password Protection is disabled](https://supabase.com/docs/guides/auth/password-security#password-strength-and-leaked-password-protection) and remains an open project-setting decision. Read-only table inspection also continues to surface `private.audit_events` without RLS; that schema is not Data API-exposed and its API ACLs are denied, so no unreviewed defense-in-depth DDL was applied. The performance advisor reports the two reviewed composite foreign keys with leading `role_id` indexes and four expected unused indexes on the new/tiny workload; all are retained. This completion pass performed only remote reads and local type/document reconciliation; it did not deploy Edge Functions, change secrets, alter hosting, or execute additional remote DDL.
+
+Fresh reconciliation verification passed: focused Squad contracts 7/7, cross-slice schema/avatar contracts 28/28, full unit suite 163 passed with 2 environment-gated skips, production build plus rendered/source suite 6/6, scoped ESLint, and `git diff --check`. A fresh disposable PostgreSQL 17.10 catalog applied the three prerequisites and Squad migration, emitted all three committed harness sentinels (pre-migration fixture, transactional rollback, and cleanup-zero), and was then dropped with the temporary local `postgres` role; both residual catalog counts were zero.
+
 ## Release record
 
 - Branch/worktree: `feature/supabase-mvp-core` at `/Users/everygolflb/Documents/Codex/2026-08-24/t-i-c-n-x-y/.worktrees/supabase-mvp-core`.

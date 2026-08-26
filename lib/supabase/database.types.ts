@@ -6,13 +6,11 @@ export type Json =
   | { [key: string]: Json | undefined }
   | Json[]
 
-// Provisional for the pending PRO7 squad migration. Regenerate from the remote
-// schema only after the reviewed deployment checkpoint is explicitly approved.
 export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "14.15"
+    PostgrestVersion: "14.17"
   }
   public: {
     Tables: {
@@ -249,35 +247,6 @@ export type Database = {
           },
         ]
       }
-      team_settings: {
-        Row: {
-          created_at: string
-          settings: Json
-          team_id: string
-          updated_at: string
-        }
-        Insert: {
-          created_at?: string
-          settings?: Json
-          team_id: string
-          updated_at?: string
-        }
-        Update: {
-          created_at?: string
-          settings?: Json
-          team_id?: string
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "team_settings_team_id_fkey"
-            columns: ["team_id"]
-            isOneToOne: true
-            referencedRelation: "teams"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       team_player_profiles: {
         Row: {
           admin_notes: string | null
@@ -322,6 +291,35 @@ export type Database = {
           },
         ]
       }
+      team_settings: {
+        Row: {
+          created_at: string
+          settings: Json
+          team_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          settings?: Json
+          team_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          settings?: Json
+          team_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "team_settings_team_id_fkey"
+            columns: ["team_id"]
+            isOneToOne: true
+            referencedRelation: "teams"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       teams: {
         Row: {
           created_at: string
@@ -357,12 +355,12 @@ export type Database = {
       accept_team_invitation: { Args: { token: string }; Returns: string }
       attach_team_member: {
         Args: {
-          p_display_name: string | null
+          p_display_name: string
           p_join_date: string
-          p_official_position: string | null
+          p_official_position: string
           p_requires_password_change: boolean
           p_role_id: string
-          p_shirt_number: number | null
+          p_shirt_number: number
           p_team_id: string
           p_user_id: string
           p_verified_actor_user_id: string
@@ -371,10 +369,14 @@ export type Database = {
       }
       create_team: {
         Args: { p_name: string; p_slug: string }
-        Returns: { id: string; name: string; slug: string }[]
+        Returns: {
+          id: string
+          name: string
+          slug: string
+        }[]
       }
       get_current_team_access_contexts: {
-        Args: Record<string, never>
+        Args: never
         Returns: {
           permission_codes: string[]
           role_id: string
@@ -387,17 +389,19 @@ export type Database = {
       }
       get_team_player_admin_detail: {
         Args: { p_team_id: string; p_user_id: string }
-        Returns: { admin_notes: string | null }[]
+        Returns: {
+          admin_notes: string
+        }[]
       }
       manage_team_player: {
         Args: {
-          p_admin_notes: string | null
+          p_admin_notes: string
           p_deactivate: boolean
           p_join_date: string
-          p_official_position: string | null
+          p_official_position: string
           p_player_status: string
           p_role_id: string
-          p_shirt_number: number | null
+          p_shirt_number: number
           p_team_id: string
           p_user_id: string
         }
