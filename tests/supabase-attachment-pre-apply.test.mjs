@@ -1,8 +1,12 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 
 const validatorUrl = new URL("./supabase-attachment-pre-apply.sql", import.meta.url);
+const validatorPath = fileURLToPath(validatorUrl);
+const databaseUrl = process.env.PRO7_ATTACHMENT_DATABASE_URL;
 
 function stripNonExecutableText(source) {
   return source
@@ -47,3 +51,47 @@ test("attachment pre-apply checkpoint is read-only and proves the exact pending 
     assert.match(source.toLowerCase(), new RegExp(literal, "u"));
   }
 });
+
+test(
+  "attachment pre-apply checkpoint parses and executes on PostgreSQL 17",
+  { skip: !databaseUrl && "set PRO7_ATTACHMENT_DATABASE_URL to an applied-Squad PG17 database" },
+  () => {
+    const result = spawnSync(
+      "psql",
+      [
+        "-XAtq",
+        "-v",
+        "ON_ERROR_STOP=1",
+        "-d",
+        databaseUrl,
+        "-c",
+        "select 'server_version_num|' || current_setting('server_version_num')",
+        "-f",
+        validatorPath,
+      ],
+      { encoding: "utf8" },
+    );
+
+    assert.equal(
+      result.status,
+      0,
+      `attachment pre-apply query failed:\n${result.stderr || result.stdout}`,
+    );
+    const version = result.stdout.match(/^server_version_num\|(\d+)$/mu)?.[1];
+    assert.ok(version, `missing PostgreSQL version evidence:\n${result.stdout}`);
+    assert.ok(Number(version) >= 170000 && Number(version) < 180000, version);
+    assert.match(
+      result.stdout,
+      /^migration_history\|20260825091904\|pro7_squad_profiles\|[a-f0-9]{64}\|t\|t\|pro7_squad_profiles\|[a-f0-9]{32}\|t$/mu,
+    );
+    assert.match(
+      result.stdout,
+      /^migration_history\|20260826035128\|preserve_existing_profile_attachment\|[a-f0-9]{64}\|f\|f\|\|\|t$/mu,
+    );
+    assert.match(
+      result.stdout,
+      /^attachment_function\|t\|postgres\|t\|.*\|t\|f\|f\|t\|t\|f\|f$/mu,
+    );
+    assert.match(result.stdout, /^auth_user_profile_gaps\|0$/mu);
+  },
+);

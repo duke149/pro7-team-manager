@@ -30,7 +30,7 @@ migration_history as (
     migration.version,
     migration.name,
     pg_catalog.md5(
-      pg_catalog.coalesce(
+      coalesce(
         pg_catalog.array_to_string(migration.statements, E'\n'),
         ''
       )
@@ -74,40 +74,42 @@ with attachment_function as (
 )
 select
   'attachment_function'::text as check_name,
-  (function.oid is not null) as exists,
-  function.owner_name,
-  function.prosecdef as security_definer,
-  function.proconfig as function_config,
+  (attachment.oid is not null) as exists,
+  attachment.owner_name,
+  attachment.prosecdef as security_definer,
+  attachment.proconfig as function_config,
   pg_catalog.has_function_privilege(
     'service_role',
-    function.oid,
+    attachment.oid,
     'EXECUTE'
   ) as service_role_can_execute,
   pg_catalog.has_function_privilege(
     'authenticated',
-    function.oid,
+    attachment.oid,
     'EXECUTE'
   ) as authenticated_can_execute,
   pg_catalog.has_function_privilege(
     'anon',
-    function.oid,
+    attachment.oid,
     'EXECUTE'
   ) as anon_can_execute,
-  pg_catalog.position(
-    'display_name = excluded.display_name' in function.definition
+  pg_catalog.strpos(
+    attachment.definition,
+    'display_name = excluded.display_name'
   ) > 0 as still_overwrites_existing_display_name,
-  pg_catalog.position(
+  pg_catalog.strpos(
+    attachment.definition,
     'requires_password_change = excluded.requires_password_change'
-    in function.definition
   ) > 0 as still_allows_password_flag_clear,
-  pg_catalog.position(
-    'display_name = profiles.display_name' in function.definition
+  pg_catalog.strpos(
+    attachment.definition,
+    'display_name = profiles.display_name'
   ) > 0 as preserves_existing_display_name,
-  pg_catalog.position(
+  pg_catalog.strpos(
+    attachment.definition,
     'profiles.requires_password_change'
-    in function.definition
   ) > 0 as password_flag_is_monotonic
-from attachment_function as function;
+from attachment_function as attachment;
 
 with auth_user_profile_gaps as (
   select auth_user.id
