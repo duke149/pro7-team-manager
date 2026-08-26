@@ -194,6 +194,119 @@ h6 {
   line-height: var(--leading-relaxed);
 }
 
+/* Overview, roster, and self profile */
+.card-kicker,
+.section-head > span,
+.stat-card > span,
+.squad-summary span,
+.player-profile-heading > span,
+.account-profile-heading > span,
+.account-profile-section-title > span,
+.account-avatar-card > div:nth-child(2) > span {
+  font-size: var(--type-label);
+  font-weight: var(--weight-bold);
+  line-height: var(--leading-control);
+  letter-spacing: var(--tracking-caps);
+}
+
+.news-item p {
+  font-size: var(--type-body-sm);
+  line-height: var(--leading-body);
+}
+
+.news-item :is(b, small),
+.fixture-row > div :is(b, small) {
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.fixture-row > div b {
+  font-size: var(--type-body-sm);
+  font-weight: var(--weight-semibold);
+  line-height: var(--leading-control);
+}
+
+.fixture-row > div small,
+.news-item small,
+.stat-card > small,
+.player-stats > span,
+.squad-summary span {
+  font-size: var(--type-caption);
+  line-height: var(--leading-body);
+}
+
+.search-box input {
+  font-size: var(--type-input);
+  font-weight: var(--weight-regular);
+}
+
+.filter-row :is(a, button, span),
+.filter-button,
+.squad-filter-panel label,
+.player-admin-fields label,
+.account-profile-fields label,
+.account-position-fieldset legend {
+  font-size: var(--type-label);
+  font-weight: var(--weight-semibold);
+  line-height: var(--leading-control);
+}
+
+.position-chip,
+.role-chip,
+.injury-chip,
+.membership-chip {
+  font-size: var(--type-caption);
+  font-weight: var(--weight-bold);
+  line-height: var(--leading-control);
+  letter-spacing: var(--tracking-normal);
+}
+
+.player-top h3 {
+  font-size: var(--type-title-sm);
+  font-weight: var(--weight-semibold);
+  line-height: var(--leading-heading);
+  overflow-wrap: anywhere;
+}
+
+.player-stats strong,
+.player-profile-value strong {
+  font-size: var(--type-body);
+  font-weight: var(--weight-semibold);
+  line-height: var(--leading-body);
+  overflow-wrap: anywhere;
+}
+
+.player-profile-value span,
+.player-deactivate-panel p,
+.account-avatar-card p,
+.account-profile-fields small,
+.account-position-fieldset > small {
+  font-size: var(--type-body-sm);
+  line-height: var(--leading-relaxed);
+}
+
+.player-admin-fields :is(input, select, textarea),
+.player-deactivate-panel input,
+.account-profile-fields input {
+  font-size: var(--type-input);
+  line-height: var(--leading-body);
+}
+
+.account-profile-message,
+.player-mutation-message {
+  font-size: var(--type-body-sm);
+  line-height: var(--leading-relaxed);
+  overflow-wrap: anywhere;
+}
+
+.account-position-fieldset span,
+.danger-button,
+.account-profile-back {
+  font-size: var(--type-control);
+  font-weight: var(--weight-bold);
+  line-height: var(--leading-control);
+}
+
 @media (max-width: 767px) {
   :root {
     --type-label: 13px;

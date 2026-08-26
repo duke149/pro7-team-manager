@@ -59,3 +59,16 @@ test("shell and authentication surfaces use semantic readable typography", async
   assert.match(css, /\.login-form button[\s\S]*font-size:\s*var\(--type-control\)/u);
   assert.match(css, /\.login-error[\s\S]*font-size:\s*var\(--type-body-sm\)/u);
 });
+
+test("overview, squad, and profile surfaces map copy and data to semantic roles", async () => {
+  const css = await readFile(typographyPath, "utf8");
+  assert.match(css, /\.card-kicker[\s\S]*font-size:\s*var\(--type-label\)/u);
+  assert.match(css, /\.news-item p[\s\S]*font-size:\s*var\(--type-body-sm\)/u);
+  assert.match(css, /\.fixture-row > div b[\s\S]*font-size:\s*var\(--type-body-sm\)/u);
+  assert.match(css, /\.search-box input[\s\S]*font-size:\s*var\(--type-input\)/u);
+  assert.match(css, /\.position-chip[\s\S]*font-size:\s*var\(--type-caption\)/u);
+  assert.match(css, /\.player-top h3[\s\S]*font-size:\s*var\(--type-title-sm\)/u);
+  assert.match(css, /\.player-profile-value strong[\s\S]*font-size:\s*var\(--type-body\)/u);
+  assert.match(css, /\.account-profile-fields input[\s\S]*font-size:\s*var\(--type-input\)/u);
+  assert.match(css, /\.account-profile-message[\s\S]*font-size:\s*var\(--type-body-sm\)/u);
+});
