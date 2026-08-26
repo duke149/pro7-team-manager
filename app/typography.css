@@ -388,6 +388,102 @@ h6 {
   line-height: var(--leading-control);
 }
 
+/* Funds, settings, dialogs, notifications, and shared states */
+.balance-card > strong {
+  font-family: var(--font-numeric);
+  font-size: var(--type-display);
+  font-weight: var(--weight-extrabold);
+  line-height: var(--leading-tight);
+  font-variant-numeric: tabular-nums;
+}
+
+.due-row,
+.due-row :is(b, small, strong),
+.transaction,
+.transaction :is(b, small, strong),
+.fund-muted,
+.fund-message,
+.fund-row-error,
+.fund-empty-copy {
+  font-size: var(--type-body-sm);
+  line-height: var(--leading-body);
+}
+
+.fund-stats :is(b, strong),
+.due-row > strong,
+.transaction > strong {
+  font-family: var(--font-numeric);
+  font-variant-numeric: tabular-nums;
+}
+
+.settings-tabs a,
+.settings-module .primary-button,
+.fund-actions button,
+.fund-row-action,
+.fund-danger-button {
+  font-size: var(--type-control);
+  font-weight: var(--weight-semibold);
+  line-height: var(--leading-control);
+}
+
+.settings-title > span,
+.settings-module-head span,
+.settings-module label,
+.modal-head span,
+.modal > label,
+.form-two label {
+  font-size: var(--type-label);
+  font-weight: var(--weight-semibold);
+  line-height: var(--leading-control);
+  letter-spacing: var(--tracking-label);
+}
+
+.settings-module :is(input, select),
+.modal :is(input, select, textarea) {
+  font-size: var(--type-input);
+  line-height: var(--leading-body);
+}
+
+.audit-list,
+.audit-list :is(b, small, code, span),
+.role-grid :is(p, small, code),
+.settings-message,
+.settings-state p {
+  font-size: var(--type-body-sm);
+  line-height: var(--leading-body);
+}
+
+.modal-head p {
+  font-size: var(--type-body-sm);
+  line-height: var(--leading-relaxed);
+}
+
+.toast {
+  font-size: var(--type-body-sm);
+  font-weight: var(--weight-semibold);
+  line-height: var(--leading-body);
+}
+
+.overview-state p,
+.match-state p,
+.tactics-state p,
+.funds-state p,
+.settings-state p,
+.squad-empty-state p,
+.squad-detail-state p,
+.notification-empty {
+  font-size: var(--type-body-sm);
+  line-height: var(--leading-relaxed);
+  overflow-wrap: anywhere;
+}
+
+.notification-popover header span,
+.notification-list :is(b, small, time),
+.notification-empty {
+  font-size: var(--type-body-sm);
+  line-height: var(--leading-body);
+}
+
 @media (max-width: 767px) {
   :root {
     --type-label: 13px;

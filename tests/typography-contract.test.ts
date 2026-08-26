@@ -85,3 +85,34 @@ test("matches and tactics keep readable labels with stable numerals", async () =
   assert.match(css, /\.pitch-player[\s\S]*font-size:\s*var\(--type-caption\)/u);
   assert.match(css, /\.bench-player[\s\S]*font-size:\s*var\(--type-body-sm\)/u);
 });
+
+test("funds, settings, dialogs, and shared states use readable semantic text", async () => {
+  const css = await readFile(typographyPath, "utf8");
+  assert.match(css, /\.balance-card > strong[\s\S]*font-size:\s*var\(--type-display\)/u);
+  assert.match(css, /\.due-row[\s\S]*font-size:\s*var\(--type-body-sm\)/u);
+  assert.match(css, /\.transaction[\s\S]*font-size:\s*var\(--type-body-sm\)/u);
+  assert.match(css, /\.settings-tabs a[\s\S]*font-size:\s*var\(--type-control\)/u);
+  assert.match(css, /\.settings-module label[\s\S]*font-size:\s*var\(--type-label\)/u);
+  assert.match(css, /\.audit-list[\s\S]*font-size:\s*var\(--type-body-sm\)/u);
+  assert.match(css, /\.modal-head p[\s\S]*font-size:\s*var\(--type-body-sm\)/u);
+  assert.match(css, /\.toast[\s\S]*font-size:\s*var\(--type-body-sm\)/u);
+});
+
+test("production CSS contains no legacy font or meaningful microtype", async () => {
+  const paths = [
+    new URL("../app/globals.css", import.meta.url),
+    new URL("../app/responsive.css", import.meta.url),
+    typographyPath,
+  ];
+  const css = (await Promise.all(paths.map((path) => readFile(path, "utf8")))).join("\n");
+  assert.doesNotMatch(css, /\b(?:Inter|Montserrat|Arial)\b/iu);
+  assert.doesNotMatch(css, /@import\s+url|fonts\.googleapis|fonts\.gstatic/iu);
+  for (const match of css.matchAll(/font-size:\s*(-?\d+(?:\.\d+)?)px/giu)) {
+    const size = Number(match[1]);
+    assert.ok(size === 0 || size >= 12, `meaningful font-size ${size}px remains`);
+  }
+  assert.doesNotMatch(css, /font-weight:\s*900\b/iu);
+  for (const match of css.matchAll(/letter-spacing:\s*(-?\d*\.?\d+)em/giu)) {
+    assert.ok(Number(match[1]) <= 0.08, `letter-spacing ${match[1]}em exceeds the contract`);
+  }
+});
