@@ -116,10 +116,11 @@ begin
       and (
         row.team_id <> v_team_id
         or not exists (
-          select 1 from public.finance_entries as marker
-          where marker.id = '70000000-0000-4000-8000-000000000401'
-            and marker.team_id = v_team_id
-            and marker.description like v_marker || '%'
+          select 1 from private.audit_events as marker
+          where marker.request_id = v_marker || '-DUE-SNAPSHOT'
+            and marker.table_name = 'member_dues'
+            and marker.row_key = pg_catalog.jsonb_build_object('id', row.id)
+            and marker.new_data = pg_catalog.to_jsonb(row)
         )
       )
   ) or exists (
@@ -250,7 +251,7 @@ begin
     id, team_id, match_id, mode, formation, instructions, pressing,
     defensive_line, version, status, created_by_user_id, applied_by_user_id, applied_at
   ) values
-    ('70000000-0000-4000-8000-000000000301', v_team_id, '70000000-0000-4000-8000-000000000001', 'balanced', '2-3-1', v_marker || ' applied balanced plan.', 'high', 'medium', 1, 'applied', v_actor_user_id, v_actor_user_id, pg_catalog.now()),
+    ('70000000-0000-4000-8000-000000000301', v_team_id, '70000000-0000-4000-8000-000000000001', 'balanced', '2-3-1', v_marker || ' balanced plan.', 'high', 'medium', 1, case when v_player_count = 7 then 'applied' else 'draft' end, v_actor_user_id, case when v_player_count = 7 then v_actor_user_id else null end, case when v_player_count = 7 then pg_catalog.now() else null end),
     ('70000000-0000-4000-8000-000000000302', v_team_id, '70000000-0000-4000-8000-000000000001', 'attacking', '3-2-1', v_marker || ' draft attacking plan.', 'medium', 'high', 1, 'draft', v_actor_user_id, null, null)
   on conflict (id) do update set
     mode = excluded.mode,
@@ -263,6 +264,17 @@ begin
     applied_by_user_id = excluded.applied_by_user_id,
     applied_at = excluded.applied_at;
 
+  delete from public.lineup_slots as row
+  using public.match_tactics as tactic
+  where row.tactic_id = tactic.id
+    and row.team_id = tactic.team_id
+    and row.id::text like '70000000-0000-4000-8000-000000001___'
+    and tactic.id = any (array[
+      '70000000-0000-4000-8000-000000000301'::uuid,
+      '70000000-0000-4000-8000-000000000302'::uuid
+    ])
+    and tactic.instructions like v_marker || '%';
+
   insert into public.lineup_slots (
     id, tactic_id, team_id, user_id, slot_kind, slot_key, role_label, shirt_number, x, y
   )
@@ -271,8 +283,8 @@ begin
     tactic.id,
     v_team_id,
     selected.user_id,
-    'starter',
-    case selected.ordinality when 1 then 'gk' else 'player-' || selected.ordinality::text end,
+    case when tactic.id = '70000000-0000-4000-8000-000000000302' and selected.ordinality = v_player_count then 'bench' else 'starter' end,
+    case when tactic.id = '70000000-0000-4000-8000-000000000302' and selected.ordinality = v_player_count then 'bench-' || selected.ordinality::text when selected.ordinality = 1 then 'gk' else 'player-' || selected.ordinality::text end,
     case when selected.ordinality = 1 then 'GK' when selected.ordinality <= 3 then 'DEF' when selected.ordinality <= 5 then 'MID' else 'ATT' end,
     coalesce(player.shirt_number, selected.ordinality::smallint),
     case selected.ordinality when 1 then 50 when 2 then 25 when 3 then 75 when 4 then 25 when 5 then 75 when 6 then 35 else 65 end,
@@ -327,6 +339,34 @@ begin
     paid_at = excluded.paid_at,
     finance_entry_id = excluded.finance_entry_id;
 
+  delete from private.audit_events as marker
+  where marker.request_id = v_marker || '-DUE-SNAPSHOT'
+    and marker.table_name = 'member_dues'
+    and marker.row_key ->> 'id' = any (array[
+      '70000000-0000-4000-8000-000000000501',
+      '70000000-0000-4000-8000-000000000502',
+      '70000000-0000-4000-8000-000000000503'
+    ]);
+
+  insert into private.audit_events (
+    actor_user_id, team_id, table_name, action, row_key, old_data, new_data, request_id
+  )
+  select
+    v_actor_user_id,
+    due.team_id,
+    'member_dues',
+    'INSERT',
+    pg_catalog.jsonb_build_object('id', due.id),
+    null,
+    pg_catalog.to_jsonb(due),
+    v_marker || '-DUE-SNAPSHOT'
+  from public.member_dues as due
+  where due.id = any (array[
+    '70000000-0000-4000-8000-000000000501'::uuid,
+    '70000000-0000-4000-8000-000000000502'::uuid,
+    '70000000-0000-4000-8000-000000000503'::uuid
+  ]);
+
   insert into public.notifications (
     id, team_id, user_id, type, source_entity, source_id, title, body, target_path
   ) values
@@ -343,12 +383,8 @@ begin
 end;
 $pro7_demo_seed$;
 
-select pg_catalog.jsonb_build_object(
-  'marker', 'PRO7-DEMO',
-  'player_count', pg_catalog.count(*)
-)
-from (
-  select membership.user_id
+with active_players as (
+  select membership.user_id, player.player_status
   from public.memberships as membership
   join public.teams as team on team.id = membership.team_id
   join public.team_player_profiles as player
@@ -356,8 +392,17 @@ from (
    and player.user_id = membership.user_id
   where team.slug = 'pro7-fc'
     and membership.status = 'active'
-  order by membership.user_id
-  limit 7
-) as selected;
+), coverage as (
+  select
+    (select pg_catalog.count(*) from (select user_id from active_players order by user_id limit 7) as selected) as player_count,
+    (select pg_catalog.count(*) from active_players where player_status = 'injured') as injured_player_count
+)
+select pg_catalog.jsonb_build_object(
+  'marker', 'PRO7-DEMO',
+  'player_count', coverage.player_count,
+  'injured_player_count', coverage.injured_player_count,
+  'injured_coverage', case when coverage.injured_player_count > 0 then 'available' else 'deferred' end
+)
+from coverage;
 
 commit;

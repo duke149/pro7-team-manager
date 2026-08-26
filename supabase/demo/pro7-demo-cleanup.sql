@@ -15,11 +15,21 @@ where row.id = any (array[
 ])
   and exists (
     select 1
-    from public.finance_entries as marker
-    where marker.team_id = row.team_id
-      and marker.id = '70000000-0000-4000-8000-000000000401'
-      and marker.description like 'PRO7-DEMO%'
+    from private.audit_events as marker
+    where marker.request_id = 'PRO7-DEMO-DUE-SNAPSHOT'
+      and marker.table_name = 'member_dues'
+      and marker.row_key = pg_catalog.jsonb_build_object('id', row.id)
+      and marker.new_data = pg_catalog.to_jsonb(row)
   );
+
+delete from private.audit_events as marker
+where marker.request_id = 'PRO7-DEMO-DUE-SNAPSHOT'
+  and marker.table_name = 'member_dues'
+  and marker.row_key ->> 'id' = any (array[
+    '70000000-0000-4000-8000-000000000501',
+    '70000000-0000-4000-8000-000000000502',
+    '70000000-0000-4000-8000-000000000503'
+  ]);
 
 delete from public.finance_entries as row
 where row.id = any (array[
