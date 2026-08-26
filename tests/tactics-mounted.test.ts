@@ -160,6 +160,39 @@ test("pointer drop swaps bench to starter and starter back to bench", async () =
   await act(async () => view.root.unmount());
 });
 
+test("the native click after coordinate drag or bench drop is consumed exactly once", async () => {
+  const view = await mounted();
+  const pitch = view.container.querySelector<HTMLElement>(".pitch");
+  const player = view.container.querySelector<HTMLButtonElement>('.pitch-player:not(.keeper)');
+  assert.ok(pitch); assert.ok(player);
+  Object.defineProperty(pitch, "getBoundingClientRect", { configurable: true, value: () => ({ left: 0, top: 0, width: 100, height: 100, right: 100, bottom: 100, x: 0, y: 0, toJSON() {} }) });
+  Object.defineProperty(browserWindow.document, "elementFromPoint", { configurable: true, value: () => player });
+  await act(async () => {
+    player.dispatchEvent(new browserWindow.PointerEvent("pointerdown", { bubbles: true, pointerId: 21, clientX: 25, clientY: 67 }));
+    pitch.dispatchEvent(new browserWindow.PointerEvent("pointermove", { bubbles: true, pointerId: 21, clientX: 40, clientY: 55 }));
+    pitch.dispatchEvent(new browserWindow.PointerEvent("pointerup", { bubbles: true, pointerId: 21, clientX: 40, clientY: 55 }));
+    player.click();
+  });
+  assert.equal(player.getAttribute("aria-pressed"), "false");
+  await act(async () => { player.click(); });
+  assert.equal(player.getAttribute("aria-pressed"), "true");
+  await act(async () => { player.click(); });
+
+  let bench = view.container.querySelector<HTMLButtonElement>(".bench-player"); assert.ok(bench);
+  const starter = view.container.querySelector<HTMLButtonElement>('.pitch-player:not(.keeper)'); assert.ok(starter);
+  Object.defineProperty(browserWindow.document, "elementFromPoint", { configurable: true, value: () => starter });
+  await act(async () => {
+    bench.dispatchEvent(new browserWindow.PointerEvent("pointerdown", { bubbles: true, pointerId: 22, clientX: 5, clientY: 5 }));
+    bench.dispatchEvent(new browserWindow.PointerEvent("pointerup", { bubbles: true, pointerId: 22, clientX: 25, clientY: 67 }));
+    bench.click();
+  });
+  bench = view.container.querySelector<HTMLButtonElement>(`[data-slot-key="${bench.dataset.slotKey}"]`); assert.ok(bench);
+  assert.equal(bench.getAttribute("aria-pressed"), "false");
+  await act(async () => { bench.click(); });
+  assert.equal(bench.getAttribute("aria-pressed"), "true");
+  await act(async () => view.root.unmount());
+});
+
 test("save sends same-origin JSON with changed coordinates and refreshes authoritative route data", async () => {
   const calls: { url: string; init?: RequestInit }[] = [];
   globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => { calls.push({ url: String(input), init }); return Response.json({ ok: true, tactic: { id: DETAIL.tactics[0].id, version: 3, updatedAt: "2026-10-03T00:00:00.000Z" } }); }) as typeof fetch;
@@ -184,16 +217,17 @@ test("save sends same-origin JSON with changed coordinates and refreshes authori
   await act(async () => view.root.unmount());
 });
 
-test("a newly saved draft reconciles its authoritative token before apply and a consecutive save/apply uses the next token", async () => {
+test("a newly saved draft reconciles before apply and the post-apply fork adopts its own create token", async () => {
   const calls: { body?: BodyInit | null }[] = [];
   const createdId = "00000000-0000-4000-8000-000000000301";
+  const forkId = "00000000-0000-4000-8000-000000000302";
   let saveCount = 0;
   globalThis.fetch = (async (_input: string | URL | Request, init?: RequestInit) => {
     calls.push({ body: init?.body });
     const body = JSON.parse(String(init?.body));
     if (body.action === "save") {
       saveCount += 1;
-      return Response.json({ ok: true, tactic: { id: createdId, version: saveCount, updatedAt: `2026-10-0${saveCount + 2}T00:00:00.000Z` } });
+      return Response.json({ ok: true, tactic: { id: saveCount === 1 ? createdId : forkId, version: 1, updatedAt: `2026-10-0${saveCount + 2}T00:00:00.000Z` } });
     }
     return Response.json({ ok: true });
   }) as typeof fetch;
@@ -210,8 +244,9 @@ test("a newly saved draft reconciles its authoritative token before apply and a 
   assert.equal(JSON.parse(String(calls[0].body)).mode, "attacking");
   assert.deepEqual(JSON.parse(String(calls[1].body)), { action: "apply", tacticId: createdId, expectedUpdatedAt: "2026-10-03T00:00:00.000Z" });
   assert.equal(JSON.parse(String(calls[2].body)).version, 1);
-  assert.equal(JSON.parse(String(calls[2].body)).expectedUpdatedAt, "2026-10-03T00:00:00.000Z");
-  assert.deepEqual(JSON.parse(String(calls[3].body)), { action: "apply", tacticId: createdId, expectedUpdatedAt: "2026-10-04T00:00:00.000Z" });
+  assert.equal(JSON.parse(String(calls[2].body)).tacticId, null);
+  assert.equal(JSON.parse(String(calls[2].body)).expectedUpdatedAt, null);
+  assert.deepEqual(JSON.parse(String(calls[3].body)), { action: "apply", tacticId: forkId, expectedUpdatedAt: "2026-10-04T00:00:00.000Z" });
   await act(async () => view.root.unmount());
 });
 
@@ -232,6 +267,43 @@ test("apply sends only draft identity and stale token, while failed mutations st
   assert.match(failed.container.textContent ?? "", /Chiến thuật đã thay đổi/u);
   assert.equal(globalThis.__tacticsRefreshes, 0);
   await act(async () => failed.root.unmount());
+});
+
+test("apply forks an unsaved editable draft so duplicate apply stays disabled and the next save creates", async () => {
+  const calls: { body?: BodyInit | null }[] = [];
+  globalThis.fetch = (async (_input: string | URL | Request, init?: RequestInit) => {
+    calls.push({ body: init?.body });
+    const body = JSON.parse(String(init?.body));
+    return body.action === "save"
+      ? Response.json({ ok: true, tactic: { id: "00000000-0000-4000-8000-000000000401", version: 1, updatedAt: "2026-10-04T00:00:00.000Z" } })
+      : Response.json({ ok: true });
+  }) as typeof fetch;
+  const view = await mounted();
+  const find = (text: string) => [...view.container.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes(text));
+  await act(async () => { find("Áp dụng cho đội")?.click(); await new Promise((resolve) => setTimeout(resolve, 0)); });
+  assert.equal(find("Áp dụng cho đội")?.disabled, true);
+  const player = view.container.querySelector<HTMLButtonElement>(".pitch-player:not(.keeper)"); assert.ok(player);
+  await act(async () => { player.dispatchEvent(new browserWindow.KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true, cancelable: true })); });
+  await act(async () => { find("Lưu bản nháp")?.click(); await new Promise((resolve) => setTimeout(resolve, 0)); });
+  assert.deepEqual(calls.map((call) => JSON.parse(String(call.body))).map((body) => body.action), ["apply", "save"]);
+  const saved = JSON.parse(String(calls[1].body));
+  assert.equal(saved.tacticId, null);
+  assert.equal(saved.version, 1);
+  assert.equal(saved.expectedUpdatedAt, null);
+  assert.equal(saved.slots.find((slot: { userId: string }) => slot.userId === USER_IDS[1]).x, 27);
+  await act(async () => view.root.unmount());
+});
+
+test("an Admin reload with only an applied tactic also seeds a valid version-one create payload", async () => {
+  const calls: { body?: BodyInit | null }[] = [];
+  globalThis.fetch = (async (_input: string | URL | Request, init?: RequestInit) => { calls.push({ body: init?.body }); return Response.json({ ok: true, tactic: { id: "00000000-0000-4000-8000-000000000402", version: 1, updatedAt: "2026-10-04T00:00:00.000Z" } }); }) as typeof fetch;
+  const applied: TacticsDetail = { ...DETAIL, tactics: DETAIL.tactics.map((tactic) => ({ ...tactic, status: "applied", appliedAt: "2026-10-03T00:00:00.000Z" })) };
+  const view = await mounted(true, applied);
+  const save = [...view.container.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("Lưu bản nháp")); assert.ok(save);
+  await act(async () => { save.click(); await new Promise((resolve) => setTimeout(resolve, 0)); });
+  const payload = JSON.parse(String(calls[0].body));
+  assert.deepEqual({ tacticId: payload.tacticId, version: payload.version, expectedUpdatedAt: payload.expectedUpdatedAt }, { tacticId: null, version: 1, expectedUpdatedAt: null });
+  await act(async () => view.root.unmount());
 });
 
 test("Member sees applied tactics as read-only with no draft mutation surface", async () => {

@@ -5,6 +5,7 @@ import type { TeamAccessContext } from "../teams/context";
 import type { PermissionCode } from "../teams/permissions";
 import { isUuid } from "../matches/model";
 import { isIsoTimestamp } from "../matches/validation";
+import { TACTIC_FORMATIONS, TACTIC_LEVELS, TACTIC_MODES, TACTIC_ROLES } from "./model";
 import { validateTacticsPayload, type SaveTacticPayload } from "./validation";
 
 const MAX_REQUEST_BYTES = 16 * 1024;
@@ -70,15 +71,43 @@ async function allPlayersAreActive(dependencies: TacticsActionDependencies, team
   return returned.every((userId, index) => userId === requested[index]);
 }
 
-function parseSavedTactic(value: unknown, expectedId: string) {
+function record(value: unknown): value is Record<string, unknown> { return typeof value === "object" && value !== null && !Array.isArray(value); }
+function exactKeys(value: Record<string, unknown>, keys: readonly string[]) { const actual = Object.keys(value); return actual.length === keys.length && keys.every((key) => actual.includes(key)); }
+function oneOf(value: unknown, values: readonly string[]) { return typeof value === "string" && values.includes(value); }
+function savedSlot(value: unknown) {
+  return record(value) && exactKeys(value, ["user_id", "slot_kind", "slot_key", "role_label", "shirt_number", "x", "y"])
+    && isUuid(value.user_id) && (value.slot_kind === "starter" || value.slot_kind === "bench")
+    && typeof value.slot_key === "string" && value.slot_key === value.slot_key.trim() && value.slot_key.length >= 1 && value.slot_key.length <= 40
+    && oneOf(value.role_label, TACTIC_ROLES)
+    && (value.shirt_number === null || (Number.isInteger(value.shirt_number) && (value.shirt_number as number) >= 1 && (value.shirt_number as number) <= 99))
+    && typeof value.x === "number" && Number.isFinite(value.x) && value.x >= 0 && value.x <= 100
+    && typeof value.y === "number" && Number.isFinite(value.y) && value.y >= 0 && value.y <= 100;
+}
+function parseSavedTactic(value: unknown) {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
   const row = value as Record<string, unknown>;
-  if (Object.keys(row).length !== 4
-    || row.id !== expectedId
+  if (!exactKeys(row, ["id", "team_id", "match_id", "mode", "formation", "instructions", "version", "pressing", "defensive_line", "status", "updated_at", "slots"])
+    || !isUuid(row.id) || !isUuid(row.team_id) || !isUuid(row.match_id)
+    || !oneOf(row.mode, TACTIC_MODES) || !oneOf(row.formation, TACTIC_FORMATIONS)
+    || !(row.instructions === null || (typeof row.instructions === "string" && row.instructions === row.instructions.trim() && Array.from(row.instructions).length >= 1 && Array.from(row.instructions).length <= 2000))
     || !Number.isInteger(row.version) || (row.version as number) < 1 || (row.version as number) > 32767
-    || !isIsoTimestamp(row.updated_at)
-    || row.status !== "draft") return null;
-  return Object.freeze({ id: row.id, version: row.version as number, updatedAt: row.updated_at });
+    || !oneOf(row.pressing, TACTIC_LEVELS) || !oneOf(row.defensive_line, TACTIC_LEVELS)
+    || (row.status !== "draft" && row.status !== "applied") || !isIsoTimestamp(row.updated_at)
+    || !Array.isArray(row.slots) || row.slots.length < 7 || row.slots.length > 30 || !row.slots.every(savedSlot)) return null;
+  return row;
+}
+function savedRowMatches(row: Record<string, unknown>, expectedId: string, teamId: string, matchId: string, payload: SaveTacticPayload) {
+  const expectedVersion = payload.tacticId === null ? 1 : payload.version + 1;
+  if (row.id !== expectedId || row.team_id !== teamId || row.match_id !== matchId || row.mode !== payload.mode
+    || row.formation !== payload.formation || row.instructions !== payload.instructions || row.version !== expectedVersion
+    || row.pressing !== payload.pressing || row.defensive_line !== payload.defensiveLine || row.status !== "draft") return false;
+  const returned = new Map((row.slots as Record<string, unknown>[]).map((slot) => [slot.slot_key, slot]));
+  if (returned.size !== payload.slots.length) return false;
+  return payload.slots.every((expected) => {
+    const slot = returned.get(expected.slotKey);
+    return slot?.user_id === expected.userId && slot.slot_kind === expected.slotKind && slot.role_label === expected.roleLabel
+      && slot.shirt_number === expected.shirtNumber && slot.x === expected.x && slot.y === expected.y;
+  });
 }
 
 export async function mutateTactics(
@@ -129,15 +158,16 @@ export async function mutateTactics(
     if (!isUuid(result.data)) return failure(500, "server", "Không thể cập nhật chiến thuật. Vui lòng thử lại.");
     const saved = await dependencies.supabase
       .from("match_tactics")
-      .select("id,version,updated_at,status")
+      .select("id,team_id,match_id,mode,formation,instructions,version,pressing,defensive_line,status,updated_at,slots:lineup_slots(user_id,slot_kind,slot_key,role_label,shirt_number,x,y)")
       .eq("team_id", context.team.id)
       .eq("match_id", target.matchId)
       .eq("id", result.data)
       .limit(1)
       .maybeSingle();
-    const tactic = saved.error ? null : parseSavedTactic(saved.data, result.data);
-    if (!tactic) return failure(500, "server", "Không thể lưu chiến thuật lúc này.");
-    return Response.json({ ok: true, tactic });
+    const savedRow = saved.error ? null : parseSavedTactic(saved.data);
+    if (!savedRow) return failure(500, "server", "Không thể lưu chiến thuật lúc này.");
+    if (!savedRowMatches(savedRow, result.data, context.team.id, target.matchId, parsed.value)) return failure(409, "stale", "Chiến thuật đã thay đổi. Vui lòng tải lại.");
+    return Response.json({ ok: true, tactic: { id: savedRow.id, version: savedRow.version, updatedAt: savedRow.updated_at } });
   } catch {
     return failure(500, "server", "Không thể cập nhật chiến thuật. Vui lòng thử lại.");
   }

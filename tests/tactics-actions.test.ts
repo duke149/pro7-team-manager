@@ -34,6 +34,16 @@ function payload() {
   return { action: "save", tacticId: TACTIC_ID, mode: "balanced", formation: "2-3-1", instructions: null, version: 2, pressing: "high", defensiveLine: "medium", slots: slots(), expectedUpdatedAt: UPDATED_AT };
 }
 
+function savedRow(overrides: Record<string, unknown> = {}) {
+  return {
+    id: TACTIC_ID, team_id: TEAM_ID, match_id: MATCH_ID, mode: "balanced", formation: "2-3-1",
+    instructions: null, version: 3, pressing: "high", defensive_line: "medium", status: "draft",
+    updated_at: "2026-10-02T00:00:00.000Z",
+    slots: slots().map((slot) => ({ user_id: slot.userId, slot_kind: slot.slotKind, slot_key: slot.slotKey, role_label: slot.roleLabel, shirt_number: slot.shirtNumber, x: slot.x, y: slot.y })),
+    ...overrides,
+  };
+}
+
 function request(body: unknown, headers: Record<string, string> = {}) {
   return new Request(`https://pro7.example/api/teams/pro7-fc/tactics/${MATCH_ID}`, {
     method: "POST",
@@ -51,7 +61,7 @@ function dependencies(options: { context?: TeamAccessContext | null; activeIds?:
   };
   const savedTacticQuery = {
     select() { return this; }, eq() { return this; }, limit() { return this; },
-    async maybeSingle() { return { data: "savedRow" in options ? options.savedRow : { id: TACTIC_ID, version: 3, updated_at: "2026-10-02T00:00:00.000Z", status: "draft" }, error: null }; },
+    async maybeSingle() { return { data: "savedRow" in options ? options.savedRow : savedRow(), error: null }; },
   };
   const deps: TacticsActionDependencies = {
     requireTeamPermission: async (_slug, permission) => { calls.push({ kind: "permission", permission }); return "context" in options ? options.context ?? null : CONTEXT; },
@@ -99,6 +109,27 @@ test("save fails closed when the authoritative tactic row is malformed", async (
   const response = await mutateTactics(request(payload()), { slug: "pro7-fc", matchId: MATCH_ID }, fixture.deps);
   assert.equal(response.status, 500);
   assert.deepEqual(await response.json(), { ok: false, code: "server", message: "Không thể lưu chiến thuật lúc này." });
+});
+
+test("save returns a stable conflict instead of adopting a raced version or mismatched content", async () => {
+  for (const raced of [
+    savedRow({ version: 4 }),
+    savedRow({ formation: "3-2-1" }),
+    savedRow({ slots: savedRow().slots.map((slot: { slot_key: string; x: number }) => slot.slot_key === "starter-2" ? { ...slot, x: slot.x + 1 } : slot) }),
+  ]) {
+    const fixture = dependencies({ savedRow: raced });
+    const response = await mutateTactics(request(payload()), { slug: "pro7-fc", matchId: MATCH_ID }, fixture.deps);
+    assert.equal(response.status, 409);
+    assert.deepEqual(await response.json(), { ok: false, code: "stale", message: "Chiến thuật đã thay đổi. Vui lòng tải lại." });
+  }
+});
+
+test("new save accepts only the authoritative version-one row", async () => {
+  const creating = { ...payload(), tacticId: null, version: 1, expectedUpdatedAt: null };
+  const fixture = dependencies({ savedRow: savedRow({ version: 1 }) });
+  const response = await mutateTactics(request(creating), { slug: "pro7-fc", matchId: MATCH_ID }, fixture.deps);
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { ok: true, tactic: { id: TACTIC_ID, version: 1, updatedAt: "2026-10-02T00:00:00.000Z" } });
 });
 
 test("save fails closed before RPC when any player is inactive or belongs to another team", async () => {

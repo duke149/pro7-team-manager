@@ -108,3 +108,30 @@ Status: `DONE_WITH_CONCERNS`
 - Tactics-scoped ESLint: exit 0. `git diff --check`: exit 0.
 - Whole-repository `npm run lint`: unchanged baseline of 479 errors and 1 warning in pre-existing/generated files.
 - No remote operation, migration edit/apply, deployment, or `supabase/.temp/` mutation occurred.
+
+---
+
+## Fix round 2/5 — apply lifecycle, readback races, and drag-click suppression
+
+Status: `DONE_WITH_CONCERNS`
+
+### Changes
+
+- A successful apply no longer leaves the now-immutable applied tactic ID and optimistic token in editable state. The editor immediately forks the applied content into an unsaved version-one draft with null ID/token, keeps duplicate Apply disabled, and sends the next Save through the create path. The same safe version-one seed is used after an Admin reload that contains only an applied tactic.
+- Post-save readback now selects and strictly parses the complete scoped tactic and lineup. It accepts only the RPC-returned ID, guarded team/match, submitted mode/formation/instructions/pressing/defensive line, expected resulting version (`1` for create, current + 1 for update), draft status, and an exact slot-keyed lineup match. A structurally valid later version or changed field/slot returns the stable `409 stale` response and its token is never adopted.
+- Pointer state records meaningful movement and cross-slot drops. The one native click generated after a coordinate drag or bench drop is consumed for the source slot and the suppression is then cleared; ordinary click and keyboard selection remain available.
+
+### Fix-round TDD evidence
+
+- Apply lifecycle RED: Apply remained enabled and the next edited Save reused the immutable tactic ID/token. GREEN: duplicate Apply is disabled, edit → Save sends `tacticId: null`, `version: 1`, and `expectedUpdatedAt: null`; reload from applied-only data has the same valid create contract.
+- Readback race RED: expanded authoritative rows failed the old four-field parser, and raced version/content fixtures could not produce the required stable conflict. GREEN: exact successful create/update rows pass while version +2, formation mismatch, and slot-coordinate mismatch return `409 stale`.
+- Pointer-click RED: dispatching pointerdown → move/drop → pointerup → native click selected the source again. GREEN: both coordinate-drag and bench-drop clicks are consumed once, and the following normal click selects normally.
+
+### Fresh verification
+
+- Focused tactics suite: 32 passed, 0 failed.
+- Full `npm run test:unit`: 370 total; 365 passed, 0 failed, 5 optional live-database skips.
+- `npm test`: production build succeeded and rendered HTML/browser-boundary checks passed 7/7.
+- Changed-file ESLint and `git diff --check`: exit 0.
+- Whole-repository `npm run lint`: unchanged baseline of 479 errors and 1 warning in pre-existing/generated files.
+- No UI redesign, remote operation, migration edit/apply, deployment, or `supabase/.temp/` mutation occurred.

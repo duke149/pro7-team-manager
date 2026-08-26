@@ -47,7 +47,7 @@ function draftFor(mode: DisplayMode, detail: TacticsDetail): Draft {
   const draft = rows.find((tactic) => tactic.status === "draft");
   if (draft) return { id: draft.id, mode, formation: draft.formation, instructions: draft.instructions, version: draft.version, pressing: draft.pressing, defensiveLine: draft.defensiveLine, updatedAt: draft.updatedAt, slots: draft.slots, expectedUpdatedAt: draft.updatedAt };
   const applied = rows.find((tactic) => tactic.status === "applied");
-  if (applied) return { id: null, mode, formation: applied.formation, instructions: applied.instructions, version: Math.min(32767, applied.version + 1), pressing: applied.pressing, defensiveLine: applied.defensiveLine, updatedAt: applied.updatedAt, slots: applied.slots, expectedUpdatedAt: null };
+  if (applied) return { id: null, mode, formation: applied.formation, instructions: applied.instructions, version: 1, pressing: applied.pressing, defensiveLine: applied.defensiveLine, updatedAt: detail.match.updatedAt, slots: applied.slots, expectedUpdatedAt: null };
   const legacy = mode === "attacking" ? detail.tactics.find((tactic) => tactic.mode === "balanced" && tactic.status === "draft") ?? detail.tactics.find((tactic) => tactic.mode === "balanced" && tactic.status === "applied") : null;
   if (legacy) return { id: null, mode, formation: legacy.formation, instructions: legacy.instructions, version: 1, pressing: legacy.pressing, defensiveLine: legacy.defensiveLine, updatedAt: legacy.updatedAt, slots: legacy.slots, expectedUpdatedAt: null };
   return { id: null, mode, formation: "2-3-1", instructions: null, version: 1, pressing: "medium", defensiveLine: "medium", updatedAt: detail.match.updatedAt, slots: defaultSlots(detail.players, "2-3-1"), expectedUpdatedAt: null };
@@ -81,7 +81,8 @@ export function TacticsBoard({ slug, teamName, detail, canManage }: { slug: stri
   const [dirty, setDirty] = useState<Partial<Record<DisplayMode, boolean>>>({});
   const [state, setState] = useState({ pending: false, message: "", error: false });
   const [selectedSlotKey, setSelectedSlotKey] = useState<string | null>(null);
-  const dragging = useRef<{ slotKey: string; pointerId: number; element: HTMLButtonElement } | null>(null);
+  const dragging = useRef<{ slotKey: string; pointerId: number; element: HTMLButtonElement; startX: number; startY: number; moved: boolean } | null>(null);
+  const suppressedClick = useRef<string | null>(null);
   const draft = drafts[mode] ?? null;
   const players = new Map(detail.players.map((player) => [player.userId, player]));
   const starters = draft?.slots.filter((slot) => slot.slotKind === "starter") ?? [];
@@ -113,6 +114,10 @@ export function TacticsBoard({ slug, teamName, detail, canManage }: { slug: stri
     if (!canManage) return;
     if (selectedSlotKey) swap(selectedSlotKey, slotKey); else setSelectedSlotKey(slotKey);
   }
+  function clickSlot(slotKey: string) {
+    if (suppressedClick.current === slotKey) { suppressedClick.current = null; return; }
+    selectOrSwap(slotKey);
+  }
   function keyMove(event: KeyboardEvent<HTMLButtonElement>, slot: TacticSlot) {
     if ((event.key === "Enter" || event.key === " ") && canManage) { event.preventDefault(); selectOrSwap(slot.slotKey); return; }
     const step = event.shiftKey ? 10 : 2;
@@ -124,7 +129,7 @@ export function TacticsBoard({ slug, teamName, detail, canManage }: { slug: stri
     if (!canManage) return;
     const element = event.currentTarget;
     element.setPointerCapture?.(event.pointerId);
-    dragging.current = { slotKey, pointerId: event.pointerId, element };
+    dragging.current = { slotKey, pointerId: event.pointerId, element, startX: event.clientX, startY: event.clientY, moved: false };
   }
   function clearPointer(pointerId?: number) {
     const active = dragging.current;
@@ -135,6 +140,7 @@ export function TacticsBoard({ slug, teamName, detail, canManage }: { slug: stri
   function pointerMove(event: PointerEvent<HTMLElement>) {
     const active = dragging.current;
     if (!canManage || !active || active.pointerId !== event.pointerId) return;
+    if (Math.hypot(event.clientX - active.startX, event.clientY - active.startY) >= 3) active.moved = true;
     const activeSlot = draft?.slots.find((slot) => slot.slotKey === active.slotKey);
     if (!activeSlot || activeSlot.slotKind !== "starter") return;
     const bounds = event.currentTarget.getBoundingClientRect();
@@ -146,6 +152,10 @@ export function TacticsBoard({ slug, teamName, detail, canManage }: { slug: stri
     if (!active || active.pointerId !== event.pointerId) return;
     const target = document.elementFromPoint?.(event.clientX, event.clientY)?.closest<HTMLElement>("[data-slot-key]");
     const targetKey = target?.dataset.slotKey;
+    if (active.moved || (targetKey && targetKey !== active.slotKey)) {
+      suppressedClick.current = active.slotKey;
+      setTimeout(() => { if (suppressedClick.current === active.slotKey) suppressedClick.current = null; }, 0);
+    }
     if (targetKey && targetKey !== active.slotKey) swap(active.slotKey, targetKey);
     clearPointer(event.pointerId);
   }
@@ -163,6 +173,8 @@ export function TacticsBoard({ slug, teamName, detail, canManage }: { slug: stri
         const authoritative = savedTactic(data);
         if (!authoritative) { setState({ pending: false, message: "Máy chủ trả về bản nháp không hợp lệ.", error: true }); return; }
         setDrafts((current) => ({ ...current, [mode]: { ...(current[mode] as Draft), id: authoritative.id, version: authoritative.version, updatedAt: authoritative.updatedAt, expectedUpdatedAt: authoritative.updatedAt } }));
+      } else {
+        setDrafts((current) => ({ ...current, [mode]: { ...(current[mode] as Draft), id: null, version: 1, updatedAt: detail.match.updatedAt, expectedUpdatedAt: null } }));
       }
       setState({ pending: false, message: action === "save" ? "Đã lưu bản nháp." : "Đã áp dụng đội hình.", error: false });
       setDirty((current) => ({ ...current, [mode]: false })); router.refresh();
@@ -175,13 +187,13 @@ export function TacticsBoard({ slug, teamName, detail, canManage }: { slug: stri
   return <div className="view-stack tactics-view" data-state={ready ? "ready" : "empty"}>
     <section className="tactics-toolbar card">
       <label>SƠ ĐỒ<select aria-label="Sơ đồ" value={draft.formation} disabled={!canManage} onChange={(event) => change((current) => withFormation(current, event.target.value as TacticFormation))}>{TACTIC_FORMATIONS.map((formation) => <option key={formation} value={formation} aria-selected={draft.formation === formation}>{formation}</option>)}</select></label>
-      <div className="mode-toggle" aria-label="Chế độ chiến thuật">{DISPLAY_MODES.map((entry) => <button type="button" aria-pressed={mode === entry.mode} disabled={!canManage && !drafts[entry.mode]} className={mode === entry.mode ? "active" : ""} onClick={() => { clearPointer(); setSelectedSlotKey(null); setMode(entry.mode); }} key={entry.mode}>{entry.label}</button>)}</div>
+      <div className="mode-toggle" aria-label="Chế độ chiến thuật">{DISPLAY_MODES.map((entry) => <button type="button" aria-pressed={mode === entry.mode} disabled={!canManage && !drafts[entry.mode]} className={mode === entry.mode ? "active" : ""} onClick={() => { clearPointer(); suppressedClick.current = null; setSelectedSlotKey(null); setMode(entry.mode); }} key={entry.mode}>{entry.label}</button>)}</div>
       <div>{canManage ? <><button className="soft-button" type="button" disabled={state.pending || !ready} onClick={() => void mutate("save")}><Save size={16} />Lưu bản nháp</button><button className="lime-button" type="button" disabled={state.pending || !draft.id || !draft.expectedUpdatedAt || dirty[mode] || !ready} onClick={() => void mutate("apply")}><Send size={16} />Áp dụng cho đội</button></> : <span className="tactics-readonly"><b>Chỉ đọc</b><small>Đã áp dụng</small></span>}</div>
     </section>
     {legacyMode && <p className="tactics-message" role="status">Chế độ dữ liệu cũ đang được hiển thị trong mục Có bóng.</p>}
     {!ready ? <section className="card tactics-state"><h2>Cần đúng 7 cầu thủ và một thủ môn</h2><p>Đội hiện chưa có đủ cầu thủ hoạt động để lập đội hình.</p></section> : <section className="tactics-layout">
-      <article className="pitch-card"><div className="pitch" onPointerMove={pointerMove} onPointerUp={finishPointer} onPointerCancel={(event) => clearPointer(event.pointerId)}><div className="pitch-center" /><div className="penalty top" /><div className="penalty bottom" />{starters.map((slot) => { const player = players.get(slot.userId); const name = playerName(player); return <button key={slot.slotKey} type="button" data-slot-key={slot.slotKey} disabled={!canManage} className={`pitch-player ${slot.roleLabel === "GK" ? "keeper" : ""}`} aria-pressed={selectedSlotKey === slot.slotKey} aria-label={`${name}, ${slot.roleLabel}, vị trí ngang ${slot.x}, dọc ${slot.y}. Dùng phím mũi tên để di chuyển; Enter hoặc phím cách để chọn đổi cầu thủ.`} style={{ left: `${slot.x}%`, top: `${slot.y}%` }} onClick={() => selectOrSwap(slot.slotKey)} onKeyDown={(event) => keyMove(event, slot)} onPointerDown={(event) => beginPointer(event, slot.slotKey)} onLostPointerCapture={(event) => clearPointer(event.pointerId)}><b>{slot.shirtNumber ?? initials(name)}</b><span>{name} • {slot.roleLabel}</span></button>; })}</div><div className="pitch-caption"><span><i className="dot green" />Đội hình {draft.formation}</span><span>{canManage ? "Kéo hoặc dùng phím mũi tên để đổi vị trí" : `${teamName} • Đội hình đã áp dụng`}</span></div></article>
-      <aside className="tactics-side"><article className="card instruction-card"><SectionHead label="CHỈ ĐẠO" title="Nhiệm vụ trận đấu" /><textarea aria-label="Chỉ đạo trận đấu" maxLength={2000} readOnly={!canManage} value={draft.instructions ?? ""} onChange={(event) => change((current) => ({ ...current, instructions: event.target.value.trim() ? event.target.value : null }))} placeholder={canManage ? "Nhập chỉ đạo cho trận đấu" : "Chưa có chỉ đạo"} /><label>Cường độ pressing <b>{LEVEL_LABELS[draft.pressing]}</b></label><input aria-label="Cường độ pressing" type="range" min="0" max="2" step="1" disabled={!canManage} value={TACTIC_LEVELS.indexOf(draft.pressing)} onChange={(event) => change((current) => ({ ...current, pressing: TACTIC_LEVELS[Number(event.target.value)] }))} /><label>Hàng phòng ngự <b>{LEVEL_LABELS[draft.defensiveLine]}</b></label><div className="segmented" aria-label="Hàng phòng ngự">{TACTIC_LEVELS.map((level) => <button key={level} type="button" aria-label={LEVEL_LABELS[level]} aria-pressed={draft.defensiveLine === level} className={draft.defensiveLine === level ? "active" : ""} disabled={!canManage} onClick={() => change((current) => ({ ...current, defensiveLine: level }))} />)}</div></article><article className="card bench-card"><SectionHead label="DỰ BỊ" title="Băng ghế" value={bench.length} />{bench.length === 0 ? <p className="tactics-muted">Chưa có cầu thủ dự bị.</p> : bench.map((slot) => { const player = players.get(slot.userId); const name = playerName(player); return <button type="button" disabled={!canManage} className="bench-player" data-slot-key={slot.slotKey} aria-pressed={selectedSlotKey === slot.slotKey} aria-label={`${name}, dự bị. Enter hoặc phím cách để chọn đổi cầu thủ.`} key={slot.slotKey} onClick={() => selectOrSwap(slot.slotKey)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); selectOrSwap(slot.slotKey); } }} onPointerDown={(event) => beginPointer(event, slot.slotKey)} onPointerUp={finishPointer} onPointerCancel={(event) => clearPointer(event.pointerId)} onLostPointerCapture={(event) => clearPointer(event.pointerId)}><span>{slot.shirtNumber ?? initials(name)}</span><b>{name} • {slot.roleLabel}</b><MoreHorizontal aria-hidden="true" /></button>; })}</article></aside>
+      <article className="pitch-card"><div className="pitch" onPointerMove={pointerMove} onPointerUp={finishPointer} onPointerCancel={(event) => clearPointer(event.pointerId)}><div className="pitch-center" /><div className="penalty top" /><div className="penalty bottom" />{starters.map((slot) => { const player = players.get(slot.userId); const name = playerName(player); return <button key={slot.slotKey} type="button" data-slot-key={slot.slotKey} disabled={!canManage} className={`pitch-player ${slot.roleLabel === "GK" ? "keeper" : ""}`} aria-pressed={selectedSlotKey === slot.slotKey} aria-label={`${name}, ${slot.roleLabel}, vị trí ngang ${slot.x}, dọc ${slot.y}. Dùng phím mũi tên để di chuyển; Enter hoặc phím cách để chọn đổi cầu thủ.`} style={{ left: `${slot.x}%`, top: `${slot.y}%` }} onClick={() => clickSlot(slot.slotKey)} onKeyDown={(event) => keyMove(event, slot)} onPointerDown={(event) => beginPointer(event, slot.slotKey)} onLostPointerCapture={(event) => clearPointer(event.pointerId)}><b>{slot.shirtNumber ?? initials(name)}</b><span>{name} • {slot.roleLabel}</span></button>; })}</div><div className="pitch-caption"><span><i className="dot green" />Đội hình {draft.formation}</span><span>{canManage ? "Kéo hoặc dùng phím mũi tên để đổi vị trí" : `${teamName} • Đội hình đã áp dụng`}</span></div></article>
+      <aside className="tactics-side"><article className="card instruction-card"><SectionHead label="CHỈ ĐẠO" title="Nhiệm vụ trận đấu" /><textarea aria-label="Chỉ đạo trận đấu" maxLength={2000} readOnly={!canManage} value={draft.instructions ?? ""} onChange={(event) => change((current) => ({ ...current, instructions: event.target.value.trim() ? event.target.value : null }))} placeholder={canManage ? "Nhập chỉ đạo cho trận đấu" : "Chưa có chỉ đạo"} /><label>Cường độ pressing <b>{LEVEL_LABELS[draft.pressing]}</b></label><input aria-label="Cường độ pressing" type="range" min="0" max="2" step="1" disabled={!canManage} value={TACTIC_LEVELS.indexOf(draft.pressing)} onChange={(event) => change((current) => ({ ...current, pressing: TACTIC_LEVELS[Number(event.target.value)] }))} /><label>Hàng phòng ngự <b>{LEVEL_LABELS[draft.defensiveLine]}</b></label><div className="segmented" aria-label="Hàng phòng ngự">{TACTIC_LEVELS.map((level) => <button key={level} type="button" aria-label={LEVEL_LABELS[level]} aria-pressed={draft.defensiveLine === level} className={draft.defensiveLine === level ? "active" : ""} disabled={!canManage} onClick={() => change((current) => ({ ...current, defensiveLine: level }))} />)}</div></article><article className="card bench-card"><SectionHead label="DỰ BỊ" title="Băng ghế" value={bench.length} />{bench.length === 0 ? <p className="tactics-muted">Chưa có cầu thủ dự bị.</p> : bench.map((slot) => { const player = players.get(slot.userId); const name = playerName(player); return <button type="button" disabled={!canManage} className="bench-player" data-slot-key={slot.slotKey} aria-pressed={selectedSlotKey === slot.slotKey} aria-label={`${name}, dự bị. Enter hoặc phím cách để chọn đổi cầu thủ.`} key={slot.slotKey} onClick={() => clickSlot(slot.slotKey)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); selectOrSwap(slot.slotKey); } }} onPointerDown={(event) => beginPointer(event, slot.slotKey)} onPointerUp={finishPointer} onPointerCancel={(event) => clearPointer(event.pointerId)} onLostPointerCapture={(event) => clearPointer(event.pointerId)}><span>{slot.shirtNumber ?? initials(name)}</span><b>{name} • {slot.roleLabel}</b><MoreHorizontal aria-hidden="true" /></button>; })}</article></aside>
     </section>}
     {state.message && <p className={`tactics-message ${state.error ? "error" : "success"}`} role={state.error ? "alert" : "status"}>{state.message}</p>}
   </div>;
