@@ -2,6 +2,7 @@ import { createClient } from "@supabase/supabase-js";
 
 import {
   executeAuthImport,
+  isSupabaseProjectUrl,
   parseAuthImportArgs,
   planAuthImport,
 } from "../lib/roster/auth-import.ts";
@@ -14,7 +15,7 @@ if (!parsed.ok) {
 } else {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? process.env.SUPABASE_URL;
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!supabaseUrl || !serviceKey) {
+  if (!supabaseUrl || !serviceKey || !isSupabaseProjectUrl(supabaseUrl, parsed.projectRef)) {
     console.error("Missing local Supabase Auth Admin environment.");
     process.exitCode = 2;
   } else {

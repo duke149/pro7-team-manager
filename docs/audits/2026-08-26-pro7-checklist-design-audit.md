@@ -19,7 +19,7 @@ Phần bảng chi tiết bên dưới ghi lại baseline lúc bắt đầu audit
 | Token màu và neon | 🟢 | Bổ sung primitive → semantic → component tokens; loại tên token sai nghĩa và toàn bộ giá trị xanh/neon còn sót. Hai theme chỉ dùng hệ đen–trắng–đỏ/trung tính. |
 | Modal keyboard | 🟢 | Modal Thêm cầu thủ dùng primitive chung có initial focus, Tab/Shift+Tab trap, Escape và trả focus; callback đóng ổn định khi parent re-render. |
 | Authentication UX | 🟢 | Login có nút hiện/ẩn mật khẩu; thêm forgot/reset password với phản hồi trung lập; first-login đổi mật khẩu thiết lập lại session bằng mật khẩu mới sau khi Admin API vô hiệu refresh token cũ. |
-| Notification/RVSP | 🟢 | Header dùng notification thật, badge chưa đọc, deep link an toàn và mark-read self-only. Đã chạy luồng trận `fc nat` tại `CK2`: Admin mời 5 thành viên; Tuấn Đạt nhận thông báo, mở chi tiết và trả lời Có; dữ liệu authoritative chuyển thành 1/5. |
+| Notification/RVSP | 🟢 | Header dùng notification thật, badge chưa đọc, deep link an toàn và mark-read self-only. Luồng thật trận `fc nat` tại `CK2` đã được chạy lại sau provisioning: Admin mời toàn bộ thành viên active, Bùi Hữu Quyền nhận thông báo, mở deep link và trả lời Có; Admin thấy `3/25` và trạng thái “Có mặt”. |
 | Member permission boundary | 🟢 | Kiểm tra tài khoản cầu thủ: Squad/Match/Tactics/Profile được xem đúng quyền; Funds và Admin Settings trả 404; CTA quản trị bị ẩn. |
 | Reduced motion | 🟢 | Có `prefers-reduced-motion: reduce` để tắt animation/transition không thiết yếu. |
 
@@ -38,7 +38,22 @@ Các mục còn 🟡/🔴 ở bảng baseline là khuyến nghị dài hạn ngo
 | Profile | 375px | Form một cột, input 48px/16px, label 14px; cả light/dark không overflow. |
 | Tactics | 375px | Member empty/applied state nằm gọn trong viewport; bottom navigation không che nội dung. |
 
-Funds và Admin Settings không được tuyên bố browser-verified trong phiên Member vì route authority trả 404 theo đúng permission; CSS responsive của hai module vẫn nằm trong automated contract/build và cần được recheck bằng phiên Admin khi thực hiện lần nghiệm thu cuối.
+Funds và Admin Settings đã được recheck bằng phiên Admin thật ở desktop: cả hai dùng Be Vietnam Pro, không tràn ngang; Funds có CTA thu/chi và Settings có đủ 5 module. Năm mục bottom navigation Admin ở 320/375/414px được giữ bằng responsive contract; phiên browser Member tiếp tục không thấy Funds/Settings theo đúng permission.
+
+## Typography và Auth/Roster re-audit cuối
+
+| Hạng mục | Kết quả | Bằng chứng |
+|---|---:|---|
+| Typeface | 🟢 | Chỉ dùng Be Vietnam Pro self-hosted; WOFF2 hash `7eac7000f8156452c799ba630a0b71153a9cd5001a95c56dd15468670e247d0a`, OFL được lưu cùng asset, không gọi font CDN. |
+| Type scale | 🟢 | Có semantic token cho display/heading/body/control/label/caption/input; production CSS không còn text có nghĩa 6–11px, weight 900 hoặc tracking trên `.08em`. |
+| Browser font | 🟢 | Login, Match, Funds và Settings đều resolve computed family `Be Vietnam Pro`; tên tiếng Việt hiển thị dấu đúng và desktop không có horizontal overflow. |
+| Username Auth | 🟢 | 23/23 username đăng nhập bằng email nội bộ `<username>@pro7.test`; Login vẫn giữ luồng email bình thường và bắt buộc đổi mật khẩu ở lần đầu. |
+| Roster/RBAC | 🟢 | 24 active membership gồm Owner; roster 23 người gồm 3 Admin/20 Member; Đức Lee, Tuấn Đạt và Trung Hiếu giữ UUID cũ; Phi Hùng inactive nhưng lịch sử trận được giữ. |
+| Provisioning guard | 🟢 | CLI bắt buộc Supabase URL khớp project ref đã pin, fail-closed nếu Auth Admin trả sai ID/email; SQL preflight phân biệt chính xác trạng thái legacy trước Auth và target-only sau Auth. Credential tạm không nằm trong tracked test/log. |
+| Mobile form cascade | 🟢 | Computed-style contract ở viewport 375px xác nhận input Match là 16px sau toàn bộ cascade, không chỉ kiểm tra token bằng regex. |
+| Match mutation reconciliation | 🟢 | Browser phát hiện Vinext giữ RSC props cũ sau `router.refresh()`. Luồng Match đã chuyển sang hard reload chỉ sau mutation thành công; browser xác nhận RSVP “Không” rồi “Có” cập nhật ngay count/trạng thái và token authoritative. |
+
+Sau khi hoàn tất provisioning, Owner/Admin đã chủ động kiểm tra CRUD hồ sơ đội bằng cách đổi `PRO7 FC / pro7-fc` thành `FC NÁT / nat-fc`. Dữ liệu liên kết theo `team_id` vẫn được giữ nguyên. Các artifact onboarding cố ý tiếp tục pin slug ban đầu `pro7-fc`, nên một lần chạy lại sẽ fail-closed cho tới khi slug được khôi phục hoặc một plan onboarding mới được duyệt.
 
 ## Phát hiện ưu tiên
 

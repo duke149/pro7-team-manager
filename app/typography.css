@@ -333,6 +333,11 @@ h6 {
   line-height: var(--leading-control);
 }
 
+.match-form :is(input, select) {
+  font-size: var(--type-input);
+  line-height: var(--leading-body);
+}
+
 .event-row,
 .motm :is(b, small),
 .tactics-match-row small,

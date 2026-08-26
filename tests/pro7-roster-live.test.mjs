@@ -155,6 +155,7 @@ test("read-only preflight recognizes the exact post-Auth state", () => {
   assert.equal(summary.project_ref, "pficsujapinkmqsyvcfw");
   assert.equal(summary.roster_count, 23);
   assert.equal(summary.collision_count, 0);
+  assert.equal(summary.ready_before_auth, false);
   assert.equal(summary.ready_after_auth, true);
 });
 

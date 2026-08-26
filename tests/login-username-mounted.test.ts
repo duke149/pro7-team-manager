@@ -99,7 +99,7 @@ function change(input: HTMLInputElement, value: string) {
   input.dispatchEvent(new browserWindow.Event("change", { bubbles: true }));
 }
 
-async function submit(container: Element, identifier: string, password = "duclee@123") {
+async function submit(container: Element, identifier: string, password = "unit-test-only-passphrase") {
   const identifierInput = container.querySelector('input[name="identifier"]') as HTMLInputElement | null;
   assert.ok(identifierInput);
   const passwordInput = container.querySelector('input[name="password"]') as HTMLInputElement | null;
@@ -118,7 +118,7 @@ async function submit(container: Element, identifier: string, password = "duclee
 test("Login submits a username through the internal email boundary while retaining visible input", async () => {
   const view = await mounted();
   const input = await submit(view.container, "DucLee");
-  assert.deepEqual(view.calls, [{ email: "duclee@pro7.test", password: "duclee@123" }]);
+  assert.deepEqual(view.calls, [{ email: "duclee@pro7.test", password: "unit-test-only-passphrase" }]);
   assert.equal(input.value, "DucLee");
   assert.equal(input.type, "text");
   assert.equal(input.autocomplete, "username");

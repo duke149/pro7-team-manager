@@ -105,7 +105,17 @@ select pg_catalog.jsonb_build_object(
     and (select count(*) from role_target) = 3
     and (select count(*) from roster) = 23
     and (select count(*) from resolved where identity_count > 1) = 0
-    and (select count(*) from resolved where legacy_email is not null and identity_count = 1) = 3
+    and (
+      select count(*) from resolved
+      where legacy_email is not null
+        and legacy_count = 1
+        and target_count = 0
+        and identity_count = 1
+    ) = 3
+    and (
+      select count(*) from resolved
+      where legacy_email is null and identity_count = 0
+    ) = 20
     and (select phi_count from phi_check) = 1
   ),
   'ready_after_auth', (

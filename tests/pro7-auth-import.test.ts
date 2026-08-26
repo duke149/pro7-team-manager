@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   executeAuthImport,
+  isSupabaseProjectUrl,
   parseAuthImportArgs,
   planAuthImport,
   type ExistingAuthUser,
@@ -79,17 +80,29 @@ test("Auth execution sends bounded Admin payloads and never returns credentials"
   const plan = planAuthImport(LEGACY_USERS, PRO7_ROSTER);
   assert.equal(plan.ok, true);
   if (!plan.ok) return;
-  const updates: Array<{ id: string; payload: Record<string, unknown> }> = [];
-  const creates: Array<Record<string, unknown>> = [];
+  const updates: Array<{
+    id: string;
+    email: string;
+    hasNonEmptyPassword: boolean;
+    role: unknown;
+    displayName: unknown;
+  }> = [];
+  let createCount = 0;
   let createOrdinal = 0;
   const result = await executeAuthImport(plan, {
     authAdmin: {
       updateUserById: async (id, payload) => {
-        updates.push({ id, payload });
+        updates.push({
+          id,
+          email: payload.email,
+          hasNonEmptyPassword: typeof payload.password === "string" && payload.password.length > 0,
+          role: payload.app_metadata.pro7_role,
+          displayName: payload.user_metadata.display_name,
+        });
         return { data: { user: { id, email: String(payload.email) } }, error: null };
       },
       createUser: async (payload) => {
-        creates.push(payload);
+        createCount += 1;
         createOrdinal += 1;
         return { data: { user: { id: `created-${createOrdinal}`, email: String(payload.email) } }, error: null };
       },
@@ -100,16 +113,55 @@ test("Auth execution sends bounded Admin payloads and never returns credentials"
   assert.equal(result.ok, true);
   if (!result.ok) return;
   assert.equal(updates.length, 3);
-  assert.equal(creates.length, 20);
-  assert.deepEqual(updates.find((item) => item.payload.email === "duclee@pro7.test")?.payload, {
+  assert.equal(createCount, 20);
+  assert.deepEqual(updates.find((item) => item.email === "duclee@pro7.test"), {
+    id: "10000000-0000-4000-8000-000000000001",
     email: "duclee@pro7.test",
-    password: "duclee@123",
-    email_confirm: true,
-    app_metadata: { pro7_roster_team_slug: "pro7-fc", pro7_username: "duclee", pro7_role: "admin" },
-    user_metadata: { display_name: "Lê Anh Đức" },
+    hasNonEmptyPassword: true,
+    role: "admin",
+    displayName: "Lê Anh Đức",
   });
   assert.equal(JSON.stringify(result).includes("@123"), false);
   assert.equal("password" in result, false);
+});
+
+test("Auth execution rejects ambiguous Admin create and update responses", async () => {
+  const planned = planAuthImport(LEGACY_USERS, PRO7_ROSTER);
+  assert.equal(planned.ok, true);
+  if (!planned.ok) return;
+  const update = planned.actions.find((action) => action.kind === "update");
+  const create = planned.actions.find((action) => action.kind === "create");
+  assert.ok(update && update.kind === "update");
+  assert.ok(create && create.kind === "create");
+
+  for (const user of [
+    { id: "wrong-id", email: update.email },
+    { id: update.userId, email: null },
+    { id: update.userId, email: "wrong@example.com" },
+  ]) {
+    const result = await executeAuthImport({ ok: true, actions: [update] }, {
+      authAdmin: {
+        updateUserById: async () => ({ data: { user }, error: null }),
+        createUser: async () => ({ data: null, error: new Error("unexpected") }),
+        deleteUser: async () => ({ data: {}, error: null }),
+      },
+    });
+    assert.deepEqual(result, { ok: false, code: "auth_failed", username: update.username });
+  }
+
+  for (const user of [
+    { id: "created-user", email: null },
+    { id: "created-user", email: "wrong@example.com" },
+  ]) {
+    const result = await executeAuthImport({ ok: true, actions: [create] }, {
+      authAdmin: {
+        updateUserById: async () => ({ data: null, error: new Error("unexpected") }),
+        createUser: async () => ({ data: { user }, error: null }),
+        deleteUser: async () => ({ data: {}, error: null }),
+      },
+    });
+    assert.deepEqual(result, { ok: false, code: "auth_failed", username: create.username });
+  }
 });
 
 test("a failed application commit compensates only newly created Auth users", async () => {
@@ -154,4 +206,23 @@ test("Auth import CLI accepts only the pinned project and one explicit safe mode
   assert.deepEqual(parseAuthImportArgs(["--project-ref=wrong", "--apply"]), { ok: false, code: "arguments" });
   assert.deepEqual(parseAuthImportArgs(["--project-ref=pficsujapinkmqsyvcfw", "--apply", "--preflight"]), { ok: false, code: "arguments" });
   assert.deepEqual(parseAuthImportArgs(["--project-ref=pficsujapinkmqsyvcfw", "--password=secret"]), { ok: false, code: "arguments" });
+});
+
+test("Auth import CLI binds its Supabase URL to the pinned project ref", () => {
+  assert.equal(
+    isSupabaseProjectUrl("https://pficsujapinkmqsyvcfw.supabase.co", "pficsujapinkmqsyvcfw"),
+    true,
+  );
+  assert.equal(
+    isSupabaseProjectUrl("https://different-project.supabase.co", "pficsujapinkmqsyvcfw"),
+    false,
+  );
+  assert.equal(
+    isSupabaseProjectUrl("https://pficsujapinkmqsyvcfw.supabase.co.attacker.example", "pficsujapinkmqsyvcfw"),
+    false,
+  );
+  assert.equal(
+    isSupabaseProjectUrl("https://user@pficsujapinkmqsyvcfw.supabase.co?leak=1", "pficsujapinkmqsyvcfw"),
+    false,
+  );
 });

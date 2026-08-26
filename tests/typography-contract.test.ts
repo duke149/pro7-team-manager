@@ -1,8 +1,11 @@
 import assert from "node:assert/strict";
 import { readFile, stat } from "node:fs/promises";
 import test from "node:test";
+import { Window } from "happy-dom";
 
 const typographyPath = new URL("../app/typography.css", import.meta.url);
+const globalsPath = new URL("../app/globals.css", import.meta.url);
+const responsivePath = new URL("../app/responsive.css", import.meta.url);
 const layoutPath = new URL("../app/layout.tsx", import.meta.url);
 const fontPath = new URL("../public/fonts/be-vietnam-pro-variable.woff2", import.meta.url);
 const licensePath = new URL("../public/fonts/OFL.txt", import.meta.url);
@@ -45,6 +48,23 @@ test("form controls inherit the product font and phone inputs remain 16px", asyn
   assert.match(css, /@media\s*\(max-width:\s*767px\)[\s\S]*--type-input:\s*16px/iu);
   assert.match(css, /input,\s*select,\s*textarea[\s\S]*font-size:\s*var\(--type-input\)/iu);
   assert.equal((await stat(fontPath)).isFile(), true);
+
+  const browserWindow = new Window();
+  browserWindow.happyDOM.setViewport({ width: 375, height: 812 });
+  const style = browserWindow.document.createElement("style");
+  style.textContent = [
+    await readFile(globalsPath, "utf8"),
+    await readFile(responsivePath, "utf8"),
+    css,
+  ].join("\n");
+  browserWindow.document.head.append(style);
+  const form = browserWindow.document.createElement("form");
+  form.className = "match-form";
+  const input = browserWindow.document.createElement("input");
+  form.append(input);
+  browserWindow.document.body.append(form);
+  assert.equal(browserWindow.getComputedStyle(input).fontSize, "16px");
+  await browserWindow.happyDOM.abort();
 });
 
 test("shell and authentication surfaces use semantic readable typography", async () => {

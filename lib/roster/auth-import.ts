@@ -121,6 +121,22 @@ export function parseAuthImportArgs(args: readonly string[]):
   };
 }
 
+export function isSupabaseProjectUrl(input: string, projectRef: string): boolean {
+  try {
+    const url = new URL(input);
+    return url.protocol === "https:"
+      && url.hostname === `${projectRef}.supabase.co`
+      && url.port === ""
+      && url.username === ""
+      && url.password === ""
+      && (url.pathname === "" || url.pathname === "/")
+      && url.search === ""
+      && url.hash === "";
+  } catch {
+    return false;
+  }
+}
+
 function payloadFor(action: AuthImportAction): AdminPayload {
   return {
     email: action.email,
@@ -147,7 +163,12 @@ export async function executeAuthImport(
       ? await dependencies.authAdmin.updateUserById(action.userId, payloadFor(action))
       : await dependencies.authAdmin.createUser(payloadFor(action));
     const user = result.data?.user;
-    if (result.error || !user?.id) return { ok: false, code: "auth_failed", username: action.username };
+    const hasExpectedIdentity = Boolean(user?.id)
+      && normalizedEmail(user?.email ?? "") === action.email
+      && (action.kind === "create" || user?.id === action.userId);
+    if (result.error || !hasExpectedIdentity || !user) {
+      return { ok: false, code: "auth_failed", username: action.username };
+    }
     users.push({ id: user.id, username: action.username, kind: action.kind });
     if (action.kind === "create") createdIds.push(user.id);
   }
