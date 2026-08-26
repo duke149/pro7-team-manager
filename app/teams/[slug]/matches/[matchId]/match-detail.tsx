@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 
 import type { AttendanceResponseStatus, MatchDetail as MatchDetailModel, MatchTeamMetrics } from "../../../../../lib/matches/model";
+import { useRsvpDeadlineClosed } from "../rsvp-deadline";
 
 type State = { pending: boolean; message: string; success: boolean };
 function serverMessage(value: unknown, fallback: string) { return typeof value === "object" && value !== null && "message" in value && typeof value.message === "string" ? value.message : fallback; }
@@ -16,10 +17,10 @@ export function MatchDetail({ slug, teamName, userId, detail, canManage, canResp
   const router = useRouter();
   const [state, setState] = useState<State>({ pending: false, message: "", success: false });
   const [selected, setSelected] = useState(() => new Set(detail?.inviteCandidates.map((candidate) => candidate.userId) ?? []));
+  const rsvpClosed = useRsvpDeadlineClosed(detail?.match.rsvpDeadline ?? null, now);
   if (!detail) return <div className="view-stack match-center" data-state="error"><section className="card match-state"><h2>Không thể tải trận đấu</h2><p>Vui lòng tải lại trang để thử lại.</p></section></div>;
   const { match } = detail;
   const own = detail.attendance.find((attendance) => attendance.userId === userId) ?? null;
-  const rsvpClosed = Date.parse(now) > Date.parse(match.rsvpDeadline);
   const base = `/api/teams/${encodeURIComponent(slug)}/matches/${encodeURIComponent(match.id)}`;
 
   async function mutate(path: string, payload: unknown, method: "PATCH" | "POST" = "PATCH") {

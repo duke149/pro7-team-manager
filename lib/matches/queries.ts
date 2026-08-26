@@ -16,14 +16,13 @@ import type {
   TeamMetric,
 } from "./model";
 import { isUuid } from "./model";
-import { isIsoTimestamp } from "./validation";
+import { isIsoTimestamp, MAX_INVITE_USER_IDS } from "./validation";
 import "./server-only";
 
 const LIST_SELECT = "id,opponent,starts_at,venue,is_home,rsvp_deadline,status,team_score,opponent_score,cancelled_at,updated_at,attendance:match_attendance(user_id,status,updated_at)";
 const DETAIL_SELECT = "id,opponent,starts_at,venue,is_home,rsvp_deadline,status,team_score,opponent_score,cancelled_at,updated_at,attendance:match_attendance(user_id,status,note,responded_at,updated_at)";
 const PAGE_SIZE = 100;
 const MAX_LIST_MATCHES = 1000;
-const MAX_INVITE_CANDIDATES = 400;
 
 type Dependencies = { supabase?: SupabaseClient<Database> };
 type ListAttendanceRow = { user_id: string; status: AttendanceStatus; updated_at: string };
@@ -139,7 +138,7 @@ export async function getMatchDetail(teamId: string, matchId: string, userId: st
         if (memberships.error || !Array.isArray(memberships.data) || memberships.data.length > PAGE_SIZE || !memberships.data.every((row: unknown) => isRecord(row) && isUuid(row.user_id))) return { ok: false, error: "server" };
         const page = (memberships.data as unknown as { user_id: string }[]).map((row) => row.user_id);
         if (page.some((id, index) => (index === 0 ? cursor !== null && id <= cursor : id <= page[index - 1]!))) return { ok: false, error: "server" };
-        if (memberIds.length + page.length > MAX_INVITE_CANDIDATES) return { ok: false, error: "server" };
+        if (memberIds.length + page.length > MAX_INVITE_USER_IDS) return { ok: false, error: "server" };
         memberIds.push(...page);
         if (page.length < PAGE_SIZE) break;
         cursor = page.at(-1)!;

@@ -155,3 +155,49 @@ Connected the hosted PRO7 Matches surface to the Task 1 `matches`, `match_attend
 - The 400-member cap is chosen to remain below the existing 16 KiB JSON request limit (a 400-ID invite body is 15,631 bytes). Teams above that active-member bound receive an explicit load error instead of a partial default-all selection.
 - Multi-batch invitation is not one cross-call transaction. If a later RPC batch fails, earlier batches may already be committed; the existing RPC's idempotent conflict handling makes the whole selection safe to retry.
 - No remote data was mutated, as required. Whole-repository TypeScript remains red only on the previously documented out-of-scope account/Squad/Cloudflare/test-harness diagnostics; the production build and Task 2 scoped diagnostics are clean.
+
+## Independent review round 2 fixes
+
+This section supersedes the round 1 decision to batch invitation RPC calls.
+
+### Outcome
+
+- Added the shared client hook `useRsvpDeadlineClosed`. Its first render derives only from the injected server timestamp, preserving server/client initial markup. After mount it schedules the first state transition for the first millisecond at which database authority considers the deadline passed.
+- The deadline timer caps every wait at the browser-safe `2,147,483,647` ms and reschedules until the deadline, clears the current timer on unmount/prop change, and keys live state by the current deadline so a refreshed deadline prop cannot inherit stale closed state.
+- Both list and detail RSVP surfaces now transition to the same honest disabled/closed state while mounted, without navigation or reload. RPC lifecycle validation remains final authority.
+- Invitation now sends the complete validated 1–400 UUID selection to `invite_match_attendance` exactly once. The RPC therefore validates and inserts the full selection in its existing single idempotent database transaction.
+- The active-candidate query and request validator now share `MAX_INVITE_USER_IDS = 400`. A malformed payload or 401 candidates fails before authorization/RPC mutation, and an inconsistent RPC count fails closed rather than returning partial success.
+
+### RED evidence
+
+- Command: `node --import tsx --test tests/matches-actions.test.ts tests/matches-mounted.test.ts`
+- Result: 14 tests; 10 passed; 4 failed as expected.
+  - 201-member invitation returned 500 under the new one-call expectation because the implementation still split at 200.
+  - The inconsistent-count case invoked the RPC twice, proving the partial multi-call path remained.
+  - List and detail stayed open after the fake clock advanced from two milliseconds before the deadline to one millisecond after it.
+
+### GREEN and final verification
+
+- Focused Matches command: 35 tests; 35 passed; 0 failed; 0 skipped.
+- Full `npm run test:unit`: 309 tests; 304 passed; 0 failed; 5 optional live-environment tests skipped.
+- `npm test`: production build succeeded; rendered HTML/browser-boundary suite 7 passed, 0 failed.
+- Scoped ESLint: 0 errors, 0 warnings.
+- Scoped TypeScript diagnostic filter: no Task 2 diagnostics.
+- `git diff --check`: clean.
+
+### Files changed in review round 2
+
+- `app/teams/[slug]/matches/rsvp-deadline.ts`
+- `app/teams/[slug]/matches/matches-view.tsx`
+- `app/teams/[slug]/matches/[matchId]/match-detail.tsx`
+- `lib/matches/actions.ts`
+- `lib/matches/queries.ts`
+- `lib/matches/validation.ts`
+- `tests/matches-actions.test.ts`
+- `tests/matches-mounted.test.ts`
+- `tests/matches-validation.test.ts`
+
+### Review-round concerns
+
+- The honest active-candidate/request limit remains 400 because a 400-UUID body is 15,631 bytes under the established 16 KiB request envelope. A larger team receives the existing explicit error rather than a partial selection.
+- No remote mutation was performed. Whole-repository TypeScript still contains the documented unrelated baseline diagnostics; Task 2 scoped diagnostics and the configured production build are clean.

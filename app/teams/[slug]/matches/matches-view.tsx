@@ -7,6 +7,7 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import type { AttendanceResponseStatus, MatchListResult, MatchSummary } from "../../../../lib/matches/model";
 import type { TeamAccessContext } from "../../../../lib/teams/context";
 import { hasPermission, type PermissionCode } from "../../../../lib/teams/permissions";
+import { useRsvpDeadlineClosed } from "./rsvp-deadline";
 
 function dateParts(value: string) {
   const date = new Date(value);
@@ -24,7 +25,7 @@ function apiMessage(value: unknown, fallback: string) { return typeof value === 
 function RsvpControls({ slug, match, canRespond, now }: { slug: string; match: MatchSummary; canRespond: boolean; now: string }) {
   const router = useRouter();
   const [state, setState] = useState({ pending: false, message: "" });
-  const closed = Date.parse(now) > Date.parse(match.rsvpDeadline);
+  const closed = useRsvpDeadlineClosed(match.rsvpDeadline, now);
   async function respond(status: AttendanceResponseStatus) {
     if (!match.ownAttendance || closed) return;
     setState({ pending: true, message: "" });

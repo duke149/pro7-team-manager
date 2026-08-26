@@ -6,7 +6,6 @@ type ValidationError =
   | Readonly<{ ok: false; kind: "validation"; fieldErrors: FieldErrors }>;
 
 export const MAX_INVITE_USER_IDS = 400;
-export const INVITE_RPC_BATCH_SIZE = 200;
 
 export type CreateMatchPayload = Readonly<{
   opponent: string;

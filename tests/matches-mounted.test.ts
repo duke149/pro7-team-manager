@@ -89,6 +89,36 @@ test("expired RSVP deadlines render an honest closed and disabled state in list 
   await act(async () => detail.root.unmount());
 });
 
+test("mounted list closes RSVP controls exactly after the deadline without a refresh", async (context) => {
+  const deadline = Date.parse(DETAIL.match.rsvpDeadline);
+  context.mock.timers.enable({ apis: ["Date", "setTimeout"], now: deadline - 2 });
+  const view = await mountedList(["matches.read", "matches.respond"], new Date(deadline - 2).toISOString());
+  try {
+    assert.doesNotMatch(view.container.textContent ?? "", /Đã hết hạn xác nhận/u);
+    assert.ok([...view.container.querySelectorAll<HTMLButtonElement>(".rsvp-options button")].every((button) => !button.disabled));
+    await act(async () => { context.mock.timers.tick(3); });
+    assert.match(view.container.textContent ?? "", /Đã hết hạn xác nhận/u);
+    assert.ok([...view.container.querySelectorAll<HTMLButtonElement>(".rsvp-options button")].every((button) => button.disabled));
+  } finally {
+    await act(async () => view.root.unmount());
+  }
+});
+
+test("mounted detail closes RSVP controls exactly after the deadline without a refresh", async (context) => {
+  const deadline = Date.parse(DETAIL.match.rsvpDeadline);
+  context.mock.timers.enable({ apis: ["Date", "setTimeout"], now: deadline - 2 });
+  const view = await mounted(false, new Date(deadline - 2).toISOString());
+  try {
+    assert.doesNotMatch(view.container.textContent ?? "", /Đã hết hạn xác nhận/u);
+    assert.ok([...view.container.querySelectorAll<HTMLButtonElement>(".rsvp-options button")].every((button) => !button.disabled));
+    await act(async () => { context.mock.timers.tick(3); });
+    assert.match(view.container.textContent ?? "", /Đã hết hạn xác nhận/u);
+    assert.ok([...view.container.querySelectorAll<HTMLButtonElement>(".rsvp-options button")].every((button) => button.disabled));
+  } finally {
+    await act(async () => view.root.unmount());
+  }
+});
+
 test("create-match dialog focuses its first field, contains Tab focus, and closes on Escape", async () => {
   const view = await mountedList(["matches.read", "matches.manage"]);
   const trigger = [...view.container.querySelectorAll("button")].find((candidate) => candidate.textContent?.includes("Xếp lịch trận đấu")); assert.ok(trigger);

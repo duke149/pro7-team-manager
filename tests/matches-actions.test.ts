@@ -32,7 +32,7 @@ function request(path: string, body: unknown, headers: Record<string, string> = 
 function dependencies(options: {
   context?: TeamAccessContext | null;
   rpcError?: { code?: string } | null;
-  rpcData?: unknown | unknown[];
+  rpcData?: unknown;
 } = {}) {
   const calls: { permission: PermissionCode; name?: string; args?: unknown }[] = [];
   const deps: MatchActionDependencies = {
@@ -43,8 +43,7 @@ function dependencies(options: {
     supabase: {
       rpc: (async (name: string, args: unknown) => {
         calls.push({ permission: "matches.read", name, args });
-        const data = Array.isArray(options.rpcData) ? options.rpcData.shift() : options.rpcData;
-        return { data: data ?? MATCH_ID, error: options.rpcError ?? null };
+        return { data: options.rpcData ?? MATCH_ID, error: options.rpcError ?? null };
       }) as never,
     },
   };
@@ -127,15 +126,34 @@ test("attendance invite is Admin-only while response targets the authenticated u
   ]);
 });
 
-test("attendance invitation batches 201 members through the idempotent RPC and sums requested counts", async () => {
-  const userIds = Array.from({ length: 201 }, (_, index) => `00000000-0000-4000-8000-${(index + 1).toString(16).padStart(12, "0")}`);
-  const fixture = dependencies({ rpcData: [200, 1] });
-  const response = await mutateMatchAttendance(request("/attendance", { action: "invite", userIds }), { slug: "pro7-fc", matchId: MATCH_ID }, fixture.deps);
-  assert.equal(response.status, 200);
-  assert.deepEqual(await response.json(), { ok: true, invited: 201 });
-  assert.deepEqual(fixture.calls, [
-    { permission: "matches.manage" },
-    { permission: "matches.read", name: "invite_match_attendance", args: { p_team_id: TEAM_ID, p_match_id: MATCH_ID, p_user_ids: userIds.slice(0, 200) } },
-    { permission: "matches.read", name: "invite_match_attendance", args: { p_team_id: TEAM_ID, p_match_id: MATCH_ID, p_user_ids: userIds.slice(200) } },
-  ]);
+test("attendance invitation sends every selected member in one idempotent RPC transaction from 201 through 400", async () => {
+  for (const count of [201, 400]) {
+    const userIds = Array.from({ length: count }, (_, index) => `00000000-0000-4000-8000-${(index + 1).toString(16).padStart(12, "0")}`);
+    const fixture = dependencies({ rpcData: count });
+    const response = await mutateMatchAttendance(request("/attendance", { action: "invite", userIds }), { slug: "pro7-fc", matchId: MATCH_ID }, fixture.deps);
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), { ok: true, invited: count });
+    assert.deepEqual(fixture.calls, [
+      { permission: "matches.manage" },
+      { permission: "matches.read", name: "invite_match_attendance", args: { p_team_id: TEAM_ID, p_match_id: MATCH_ID, p_user_ids: userIds } },
+    ]);
+  }
+});
+
+test("attendance invitation has no partial-success response and rejects malformed or 401-member payloads before mutation", async () => {
+  const selected = Array.from({ length: 201 }, (_, index) => `00000000-0000-4000-8000-${(index + 1).toString(16).padStart(12, "0")}`);
+  const inconsistent = dependencies({ rpcData: 200 });
+  const inconsistentResponse = await mutateMatchAttendance(request("/attendance", { action: "invite", userIds: selected }), { slug: "pro7-fc", matchId: MATCH_ID }, inconsistent.deps);
+  assert.equal(inconsistentResponse.status, 500);
+  assert.equal(inconsistent.calls.filter((call) => call.name === "invite_match_attendance").length, 1);
+
+  for (const [payload, expectedStatus] of [
+    [{ action: "invite", userIds: selected, injected: true }, 400],
+    [{ action: "invite", userIds: Array.from({ length: 401 }, (_, index) => `00000000-0000-4000-8000-${(index + 1).toString(16).padStart(12, "0")}`) }, 422],
+  ] as const) {
+    const fixture = dependencies();
+    const response = await mutateMatchAttendance(request("/attendance", payload), { slug: "pro7-fc", matchId: MATCH_ID }, fixture.deps);
+    assert.equal(response.status, expectedStatus);
+    assert.equal(fixture.calls.length, 0);
+  }
 });

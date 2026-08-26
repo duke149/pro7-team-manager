@@ -4,7 +4,7 @@ import type { Database } from "../supabase/database.types";
 import type { TeamAccessContext } from "../teams/context";
 import type { PermissionCode } from "../teams/permissions";
 import { isUuid } from "./model";
-import { INVITE_RPC_BATCH_SIZE, validateAttendancePayload, validateCreateMatchPayload, validateMatchMutationPayload, type CreateMatchPayload, type MatchMutationPayload } from "./validation";
+import { validateAttendancePayload, validateCreateMatchPayload, validateMatchMutationPayload, type CreateMatchPayload, type MatchMutationPayload } from "./validation";
 import "./server-only";
 
 const MAX_REQUEST_BYTES = 16 * 1024;
@@ -38,18 +38,13 @@ function rpcFailure(error: { code?: string }) {
   }
 }
 async function authorize(slug: string, permission: PermissionCode, supplied?: MatchActionDependencies) { const dependencies = supplied ?? await defaults(); return { dependencies, context: await dependencies.requireTeamPermission(slug, permission) }; }
-async function invoke(dependencies: MatchActionDependencies, name: string, arguments_: Record<string, unknown>, successStatus = 200) { const rpc = dependencies.supabase.rpc as unknown as (name: string, args: Record<string, unknown>) => Promise<{ data: unknown; error: { code?: string } | null }>; const result = await rpc.call(dependencies.supabase, name, arguments_); return result.error ? rpcFailure(result.error) : Response.json({ ok: true, ...(name === "manage_match" && typeof result.data === "string" ? { matchId: result.data } : name === "invite_match_attendance" && typeof result.data === "number" ? { invited: result.data } : {}) }, { status: successStatus }); }
-async function inviteInBatches(dependencies: MatchActionDependencies, teamId: string, matchId: string, userIds: readonly string[]) {
+async function invoke(dependencies: MatchActionDependencies, name: string, arguments_: Record<string, unknown>, successStatus = 200) { const rpc = dependencies.supabase.rpc as unknown as (name: string, args: Record<string, unknown>) => Promise<{ data: unknown; error: { code?: string } | null }>; const result = await rpc.call(dependencies.supabase, name, arguments_); return result.error ? rpcFailure(result.error) : Response.json({ ok: true, ...(name === "manage_match" && typeof result.data === "string" ? { matchId: result.data } : {}) }, { status: successStatus }); }
+async function inviteOnce(dependencies: MatchActionDependencies, teamId: string, matchId: string, userIds: readonly string[]) {
   const rpc = dependencies.supabase.rpc as unknown as (name: string, args: Record<string, unknown>) => Promise<{ data: unknown; error: { code?: string } | null }>;
-  let invited = 0;
-  for (let offset = 0; offset < userIds.length; offset += INVITE_RPC_BATCH_SIZE) {
-    const batch = userIds.slice(offset, offset + INVITE_RPC_BATCH_SIZE);
-    const result = await rpc.call(dependencies.supabase, "invite_match_attendance", { p_team_id: teamId, p_match_id: matchId, p_user_ids: batch });
-    if (result.error) return rpcFailure(result.error);
-    if (!Number.isInteger(result.data) || result.data !== batch.length) return failure(500, "server", "Không thể cập nhật trận đấu. Vui lòng thử lại.");
-    invited += result.data;
-  }
-  return Response.json({ ok: true, invited });
+  const result = await rpc.call(dependencies.supabase, "invite_match_attendance", { p_team_id: teamId, p_match_id: matchId, p_user_ids: userIds });
+  if (result.error) return rpcFailure(result.error);
+  if (!Number.isInteger(result.data) || result.data !== userIds.length) return failure(500, "server", "Không thể cập nhật trận đấu. Vui lòng thử lại.");
+  return Response.json({ ok: true, invited: result.data });
 }
 function manageArguments(teamId: string, matchId: string | null, payload: CreateMatchPayload | MatchMutationPayload) {
   return { p_action: "action" in payload ? payload.action : "create", p_team_id: teamId, p_match_id: matchId, p_opponent: "opponent" in payload ? payload.opponent : null, p_starts_at: "startsAt" in payload ? payload.startsAt : null, p_venue: "venue" in payload ? payload.venue : null, p_is_home: "isHome" in payload ? payload.isHome : null, p_rsvp_deadline: "rsvpDeadline" in payload ? payload.rsvpDeadline : null, p_team_score: "teamScore" in payload ? payload.teamScore : null, p_opponent_score: "opponentScore" in payload ? payload.opponentScore : null, p_expected_updated_at: "expectedUpdatedAt" in payload ? payload.expectedUpdatedAt : null };
@@ -79,5 +74,5 @@ export async function mutateMatch(request: Request, target: Required<Target>, su
   try { const input = await requestPayload(request); if (input.response) return input.response; if (!isUuid(target.matchId)) return failure(404, "not_found", "Không tìm thấy trận đấu."); const parsed = validateMatchMutationPayload(input.value); if (!parsed.ok) return parsed.kind === "malformed" ? failure(400, "malformed", "Dữ liệu yêu cầu không hợp lệ.") : failure(422, "validation", "Vui lòng kiểm tra thông tin trận đấu.", parsed.fieldErrors); const { dependencies, context } = await authorize(target.slug, "matches.manage", supplied); if (!context) return failure(403, "forbidden", "Bạn không có quyền quản lý trận đấu."); return invoke(dependencies, "manage_match", manageArguments(context.team.id, target.matchId, parsed.value)); } catch { return failure(500, "server", "Không thể cập nhật trận đấu. Vui lòng thử lại."); }
 }
 export async function mutateMatchAttendance(request: Request, target: Required<Target>, supplied?: MatchActionDependencies): Promise<Response> {
-  try { const input = await requestPayload(request); if (input.response) return input.response; if (!isUuid(target.matchId)) return failure(404, "not_found", "Không tìm thấy trận đấu."); const parsed = validateAttendancePayload(input.value); if (!parsed.ok) return parsed.kind === "malformed" ? failure(400, "malformed", "Dữ liệu yêu cầu không hợp lệ.") : failure(422, "validation", "Vui lòng kiểm tra phản hồi tham gia.", parsed.fieldErrors); const permission = parsed.value.action === "invite" ? "matches.manage" : "matches.respond"; const { dependencies, context } = await authorize(target.slug, permission, supplied); if (!context) return failure(403, "forbidden", "Bạn không có quyền cập nhật danh sách tham gia."); return parsed.value.action === "invite" ? inviteInBatches(dependencies, context.team.id, target.matchId, parsed.value.userIds) : invoke(dependencies, "respond_match_attendance", { p_team_id: context.team.id, p_match_id: target.matchId, p_user_id: context.userId, p_status: parsed.value.status, p_note: parsed.value.note, p_expected_updated_at: parsed.value.expectedUpdatedAt }); } catch { return failure(500, "server", "Không thể cập nhật danh sách tham gia. Vui lòng thử lại."); }
+  try { const input = await requestPayload(request); if (input.response) return input.response; if (!isUuid(target.matchId)) return failure(404, "not_found", "Không tìm thấy trận đấu."); const parsed = validateAttendancePayload(input.value); if (!parsed.ok) return parsed.kind === "malformed" ? failure(400, "malformed", "Dữ liệu yêu cầu không hợp lệ.") : failure(422, "validation", "Vui lòng kiểm tra phản hồi tham gia.", parsed.fieldErrors); const permission = parsed.value.action === "invite" ? "matches.manage" : "matches.respond"; const { dependencies, context } = await authorize(target.slug, permission, supplied); if (!context) return failure(403, "forbidden", "Bạn không có quyền cập nhật danh sách tham gia."); return parsed.value.action === "invite" ? inviteOnce(dependencies, context.team.id, target.matchId, parsed.value.userIds) : invoke(dependencies, "respond_match_attendance", { p_team_id: context.team.id, p_match_id: target.matchId, p_user_id: context.userId, p_status: parsed.value.status, p_note: parsed.value.note, p_expected_updated_at: parsed.value.expectedUpdatedAt }); } catch { return failure(500, "server", "Không thể cập nhật danh sách tham gia. Vui lòng thử lại."); }
 }

@@ -117,7 +117,7 @@ test("attendance validation bounds notes and permits only invite or own response
   ]);
 });
 
-test("attendance validation accepts more than one RPC batch without exceeding the safe request cap", () => {
+test("attendance validation accepts the complete active-candidate set within the safe request cap", () => {
   const userIds = Array.from({ length: 201 }, (_, index) => `00000000-0000-4000-8000-${(index + 1).toString(16).padStart(12, "0")}`);
   const result = validateAttendancePayload({ action: "invite", userIds });
   assert.equal(result.ok, true);
