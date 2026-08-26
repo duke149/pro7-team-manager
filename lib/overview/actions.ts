@@ -7,15 +7,13 @@ import type { PermissionCode } from "../teams/permissions";
 import "../matches/server-only";
 
 const MAX_REQUEST_BYTES = 256;
-const PAGE_SIZE = 100;
-const MAX_PENDING_RECIPIENTS = 400;
 
 type Target = Readonly<{ slug: string; matchId: string }>;
 type Guard = (slug: string, permission: PermissionCode) => Promise<TeamAccessContext | null>;
 
 export type OverviewActionDependencies = {
   requireTeamPermission: Guard;
-  supabase: Pick<SupabaseClient<Database>, "from" | "rpc">;
+  supabase: Pick<SupabaseClient<Database>, "rpc">;
 };
 
 function failure(status: number, code: string, message: string): Response {
@@ -65,46 +63,6 @@ async function defaults(): Promise<OverviewActionDependencies> {
   return { requireTeamPermission, supabase: await createServerSupabaseClient() };
 }
 
-function isPendingRow(value: unknown): value is { user_id: string } {
-  return typeof value === "object"
-    && value !== null
-    && !Array.isArray(value)
-    && Object.keys(value).length === 1
-    && isUuid((value as Record<string, unknown>).user_id);
-}
-
-async function pendingUserIds(
-  supabase: OverviewActionDependencies["supabase"],
-  teamId: string,
-  matchId: string,
-): Promise<readonly string[] | null> {
-  const userIds: string[] = [];
-  let cursor: string | null = null;
-  while (true) {
-    let query = supabase
-      .from("match_attendance")
-      .select("user_id")
-      .eq("team_id", teamId)
-      .eq("match_id", matchId)
-      .eq("status", "pending")
-      .order("user_id", { ascending: true });
-    if (cursor) query = query.gt("user_id", cursor);
-    const result = await query.limit(PAGE_SIZE);
-    if (result.error
-      || !Array.isArray(result.data)
-      || result.data.length > PAGE_SIZE
-      || !result.data.every(isPendingRow)) return null;
-    const page = (result.data as unknown as { user_id: string }[]).map(({ user_id }) => user_id);
-    if (page.some((userId, index) => index === 0 ? cursor !== null && userId <= cursor : userId <= page[index - 1]!)) {
-      return null;
-    }
-    if (userIds.length + page.length > MAX_PENDING_RECIPIENTS) return null;
-    userIds.push(...page);
-    if (page.length < PAGE_SIZE) return Object.freeze(userIds);
-    cursor = page.at(-1)!;
-  }
-}
-
 function rpcFailure(error: { code?: string }): Response {
   switch (error.code) {
     case "42501": case "28000":
@@ -134,21 +92,12 @@ export async function remindPendingAttendance(
     const context = await dependencies.requireTeamPermission(target.slug, "matches.manage");
     if (!context) return failure(403, "forbidden", "Bạn không có quyền nhắc thành viên.");
 
-    const userIds = await pendingUserIds(dependencies.supabase, context.team.id, target.matchId);
-    if (!userIds) return failure(500, "server", "Không thể tải đầy đủ danh sách chờ.");
-    if (userIds.length === 0) return Response.json({ ok: true, reminded: 0 });
-
-    const rpc = dependencies.supabase.rpc as unknown as (
-      name: "remind_match_attendance",
-      args: { p_team_id: string; p_match_id: string; p_user_ids: string[] },
-    ) => Promise<{ data: unknown; error: { code?: string } | null }>;
-    const result = await rpc.call(dependencies.supabase, "remind_match_attendance", {
+    const result = await dependencies.supabase.rpc("remind_match_attendance", {
       p_team_id: context.team.id,
       p_match_id: target.matchId,
-      p_user_ids: [...userIds],
     });
     if (result.error) return rpcFailure(result.error);
-    if (!Number.isInteger(result.data) || result.data !== userIds.length) {
+    if (!Number.isInteger(result.data) || result.data < 0) {
       return failure(500, "server", "Không thể xác nhận toàn bộ lời nhắc.");
     }
     return Response.json({ ok: true, reminded: result.data });

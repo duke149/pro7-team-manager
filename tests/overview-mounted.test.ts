@@ -108,12 +108,22 @@ test("Admin reminder sends only match identity, shows pending/success, and refre
 });
 
 test("Admin reminder shows bounded errors without refreshing", async () => {
-  globalThis.fetch = (async () => Response.json({ ok: false, code: "lifecycle", message: "Danh sách chờ đã thay đổi. Vui lòng tải lại." }, { status: 409 })) as typeof fetch;
+  globalThis.fetch = (async () => Response.json({ ok: false, code: "not_found", message: "Không tìm thấy trận đấu." }, { status: 404 })) as typeof fetch;
   const view = await mounted();
   const button = [...view.container.querySelectorAll("button")].find((candidate) => candidate.textContent?.includes("Nhắc người chưa trả lời")); assert.ok(button);
   await act(async () => { button.click(); await new Promise((resolvePromise) => setTimeout(resolvePromise, 0)); });
-  assert.match(view.container.textContent ?? "", /Danh sách chờ đã thay đổi/u);
+  assert.match(view.container.textContent ?? "", /Không tìm thấy trận đấu/u);
   assert.equal(globalThis.__overviewRefreshes, 0);
+  await act(async () => view.root.unmount());
+});
+
+test("Admin reminder renders an authoritative zero RPC result and refreshes", async () => {
+  globalThis.fetch = (async () => Response.json({ ok: true, reminded: 0 })) as typeof fetch;
+  const view = await mounted();
+  const button = [...view.container.querySelectorAll("button")].find((candidate) => candidate.textContent?.includes("Nhắc người chưa trả lời")); assert.ok(button);
+  await act(async () => { button.click(); await new Promise((resolvePromise) => setTimeout(resolvePromise, 0)); });
+  assert.match(view.container.textContent ?? "", /Không còn người chờ trả lời/u);
+  assert.equal(globalThis.__overviewRefreshes, 1);
   await act(async () => view.root.unmount());
 });
 
