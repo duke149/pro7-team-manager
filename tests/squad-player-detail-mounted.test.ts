@@ -120,22 +120,23 @@ test.after(async () => {
   }
 });
 
-function element(player: SquadPlayerDetail) {
+function element(player: SquadPlayerDetail, assignableRoles: readonly SquadAssignableRole[] = ROLES) {
   return createElement(PlayerDetail, {
     key: JSON.stringify([player.role.id, player.membershipStatus, player.shirtNumber, player.officialPosition, player.playerStatus, player.joinDate, player.adminNotes]),
     slug: "pro7-fc",
     player,
     canManage: true,
-    assignableRoles: ROLES,
+    assignableRoles,
   });
 }
 
-async function mounted() {
+async function mounted(player: SquadPlayerDetail = PLAYER, assignableRoles: readonly SquadAssignableRole[] = ROLES) {
   browserWindow.document.body.innerHTML = '<div id="root"></div>';
   const container = browserWindow.document.getElementById("root");
   assert.ok(container);
   const root = createRoot(container);
-  await act(async () => root.render(element(PLAYER)));
+  globalThis.__playerDetailRefresh = undefined;
+  await act(async () => root.render(element(player, assignableRoles)));
   return { container, root };
 }
 
@@ -236,6 +237,39 @@ test("tampered role values are rejected before fetch and identify the invalid fi
   assert.equal(role.getAttribute("aria-invalid"), "true");
   assert.equal(role.getAttribute("aria-describedby"), "player-error-roleId");
   assert.equal(view.container.querySelector("#player-error-roleId")?.textContent, "Chọn một vai trò hợp lệ của đội.");
+  await act(async () => view.root.unmount());
+});
+
+test("restricted-role dual manager keeps official mutations with the unchanged role ID", async () => {
+  const restrictedPlayer: SquadPlayerDetail = {
+    ...PLAYER,
+    role: {
+      id: MEMBER_ROLE.id,
+      name: "Không có quyền xem vai trò",
+      slug: "",
+      isSystem: false,
+      isVisible: false,
+    },
+  };
+  const view = await mounted(restrictedPlayer, []);
+  const bodies: Array<Record<string, unknown>> = [];
+  globalThis.fetch = async (_input, init) => {
+    bodies.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+    return Response.json({ ok: true });
+  };
+  globalThis.__playerDetailRefresh = () => {};
+
+  assert.equal(view.container.querySelector('[name="roleId"]'), null);
+  assert.ok(view.container.querySelector('[name="shirtNumber"]'));
+  assert.ok(view.container.querySelector("button.danger-button"));
+  const form = view.container.querySelector("form.player-admin-form") as HTMLFormElement;
+  await act(async () => {
+    form.dispatchEvent(new browserWindow.Event("submit", { bubbles: true, cancelable: true }));
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+
+  assert.equal(bodies[0]?.roleId, MEMBER_ROLE.id);
   await act(async () => view.root.unmount());
 });
 

@@ -88,11 +88,16 @@ export function PlayerDetail({
   const [state, setState] = useState<MutationState>({ kind: "idle" });
   const name = player.displayName ?? "Cầu thủ chưa cập nhật tên";
   const avatarUrl = safeAvatarUrl(player.avatarUrl);
-  const isOwner = player.role.isSystem && player.role.slug === "owner";
+  const isOwner = player.role.isVisible !== false && player.role.isSystem && player.role.slug === "owner";
   const canMutate = canManage && !isOwner && player.membershipStatus === "active";
   const eligibleRoleIds = useMemo(
     () => new Set(assignableRoles.map((role) => role.id)),
     [assignableRoles],
+  );
+  const canChangeRole = eligibleRoleIds.has(player.role.id);
+  const permittedRoleIds = useMemo(
+    () => canChangeRole ? eligibleRoleIds : new Set([player.role.id]),
+    [canChangeRole, eligibleRoleIds, player.role.id],
   );
   const apiPath = `/api/teams/${encodeURIComponent(slug)}/players/${encodeURIComponent(player.userId)}`;
 
@@ -106,7 +111,7 @@ export function PlayerDetail({
   });
 
   async function mutate(operation: "update" | "deactivate") {
-    if (!eligibleRoleIds.has(roleId)) {
+    if (!permittedRoleIds.has(roleId)) {
       setState({
         kind: "error",
         message: "Vai trò không còn hợp lệ. Vui lòng tải lại trang.",
@@ -168,7 +173,7 @@ export function PlayerDetail({
           <form className="card player-admin-form" onSubmit={submitUpdate}>
             <div className="section-head"><div><span>QUẢN TRỊ ĐỘI HÌNH</span><h2>Chỉnh sửa thông tin đội</h2></div></div>
             <div className="player-admin-fields">
-              <label>Vai trò<select name="roleId" value={roleId} aria-invalid={fieldError("roleId") ? true : undefined} aria-describedby={fieldError("roleId") ? "player-error-roleId" : undefined} onChange={(event) => setRoleId(event.target.value)}>{assignableRoles.map((role) => <option key={role.id} value={role.id}>{role.name}</option>)}</select></label>
+              {canChangeRole && <label>Vai trò<select name="roleId" value={roleId} aria-invalid={fieldError("roleId") ? true : undefined} aria-describedby={fieldError("roleId") ? "player-error-roleId" : undefined} onChange={(event) => setRoleId(event.target.value)}>{assignableRoles.map((role) => <option key={role.id} value={role.id}>{role.name}</option>)}</select></label>}
               <label>Số áo<input name="shirtNumber" type="number" min="1" max="99" value={shirtNumber} aria-invalid={fieldError("shirtNumber") ? true : undefined} aria-describedby={fieldError("shirtNumber") ? "player-error-shirtNumber" : undefined} onChange={(event) => setShirtNumber(event.target.value)} /></label>
               <label>Vị trí chính<select name="officialPosition" value={officialPosition} aria-invalid={fieldError("officialPosition") ? true : undefined} aria-describedby={fieldError("officialPosition") ? "player-error-officialPosition" : undefined} onChange={(event) => setOfficialPosition(event.target.value)}><option value="">Chưa xếp</option><option value="GK">GK</option><option value="DEF">DEF</option><option value="MID">MID</option><option value="ATT">ATT</option></select></label>
               <label>Tình trạng<select name="playerStatus" value={playerStatus} aria-invalid={fieldError("playerStatus") ? true : undefined} aria-describedby={fieldError("playerStatus") ? "player-error-playerStatus" : undefined} onChange={(event) => setPlayerStatus(event.target.value as typeof playerStatus)}><option value="available">Sẵn sàng</option><option value="injured">Chấn thương</option><option value="unavailable">Không sẵn sàng</option></select></label>

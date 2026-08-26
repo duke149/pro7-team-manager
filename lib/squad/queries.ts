@@ -29,7 +29,7 @@ type MembershipRow = {
   user_id: string;
   role_id: string;
   status: MembershipStatus;
-  role: { id: string; name: string; slug: string; is_system: boolean };
+  role: { id: string; name: string; slug: string; is_system: boolean } | null;
   player: {
     shirt_number: number | null;
     official_position: PlayerPosition | null;
@@ -90,15 +90,19 @@ function isMembershipStatus(value: unknown): value is MembershipStatus {
 }
 
 function isMembershipRow(value: unknown): value is MembershipRow {
-  if (!isRecord(value) || !isRecord(value.role) || !isRecord(value.player)) return false;
+  if (!isRecord(value) || !isRecord(value.player)) return false;
+  const validRole = value.role === null || (
+    isRecord(value.role) &&
+    typeof value.role.id === "string" &&
+    typeof value.role.name === "string" &&
+    typeof value.role.slug === "string" &&
+    typeof value.role.is_system === "boolean"
+  );
   return (
     typeof value.user_id === "string" &&
     typeof value.role_id === "string" &&
     isMembershipStatus(value.status) &&
-    typeof value.role.id === "string" &&
-    typeof value.role.name === "string" &&
-    typeof value.role.slug === "string" &&
-    typeof value.role.is_system === "boolean" &&
+    validRole &&
     isNullableNumber(value.player.shirt_number) &&
     (value.player.official_position === null || isPosition(value.player.official_position)) &&
     isPlayerStatus(value.player.player_status) &&
@@ -207,12 +211,20 @@ function mapSummary(
     avatarPath: profile.avatar_path,
     avatarUrl: profile.avatar_url,
     membershipStatus: membership.status,
-    role: Object.freeze({
-      id: membership.role.id,
-      name: membership.role.name,
-      slug: membership.role.slug,
-      isSystem: membership.role.is_system,
-    }),
+    role: membership.role
+      ? Object.freeze({
+        id: membership.role.id,
+        name: membership.role.name,
+        slug: membership.role.slug,
+        isSystem: membership.role.is_system,
+      })
+      : Object.freeze({
+        id: membership.role_id,
+        name: "Không có quyền xem vai trò",
+        slug: "",
+        isSystem: false,
+        isVisible: false,
+      }),
     shirtNumber: membership.player.shirt_number,
     officialPosition: membership.player.official_position,
     playerStatus: membership.player.player_status,

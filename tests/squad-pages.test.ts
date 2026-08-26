@@ -406,7 +406,7 @@ test("Owner target remains readable but never renders manager mutation controls"
   assert.doesNotMatch(markup, /Chỉnh sửa thông tin đội|Ngừng hoạt động|Không được lộ qua form/u);
 });
 
-test("Dual manager detail fails closed when assignable roles cannot be loaded", async () => {
+test("Dual manager keeps official mutations but omits role change when assignable roles fail", async () => {
   const output = await detailPage.renderSquadPlayerPage({
     params: Promise.resolve({ slug: "pro7-fc", userId: PLAYER.userId }),
     requireTeamPermission: async () => ADMIN_CONTEXT,
@@ -419,11 +419,12 @@ test("Dual manager detail fails closed when assignable roles cannot be loaded", 
   });
   const markup = html(output);
 
-  assert.match(markup, /Không thể tải quyền quản trị cầu thủ/u);
-  assert.doesNotMatch(markup, /Chỉnh sửa thông tin đội|name="roleId"|Không được đưa vào form khi role query lỗi/u);
+  assert.match(markup, /Chỉnh sửa thông tin đội|name="shirtNumber"|Ngừng hoạt động/u);
+  assert.match(markup, /Không được đưa vào form khi role query lỗi/u);
+  assert.doesNotMatch(markup, /name="roleId"|Không thể tải quyền quản trị cầu thủ/u);
 });
 
-test("Dual manager without roles.read locks role mutation before an RLS-incomplete query", async () => {
+test("Dual manager without roles.read keeps official mutations with the current role ID", async () => {
   let canReadRoles: boolean | undefined;
   const output = await detailPage.renderSquadPlayerPage({
     params: Promise.resolve({ slug: "pro7-fc", userId: PLAYER.userId }),
@@ -432,7 +433,20 @@ test("Dual manager without roles.read locks role mutation before an RLS-incomple
       "players.manage",
       "members.manage",
     ]),
-    getSquadPlayer: async () => ({ ok: true, player: DETAIL }),
+    getSquadPlayer: async () => ({
+      ok: true,
+      player: {
+        ...DETAIL,
+        role: {
+          id: DETAIL.role.id,
+          name: "Không có quyền xem vai trò",
+          slug: "",
+          isSystem: false,
+          isVisible: false,
+        },
+        adminNotes: "Dual manager note",
+      },
+    }),
     listAssignableSquadRoles: async (_teamId, canRead) => {
       canReadRoles = canRead;
       return { ok: false, error: "server" };
@@ -441,8 +455,9 @@ test("Dual manager without roles.read locks role mutation before an RLS-incomple
   });
 
   assert.equal(canReadRoles, false);
-  assert.match(html(output), /Không thể tải quyền quản trị cầu thủ/u);
-  assert.doesNotMatch(html(output), /name="roleId"|Chỉnh sửa thông tin đội/u);
+  const markup = html(output);
+  assert.match(markup, /Chỉnh sửa thông tin đội|name="shirtNumber"|Dual manager note|Ngừng hoạt động/u);
+  assert.doesNotMatch(markup, /name="roleId"|Không thể tải quyền quản trị cầu thủ/u);
 });
 
 test("Squad loading and error boundaries preserve the roster surface with honest text", () => {

@@ -550,6 +550,27 @@ test("getSquadPlayer returns not_found without requesting admin notes when the s
   );
 });
 
+test("getSquadPlayer preserves role_id when RLS hides the embedded role", async () => {
+  const fixture = clientDouble({
+    memberships: [response({ ...playerRows()[1], user_id: DETAIL_USER_ID, role: null })],
+    profiles: [response({ ...profileRows()[1], id: DETAIL_USER_ID })],
+  });
+
+  const result = await getSquadPlayer("team-1", DETAIL_USER_ID, true, {
+    supabase: fixture.client,
+  });
+
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.ok ? result.player.role : null, {
+    id: "role-member",
+    name: "Không có quyền xem vai trò",
+    slug: "",
+    isSystem: false,
+    isVisible: false,
+  });
+  assert.equal(result.ok ? result.player.adminNotes : null, "Theo dõi thể lực");
+});
+
 test("getSquadPlayer treats a malformed route user ID as not_found before database access", async () => {
   const fixture = clientDouble({ memberships: [], profiles: [] });
 

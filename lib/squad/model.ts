@@ -11,6 +11,7 @@ export type SquadPlayerRole = Readonly<{
   name: string;
   slug: string;
   isSystem: boolean;
+  isVisible?: boolean;
 }>;
 
 export type SquadAssignableRole = SquadPlayerRole;

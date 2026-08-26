@@ -66,11 +66,13 @@ export async function renderSquadPlayerPage(arguments_: DetailPageArguments) {
     );
   }
 
-  const isOwner = result.player.role.isSystem && result.player.role.slug === "owner";
-  const isActiveManageTarget = canManage
+  const isOwner = result.player.role.isVisible !== false
+    && result.player.role.isSystem
+    && result.player.role.slug === "owner";
+  const canMutate = canManage
     && result.player.membershipStatus === "active"
     && !isOwner;
-  const rolesResult = isActiveManageTarget
+  const rolesResult = canMutate
     ? await arguments_.listAssignableSquadRoles(
       context.team.id,
       hasPermission(context, "roles.read"),
@@ -78,27 +80,21 @@ export async function renderSquadPlayerPage(arguments_: DetailPageArguments) {
     : { ok: true as const, roles: [] };
   const hasCurrentRole = rolesResult.ok
     && rolesResult.roles.some((role) => role.id === result.player.role.id);
-  const canRenderManagerControls = isActiveManageTarget && rolesResult.ok && hasCurrentRole;
-  const playerForClient = canRenderManagerControls
+  const assignableRoles = rolesResult.ok && hasCurrentRole
+    ? rolesResult.roles
+    : [];
+  const playerForClient = canMutate
     ? result.player
     : withoutAdminNotes(result.player);
 
   return (
-    <>
-      {isActiveManageTarget && !canRenderManagerControls && (
-        <section className="card squad-detail-state" data-state="error">
-          <h2>Không thể tải quyền quản trị cầu thủ</h2>
-          <p>Thông tin hồ sơ vẫn có thể xem, nhưng chỉnh sửa đang được khóa an toàn.</p>
-        </section>
-      )}
-      <PlayerDetail
-        key={playerMutationVersion(playerForClient)}
-        slug={context.team.slug}
-        player={playerForClient}
-        canManage={canRenderManagerControls}
-        assignableRoles={canRenderManagerControls && rolesResult.ok ? rolesResult.roles : []}
-      />
-    </>
+    <PlayerDetail
+      key={playerMutationVersion(playerForClient)}
+      slug={context.team.slug}
+      player={playerForClient}
+      canManage={canMutate}
+      assignableRoles={assignableRoles}
+    />
   );
 }
 

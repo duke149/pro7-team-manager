@@ -38,7 +38,7 @@ test.before(async () => {
           : null;
       },
     }],
-    resolve: { alias: { "next/navigation": resolve("node_modules/vinext/dist/shims/navigation.js") } },
+    resolve: { alias: { "next/navigation": resolve("tests/fixtures/squad-page-navigation.ts") } },
     server: { middlewareMode: true },
   });
   squad = await vite.ssrLoadModule("/app/teams/[slug]/squad/page.tsx") as SquadRouteModule;
