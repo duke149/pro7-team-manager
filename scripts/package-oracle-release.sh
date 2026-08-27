@@ -14,7 +14,7 @@ if ! git diff --quiet HEAD; then
   exit 1
 fi
 
-if git ls-tree -r --name-only HEAD | grep -Fxq '.env.local'; then
+if git ls-tree -r --name-only HEAD | grep -Eq '(^|/)\.env\.local$'; then
   echo "Refusing to archive .env.local." >&2
   exit 1
 fi
@@ -24,5 +24,5 @@ mkdir -p "$output_directory"
 git_sha="$(git rev-parse HEAD)"
 archive_path="$output_directory/pro7-$git_sha.tar.gz"
 
-git archive --format=tar.gz --output="$archive_path" HEAD
+git archive --format=tar HEAD | gzip -n > "$archive_path"
 printf '%s\n' "$archive_path"

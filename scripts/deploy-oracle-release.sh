@@ -29,9 +29,14 @@ is_public_ipv4() {
   second_octet=$((10#${octets[1]}))
   (( first_octet > 0 && first_octet < 224 )) || return 1
   (( first_octet != 10 && first_octet != 127 )) || return 1
+  (( !(first_octet == 100 && second_octet >= 64 && second_octet <= 127) )) || return 1
   (( !(first_octet == 169 && second_octet == 254) )) || return 1
   (( !(first_octet == 172 && second_octet >= 16 && second_octet <= 31) )) || return 1
+  (( !(first_octet == 192 && second_octet == 0) )) || return 1
+  (( !(first_octet == 192 && second_octet == 88) )) || return 1
   (( !(first_octet == 192 && second_octet == 168) )) || return 1
+  (( !(first_octet == 198 && (second_octet == 18 || second_octet == 19 || second_octet == 51)) )) || return 1
+  (( !(first_octet == 203 && second_octet == 0) )) || return 1
 }
 
 file_mode() {
@@ -100,13 +105,41 @@ fi
 
 if ! awk -F= '
   BEGIN { valid = 1 }
-  $1 == "NODE_ENV" && $2 == "production" { node_environment += 1; next }
-  $1 == "NEXT_PUBLIC_SUPABASE_URL" && NF >= 2 && length($2) { supabase_url += 1; next }
-  $1 == "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY" && NF >= 2 && length($2) { publishable_key += 1; next }
+  $1 == "NODE_ENV" && NF == 2 && $2 == "production" { node_environment += 1; next }
+  $1 == "NEXT_PUBLIC_SUPABASE_URL" && NF == 2 && $2 == "https://pficsujapinkmqsyvcfw.supabase.co" { supabase_url += 1; next }
+  $1 == "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY" && NF == 2 && length($2) { publishable_key += 1; next }
   { valid = 0 }
   END { exit !(valid != 0 && node_environment == 1 && supabase_url == 1 && publishable_key == 1) }
 ' "$environment_file"; then
   echo "--env-file must contain only the three required production variables." >&2
+  exit 1
+fi
+
+publishable_key="$(awk -F= '$1 == "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY" { print $2 }' "$environment_file")"
+if ! NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY="$publishable_key" node - <<'NODE'
+const value = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ?? "";
+if (/^sb_publishable_[A-Za-z0-9_-]+$/.test(value)) {
+  process.exit(0);
+}
+const segments = value.split(".");
+if (segments.length !== 3 || segments.some((segment) => !/^[A-Za-z0-9_-]+$/.test(segment))) {
+  process.exit(1);
+}
+if (segments.some((segment) => segment.length % 4 === 1)) {
+  process.exit(1);
+}
+try {
+  const decode = (segment) => JSON.parse(Buffer.from(segment, "base64url").toString("utf8"));
+  const header = decode(segments[0]);
+  const payload = decode(segments[1]);
+  Buffer.from(segments[2], "base64url");
+  process.exit(header?.alg === "HS256" && payload?.role === "anon" ? 0 : 1);
+} catch {
+  process.exit(1);
+}
+NODE
+then
+  echo "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY must be a Supabase publishable key or a legacy anon key." >&2
   exit 1
 fi
 
@@ -132,6 +165,24 @@ if [[ -z "$release_sha" ]]; then
 fi
 
 script_directory="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+repository_root="$(git -C "$script_directory/.." rev-parse --show-toplevel)"
+if ! git -C "$repository_root" rev-parse --verify --quiet "$release_sha^{commit}" >/dev/null; then
+  echo "--archive Git SHA is not available in this repository." >&2
+  exit 1
+fi
+expected_archive="$(mktemp)"
+if ! git -C "$repository_root" archive --format=tar "$release_sha" | gzip -n > "$expected_archive"; then
+  rm -f "$expected_archive"
+  echo "Unable to reproduce the requested Git archive." >&2
+  exit 1
+fi
+if ! cmp -s "$expected_archive" "$archive_file"; then
+  rm -f "$expected_archive"
+  echo "--archive must exactly match git archive for its Git SHA." >&2
+  exit 1
+fi
+rm -f "$expected_archive"
+
 service_file="$script_directory/../ops/oracle/pro7.service"
 caddy_template="$script_directory/../ops/oracle/Caddyfile.template"
 if [[ ! -f "$service_file" || ! -f "$caddy_template" ]]; then
@@ -179,6 +230,9 @@ rollback() {
   if [[ -n "$previous_release" ]]; then
     sudo ln -sfn "$previous_release" /opt/pro7/current
     sudo systemctl restart pro7
+  else
+    sudo systemctl stop pro7 || true
+    sudo rm -f /opt/pro7/current
   fi
 }
 
@@ -195,12 +249,18 @@ sudo chown -R pro7:pro7 "$release_directory"
 
 sudo -u pro7 env RELEASE_DIRECTORY="$release_directory" bash -s <<'BUILD_RELEASE'
 set -euo pipefail
-set -a
-source /opt/pro7/shared/production.env
-set +a
+read_environment_value() {
+  awk -F= -v name="$1" '$1 == name { print substr($0, length(name) + 2) }' /opt/pro7/shared/production.env
+}
+node_environment="$(read_environment_value NODE_ENV)"
+supabase_url="$(read_environment_value NEXT_PUBLIC_SUPABASE_URL)"
+publishable_key="$(read_environment_value NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY)"
+if [[ "$node_environment" != "production" || "$supabase_url" != "https://pficsujapinkmqsyvcfw.supabase.co" ]]; then
+  exit 1
+fi
 cd "$RELEASE_DIRECTORY"
-npm ci
-npm run build
+env -i HOME=/home/pro7 PATH=/usr/local/bin:/usr/bin:/bin NODE_ENV="$node_environment" NEXT_PUBLIC_SUPABASE_URL="$supabase_url" NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY="$publishable_key" npm ci
+env -i HOME=/home/pro7 PATH=/usr/local/bin:/usr/bin:/bin NODE_ENV="$node_environment" NEXT_PUBLIC_SUPABASE_URL="$supabase_url" NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY="$publishable_key" npm run build
 BUILD_RELEASE
 
 sudo -u pro7 env RELEASE_DIRECTORY="$release_directory" bash -s <<'PROBE_RELEASE'
@@ -223,7 +283,15 @@ sudo systemctl daemon-reload
 sudo systemctl enable pro7
 sudo systemctl restart pro7
 
-if ! curl -fsS http://127.0.0.1:3000/ >/dev/null; then
+ready=0
+for attempt in {1..30}; do
+  if curl -fsS http://127.0.0.1:3000/ >/dev/null; then
+    ready=1
+    break
+  fi
+  sleep 1
+done
+if [[ "$ready" != "1" ]]; then
   rollback
   exit 1
 fi
