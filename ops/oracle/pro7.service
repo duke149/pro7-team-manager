@@ -1,0 +1,30 @@
+[Unit]
+Description=PRO7 Vinext application
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pro7
+Group=pro7
+WorkingDirectory=/opt/pro7/current
+EnvironmentFile=/opt/pro7/shared/production.env
+Environment=HOST=127.0.0.1
+Environment=PORT=3000
+ExecStart=/usr/bin/npm run start -- --host 127.0.0.1 --port 3000
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+PrivateDevices=true
+ProtectControlGroups=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+UMask=027
+
+[Install]
+WantedBy=multi-user.target

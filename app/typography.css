@@ -1,0 +1,503 @@
+/*
+ * PRO7 typography foundation.
+ * Be Vietnam Pro source: bettergui/BeVietnamPro @
+ * 804e62d81abbbcdcce5686069c69b41b8c245192 (OFL-1.1).
+ */
+@font-face {
+  font-family: "Be Vietnam Pro";
+  src: url("/fonts/be-vietnam-pro-variable.woff2") format("woff2-variations");
+  font-style: normal;
+  font-weight: 400 800;
+  font-display: swap;
+}
+
+:root {
+  --font-sans: "Be Vietnam Pro", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-numeric: var(--font-sans);
+
+  --type-caption: 12px;
+  --type-label: 12px;
+  --type-control: 13px;
+  --type-body-sm: 13px;
+  --type-body: 14px;
+  --type-input: 14px;
+  --type-title-sm: 18px;
+  --type-title-md: 22px;
+  --type-title-lg: 28px;
+  --type-display: 32px;
+
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+  --weight-bold: 700;
+  --weight-extrabold: 800;
+
+  --leading-tight: 1.15;
+  --leading-heading: 1.25;
+  --leading-control: 1.3;
+  --leading-body: 1.5;
+  --leading-relaxed: 1.6;
+
+  --tracking-tight: -.02em;
+  --tracking-normal: 0;
+  --tracking-label: .035em;
+  --tracking-caps: .075em;
+}
+
+html,
+body {
+  font-family: var(--font-sans);
+  font-size: var(--type-body);
+  font-weight: var(--weight-regular);
+  line-height: var(--leading-body);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+input,
+select,
+textarea {
+  font-size: var(--type-input);
+  line-height: var(--leading-body);
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-family: var(--font-sans);
+  font-weight: var(--weight-bold);
+  line-height: var(--leading-heading);
+  letter-spacing: var(--tracking-tight);
+}
+
+.numeric,
+.metric-value,
+.hero-score,
+.countdown-box,
+.funds-balance,
+.shirt-number,
+[data-numeric="true"] {
+  font-family: var(--font-numeric);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Product shell, account controls, and authentication */
+.logo > div,
+.login-brand > div,
+.account-profile-brand,
+.page-heading,
+.main-nav,
+.mobile-nav,
+.account-menu,
+.login-shell {
+  font-family: var(--font-sans);
+}
+
+.logo small,
+.team-picker > span,
+.nav-label,
+.page-heading > span,
+.login-brand small,
+.login-copy p {
+  font-size: var(--type-label);
+  font-weight: var(--weight-bold);
+  line-height: var(--leading-control);
+  letter-spacing: var(--tracking-caps);
+}
+
+.page-heading h1 {
+  font-size: var(--type-title-lg);
+  font-weight: var(--weight-bold);
+  line-height: var(--leading-heading);
+  letter-spacing: var(--tracking-tight);
+}
+
+.page-heading p,
+.account-menu-summary span,
+.account-menu-identity span {
+  font-size: var(--type-body-sm);
+  line-height: var(--leading-body);
+}
+
+.main-nav :is(a, button) {
+  font-size: var(--type-control);
+  font-weight: var(--weight-semibold);
+  line-height: var(--leading-control);
+}
+
+.mobile-nav a {
+  font-size: var(--type-caption);
+  font-weight: var(--weight-semibold);
+  line-height: var(--leading-control);
+  white-space: normal;
+  text-wrap: balance;
+}
+
+.account-menu-popover :is(a, button) {
+  font-size: var(--type-control);
+  font-weight: var(--weight-semibold);
+  line-height: var(--leading-control);
+}
+
+.login-copy h1 {
+  font-size: var(--type-title-lg);
+  font-weight: var(--weight-bold);
+  line-height: var(--leading-heading);
+  letter-spacing: var(--tracking-tight);
+}
+
+.login-copy span,
+.login-footnote,
+.login-success {
+  font-size: var(--type-body-sm);
+  line-height: var(--leading-relaxed);
+  letter-spacing: var(--tracking-normal);
+}
+
+.login-form label {
+  font-size: var(--type-label);
+  font-weight: var(--weight-semibold);
+  line-height: var(--leading-control);
+  letter-spacing: var(--tracking-normal);
+}
+
+.login-form input {
+  font-size: var(--type-input);
+  font-weight: var(--weight-regular);
+  line-height: var(--leading-body);
+}
+
+.login-form button,
+.password-visibility,
+.login-secondary-link,
+.logout-button,
+.profile-button,
+.theme-button {
+  font-size: var(--type-control);
+  font-weight: var(--weight-bold);
+  line-height: var(--leading-control);
+}
+
+.login-error {
+  font-size: var(--type-body-sm);
+  font-weight: var(--weight-regular);
+  line-height: var(--leading-relaxed);
+}
+
+/* Overview, roster, and self profile */
+.card-kicker,
+.section-head > span,
+.stat-card > span,
+.squad-summary span,
+.player-profile-heading > span,
+.account-profile-heading > span,
+.account-profile-section-title > span,
+.account-avatar-card > div:nth-child(2) > span {
+  font-size: var(--type-label);
+  font-weight: var(--weight-bold);
+  line-height: var(--leading-control);
+  letter-spacing: var(--tracking-caps);
+}
+
+.news-item p {
+  font-size: var(--type-body-sm);
+  line-height: var(--leading-body);
+}
+
+.news-item :is(b, small),
+.fixture-row > div :is(b, small) {
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.fixture-row > div b {
+  font-size: var(--type-body-sm);
+  font-weight: var(--weight-semibold);
+  line-height: var(--leading-control);
+}
+
+.fixture-row > div small,
+.news-item small,
+.stat-card > small,
+.player-stats > span,
+.squad-summary span {
+  font-size: var(--type-caption);
+  line-height: var(--leading-body);
+}
+
+.search-box input {
+  font-size: var(--type-input);
+  font-weight: var(--weight-regular);
+}
+
+.filter-row :is(a, button, span),
+.filter-button,
+.squad-filter-panel label,
+.player-admin-fields label,
+.account-profile-fields label,
+.account-position-fieldset legend {
+  font-size: var(--type-label);
+  font-weight: var(--weight-semibold);
+  line-height: var(--leading-control);
+}
+
+.position-chip,
+.role-chip,
+.injury-chip,
+.membership-chip {
+  font-size: var(--type-caption);
+  font-weight: var(--weight-bold);
+  line-height: var(--leading-control);
+  letter-spacing: var(--tracking-normal);
+}
+
+.player-top h3 {
+  font-size: var(--type-title-sm);
+  font-weight: var(--weight-semibold);
+  line-height: var(--leading-heading);
+  overflow-wrap: anywhere;
+}
+
+.player-stats strong,
+.player-profile-value strong {
+  font-size: var(--type-body);
+  font-weight: var(--weight-semibold);
+  line-height: var(--leading-body);
+  overflow-wrap: anywhere;
+}
+
+.player-profile-value span,
+.player-deactivate-panel p,
+.account-avatar-card p,
+.account-profile-fields small,
+.account-position-fieldset > small {
+  font-size: var(--type-body-sm);
+  line-height: var(--leading-relaxed);
+}
+
+.player-admin-fields :is(input, select, textarea),
+.player-deactivate-panel input,
+.account-profile-fields input {
+  font-size: var(--type-input);
+  line-height: var(--leading-body);
+}
+
+.account-profile-message,
+.player-mutation-message {
+  font-size: var(--type-body-sm);
+  line-height: var(--leading-relaxed);
+  overflow-wrap: anywhere;
+}
+
+.account-position-fieldset span,
+.danger-button,
+.account-profile-back {
+  font-size: var(--type-control);
+  font-weight: var(--weight-bold);
+  line-height: var(--leading-control);
+}
+
+/* Matches and tactics */
+.confirmed-strip,
+.analysis-score > :is(span, small),
+.tactics-toolbar label {
+  font-size: var(--type-label);
+  font-weight: var(--weight-bold);
+  line-height: var(--leading-control);
+  letter-spacing: var(--tracking-caps);
+}
+
+.confirmed-body > p,
+.match-meta,
+.roster-progress > span,
+.compare-row,
+.tactics-state p,
+.tactics-muted {
+  font-size: var(--type-body);
+  line-height: var(--leading-body);
+}
+
+.rsvp-options :is(button, span) {
+  font-size: var(--type-control);
+  font-weight: var(--weight-semibold);
+  line-height: var(--leading-control);
+}
+
+.match-form :is(input, select) {
+  font-size: var(--type-input);
+  line-height: var(--leading-body);
+}
+
+.event-row,
+.motm :is(b, small),
+.tactics-match-row small,
+.tactics-readonly :is(b, small),
+.tactics-message {
+  font-size: var(--type-body-sm);
+  line-height: var(--leading-body);
+}
+
+.score-board strong,
+.countdown-row b,
+.roster-progress strong {
+  font-family: var(--font-numeric);
+  font-variant-numeric: tabular-nums;
+}
+
+.mode-toggle button,
+.tactics-toolbar select {
+  font-size: var(--type-control);
+  font-weight: var(--weight-semibold);
+  line-height: var(--leading-control);
+}
+
+.instruction-card textarea {
+  font-size: var(--type-body);
+  font-weight: var(--weight-regular);
+  line-height: var(--leading-relaxed);
+}
+
+.instruction-card > label,
+.pitch-caption {
+  font-size: var(--type-label);
+  font-weight: var(--weight-semibold);
+  line-height: var(--leading-control);
+}
+
+.pitch-player span {
+  font-size: var(--type-caption);
+  font-weight: var(--weight-bold);
+  line-height: var(--leading-control);
+}
+
+.pitch-player b {
+  font-family: var(--font-numeric);
+  font-size: var(--type-control);
+  font-variant-numeric: tabular-nums;
+}
+
+.bench-player,
+.bench-player > :is(b, span) {
+  font-size: var(--type-body-sm);
+  font-weight: var(--weight-semibold);
+  line-height: var(--leading-control);
+}
+
+/* Funds, settings, dialogs, notifications, and shared states */
+.balance-card > strong {
+  font-family: var(--font-numeric);
+  font-size: var(--type-display);
+  font-weight: var(--weight-extrabold);
+  line-height: var(--leading-tight);
+  font-variant-numeric: tabular-nums;
+}
+
+.due-row,
+.due-row :is(b, small, strong),
+.transaction,
+.transaction :is(b, small, strong),
+.fund-muted,
+.fund-message,
+.fund-row-error,
+.fund-empty-copy {
+  font-size: var(--type-body-sm);
+  line-height: var(--leading-body);
+}
+
+.fund-stats :is(b, strong),
+.due-row > strong,
+.transaction > strong {
+  font-family: var(--font-numeric);
+  font-variant-numeric: tabular-nums;
+}
+
+.settings-tabs a,
+.settings-module .primary-button,
+.fund-actions button,
+.fund-row-action,
+.fund-danger-button {
+  font-size: var(--type-control);
+  font-weight: var(--weight-semibold);
+  line-height: var(--leading-control);
+}
+
+.settings-title > span,
+.settings-module-head span,
+.settings-module label,
+.modal-head span,
+.modal > label,
+.form-two label {
+  font-size: var(--type-label);
+  font-weight: var(--weight-semibold);
+  line-height: var(--leading-control);
+  letter-spacing: var(--tracking-label);
+}
+
+.settings-module :is(input, select),
+.modal :is(input, select, textarea) {
+  font-size: var(--type-input);
+  line-height: var(--leading-body);
+}
+
+.audit-list,
+.audit-list :is(b, small, code, span),
+.role-grid :is(p, small, code),
+.settings-message,
+.settings-state p {
+  font-size: var(--type-body-sm);
+  line-height: var(--leading-body);
+}
+
+.modal-head p {
+  font-size: var(--type-body-sm);
+  line-height: var(--leading-relaxed);
+}
+
+.toast {
+  font-size: var(--type-body-sm);
+  font-weight: var(--weight-semibold);
+  line-height: var(--leading-body);
+}
+
+.overview-state p,
+.match-state p,
+.tactics-state p,
+.funds-state p,
+.settings-state p,
+.squad-empty-state p,
+.squad-detail-state p,
+.notification-empty {
+  font-size: var(--type-body-sm);
+  line-height: var(--leading-relaxed);
+  overflow-wrap: anywhere;
+}
+
+.notification-popover header span,
+.notification-list :is(b, small, time),
+.notification-empty {
+  font-size: var(--type-body-sm);
+  line-height: var(--leading-body);
+}
+
+@media (max-width: 767px) {
+  :root {
+    --type-label: 13px;
+    --type-control: 14px;
+    --type-body-sm: 14px;
+    --type-body: 15px;
+    --type-input: 16px;
+    --type-title-md: 20px;
+    --type-title-lg: 24px;
+    --type-display: 28px;
+  }
+}

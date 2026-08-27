@@ -1,0 +1,1 @@
+export default function MatchesLoading() { return <div className="view-stack match-center" data-state="loading" aria-busy="true"><section className="card match-state"><span className="squad-loading-dot" aria-hidden="true" /><h2>Đang tải trận đấu</h2><p>Lịch thi đấu và xác nhận đang được đồng bộ.</p></section></div>; }
