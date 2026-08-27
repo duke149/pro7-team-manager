@@ -268,3 +268,198 @@ test("remote deployment waits for readiness and clears current on first-release 
   );
   assert.match(deployScript, /sudo rm -f \/opt\/pro7\/current/u);
 });
+
+test("deploy rejects a valid deterministic archive from an older reachable commit", async (t) => {
+  const fixtureDirectory = await mkdtemp(path.join(os.tmpdir(), "pro7-oracle-provenance-"));
+  t.after(() => rm(fixtureDirectory, { force: true, recursive: true }));
+  await mkdir(path.join(fixtureDirectory, "scripts"));
+  await mkdir(path.join(fixtureDirectory, "ops/oracle"), { recursive: true });
+  await Promise.all([
+    writeFile(path.join(fixtureDirectory, "scripts/deploy-oracle-release.sh"), await readRepositoryFile("scripts/deploy-oracle-release.sh")),
+    writeFile(path.join(fixtureDirectory, "ops/oracle/pro7.service"), await readRepositoryFile("ops/oracle/pro7.service")),
+    writeFile(path.join(fixtureDirectory, "ops/oracle/Caddyfile.template"), await readRepositoryFile("ops/oracle/Caddyfile.template")),
+    writeFile(path.join(fixtureDirectory, "tracked.txt"), "first\n"),
+  ]);
+  await chmod(path.join(fixtureDirectory, "scripts/deploy-oracle-release.sh"), 0o700);
+  execFileSync("git", ["init", "--initial-branch=main"], { cwd: fixtureDirectory });
+  execFileSync("git", ["config", "user.email", "contract@example.test"], { cwd: fixtureDirectory });
+  execFileSync("git", ["config", "user.name", "Contract Test"], { cwd: fixtureDirectory });
+  execFileSync("git", ["add", "."], { cwd: fixtureDirectory });
+  execFileSync("git", ["commit", "-m", "older"], { cwd: fixtureDirectory });
+  const olderSha = execFileSync("git", ["rev-parse", "HEAD"], { cwd: fixtureDirectory, encoding: "utf8" }).trim();
+  await writeFile(path.join(fixtureDirectory, "tracked.txt"), "current\n");
+  execFileSync("git", ["add", "tracked.txt"], { cwd: fixtureDirectory });
+  execFileSync("git", ["commit", "-m", "current"], { cwd: fixtureDirectory });
+
+  const keyFile = path.join(fixtureDirectory, "key");
+  const environmentFile = path.join(fixtureDirectory, "production.env");
+  const archiveFile = path.join(fixtureDirectory, "pro7-" + olderSha + ".tar.gz");
+  await Promise.all([
+    writeFile(keyFile, "test key\n"),
+    writeFile(environmentFile, [
+      "NODE_ENV=production",
+      "NEXT_PUBLIC_SUPABASE_URL=" + approvedUrl,
+      "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=" + validPublishableKey,
+    ].join("\n")),
+    writeFile(path.join(fixtureDirectory, "ssh"), "#!/usr/bin/env bash\nexit 97\n"),
+  ]);
+  await Promise.all([chmod(keyFile, 0o600), chmod(environmentFile, 0o600), chmod(path.join(fixtureDirectory, "ssh"), 0o700)]);
+  execFileSync("bash", ["-c", "git archive --format=tar \"$1\" | gzip -n > \"$2\"", "bash", olderSha, archiveFile], {
+    cwd: fixtureDirectory,
+  });
+
+  const result = spawnSync("bash", [
+    path.join(fixtureDirectory, "scripts/deploy-oracle-release.sh"),
+    "--ip", "8.8.8.8", "--key", keyFile, "--env-file", environmentFile, "--archive", archiveFile,
+  ], {
+    cwd: fixtureDirectory,
+    encoding: "utf8",
+    env: { ...process.env, PATH: fixtureDirectory + ":" + process.env.PATH },
+  });
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /current Git HEAD/u);
+
+  const currentSha = execFileSync("git", ["rev-parse", "HEAD"], { cwd: fixtureDirectory, encoding: "utf8" }).trim();
+  const currentArchive = path.join(fixtureDirectory, "pro7-" + currentSha + ".tar.gz");
+  execFileSync("bash", ["-c", "git archive --format=tar HEAD | gzip -n > \"$1\"", "bash", currentArchive], {
+    cwd: fixtureDirectory,
+  });
+  await writeFile(path.join(fixtureDirectory, "tracked.txt"), "dirty\n");
+  const dirtyResult = spawnSync("bash", [
+    path.join(fixtureDirectory, "scripts/deploy-oracle-release.sh"),
+    "--ip", "8.8.8.8", "--key", keyFile, "--env-file", environmentFile, "--archive", currentArchive,
+  ], {
+    cwd: fixtureDirectory,
+    encoding: "utf8",
+    env: { ...process.env, PATH: fixtureDirectory + ":" + process.env.PATH },
+  });
+  assert.notEqual(dirtyResult.status, 0);
+  assert.match(dirtyResult.stderr, /dirty tracked Git HEAD/u);
+});
+
+test("deploy accepts public neighbors of reserved /24 ranges for preflight validation", async (t) => {
+  const fixture = await createDeployFixture(t, [
+    "NODE_ENV=production",
+    "NEXT_PUBLIC_SUPABASE_URL=" + approvedUrl,
+    "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=" + validPublishableKey,
+  ]);
+  for (const ipAddress of ["192.0.3.10", "192.88.100.10", "198.52.100.10", "203.1.113.10"]) {
+    const result = runDeploy(fixture, { ipAddress });
+    assert.notEqual(result.status, 0);
+    assert.doesNotMatch(result.stderr, /valid public IPv4/u);
+    assert.match(result.stderr, /--archive must exactly match git archive/u);
+  }
+});
+
+test("bootstrap preflight rejects mismatched source and missing public-key proof before mutation", async (t) => {
+  const fixtureDirectory = await mkdtemp(path.join(os.tmpdir(), "pro7-oracle-bootstrap-"));
+  t.after(() => rm(fixtureDirectory, { force: true, recursive: true }));
+  const binDirectory = path.join(fixtureDirectory, "bin");
+  const operatorHome = path.join(fixtureDirectory, "operator");
+  const mutationLog = path.join(fixtureDirectory, "mutation.log");
+  await mkdir(binDirectory);
+  await mkdir(path.join(operatorHome, ".ssh"), { recursive: true });
+  await writeFile(path.join(operatorHome, ".ssh/authorized_keys"), "ssh-ed25519 test\n");
+  await Promise.all([
+    writeFile(path.join(binDirectory, "getent"), "#!/usr/bin/env bash\necho \"operator:x:1000:1000::$PRO7_TEST_OPERATOR_HOME:/bin/bash\"\n"),
+    writeFile(path.join(binDirectory, "ssh-keygen"), "#!/usr/bin/env bash\nexit 0\n"),
+    writeFile(path.join(binDirectory, "journalctl"), "#!/usr/bin/env bash\nprintf '%s\\n' \"$PRO7_TEST_JOURNAL\"\n"),
+    writeFile(path.join(binDirectory, "ufw"), "#!/usr/bin/env bash\necho ufw >> \"$PRO7_TEST_MUTATION_LOG\"\n"),
+    writeFile(path.join(binDirectory, "systemctl"), "#!/usr/bin/env bash\necho systemctl >> \"$PRO7_TEST_MUTATION_LOG\"\n"),
+  ]);
+  for (const command of ["getent", "ssh-keygen", "journalctl", "ufw", "systemctl"]) {
+    await chmod(path.join(binDirectory, command), 0o700);
+  }
+
+  const runPreflight = (connection, journal = "") => spawnSync("bash", [
+    path.join(repositoryRoot, "ops/oracle/bootstrap-ubuntu.sh"),
+    "--verify-session", "198.51.100.10/32",
+  ], {
+    encoding: "utf8",
+    env: {
+      ...process.env,
+      PATH: binDirectory + ":" + process.env.PATH,
+      PRO7_TEST_OPERATOR_HOME: operatorHome,
+      PRO7_TEST_MUTATION_LOG: mutationLog,
+      PRO7_TEST_JOURNAL: journal,
+      SSH_CONNECTION: connection,
+      SUDO_USER: "operator",
+    },
+  });
+
+  const mismatch = runPreflight("198.51.100.11 50000 10.0.0.1 22");
+  assert.notEqual(mismatch.status, 0);
+  assert.match(mismatch.stderr, /SSH_CONNECTION source/u);
+  const missingProof = runPreflight("198.51.100.10 50000 10.0.0.1 22");
+  assert.notEqual(missingProof.status, 0);
+  assert.match(missingProof.stderr, /public-key SSH authentication/u);
+  await assert.rejects(readFile(mutationLog, "utf8"), { code: "ENOENT" });
+});
+
+test("remote deployment retries delayed readiness and clears a failed first release", async (t) => {
+  const deployScript = await readRepositoryFile("scripts/deploy-oracle-release.sh");
+  const remoteScript = deployScript.match(/<<'REMOTE_DEPLOY'\n([\s\S]+)\nREMOTE_DEPLOY\n?$/u)?.[1];
+  assert.ok(remoteScript, "remote deployment script is present");
+
+  const runRemote = async (mode) => {
+    const fixtureDirectory = await mkdtemp(path.join(os.tmpdir(), "pro7-oracle-remote-"));
+    const binDirectory = path.join(fixtureDirectory, "bin");
+    const stagingDirectory = path.join(fixtureDirectory, "staging");
+    const logFile = path.join(fixtureDirectory, "remote.log");
+    t.after(() => rm(fixtureDirectory, { force: true, recursive: true }));
+    await mkdir(binDirectory);
+    await mkdir(stagingDirectory);
+    await writeFile(path.join(stagingDirectory, "Caddyfile.template"), "{$PRO7_HOSTNAME} {}\n");
+    await Promise.all([
+      writeFile(
+        path.join(binDirectory, "sudo"),
+        "#!/usr/bin/env bash\n" +
+          "echo \"$*\" >> \"$PRO7_TEST_LOG\"\n" +
+          "last=\"\"; for argument; do last=\"$argument\"; done\n" +
+          "if [[ \"$1\" == \"install\" && \" $* \" == *\" -d \"* ]]; then mkdir -p \"$last\"; fi\n" +
+          "exit 0\n",
+      ),
+      writeFile(
+        path.join(binDirectory, "curl"),
+        "#!/usr/bin/env bash\n" +
+          "url=\"\"; for argument; do url=\"$argument\"; done\n" +
+          "if [[ \"$url\" == http://127.0.0.1:3000/* ]]; then\n" +
+          "  count_file=\"$PRO7_TEST_CURL_COUNT\"\n" +
+          "  count=0; [[ -f \"$count_file\" ]] && count=$(cat \"$count_file\")\n" +
+          "  count=$((count + 1)); echo \"$count\" > \"$count_file\"\n" +
+          "  [[ \"$PRO7_TEST_READY_MODE\" == delayed && \"$count\" -ge 3 ]] && exit 0\n" +
+          "  exit 1\n" +
+          "fi\n" +
+          "exit 0\n",
+      ),
+      writeFile(path.join(binDirectory, "sleep"), "#!/usr/bin/env bash\nexit 0\n"),
+    ]);
+    for (const command of ["sudo", "curl", "sleep"]) {
+      await chmod(path.join(binDirectory, command), 0o700);
+    }
+    const result = spawnSync("bash", ["-s", "--", "a".repeat(40), stagingDirectory, "8.8.8.8.sslip.io"], {
+      encoding: "utf8",
+      input: remoteScript,
+      env: {
+        ...process.env,
+        PATH: binDirectory + ":" + process.env.PATH,
+        PRO7_TEST_CURL_COUNT: path.join(fixtureDirectory, "curl-count"),
+        PRO7_TEST_LOG: logFile,
+        PRO7_TEST_READY_MODE: mode,
+      },
+    });
+    return { logFile, result };
+  };
+
+  const delayed = await runRemote("delayed");
+  assert.equal(delayed.result.status, 0);
+  const delayedLog = await readFile(delayed.logFile, "utf8");
+  assert.match(delayedLog, /systemctl restart pro7/u);
+  assert.doesNotMatch(delayedLog, /rm -f \/opt\/pro7\/current/u);
+
+  const exhausted = await runRemote("exhausted");
+  assert.notEqual(exhausted.result.status, 0);
+  const exhaustedLog = await readFile(exhausted.logFile, "utf8");
+  assert.match(exhaustedLog, /systemctl stop pro7/u);
+  assert.match(exhaustedLog, /rm -f \/opt\/pro7\/current/u);
+});

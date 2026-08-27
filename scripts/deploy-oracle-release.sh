@@ -21,22 +21,24 @@ is_public_ipv4() {
   local address="$1"
   local first_octet
   local second_octet
+  local third_octet
   local -a octets
 
   is_ipv4 "$address" || return 1
   IFS='.' read -r -a octets <<< "$address"
   first_octet=$((10#${octets[0]}))
   second_octet=$((10#${octets[1]}))
+  third_octet=$((10#${octets[2]}))
   (( first_octet > 0 && first_octet < 224 )) || return 1
   (( first_octet != 10 && first_octet != 127 )) || return 1
   (( !(first_octet == 100 && second_octet >= 64 && second_octet <= 127) )) || return 1
   (( !(first_octet == 169 && second_octet == 254) )) || return 1
   (( !(first_octet == 172 && second_octet >= 16 && second_octet <= 31) )) || return 1
-  (( !(first_octet == 192 && second_octet == 0) )) || return 1
-  (( !(first_octet == 192 && second_octet == 88) )) || return 1
+  (( !(first_octet == 192 && second_octet == 0 && (third_octet == 0 || third_octet == 2)) )) || return 1
+  (( !(first_octet == 192 && second_octet == 88 && third_octet == 99) )) || return 1
   (( !(first_octet == 192 && second_octet == 168) )) || return 1
-  (( !(first_octet == 198 && (second_octet == 18 || second_octet == 19 || second_octet == 51)) )) || return 1
-  (( !(first_octet == 203 && second_octet == 0) )) || return 1
+  (( !(first_octet == 198 && (second_octet == 18 || second_octet == 19 || (second_octet == 51 && third_octet == 100)) )) ) || return 1
+  (( !(first_octet == 203 && second_octet == 0 && third_octet == 113) )) || return 1
 }
 
 file_mode() {
@@ -166,6 +168,11 @@ fi
 
 script_directory="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repository_root="$(git -C "$script_directory/.." rev-parse --show-toplevel)"
+current_sha="$(git -C "$repository_root" rev-parse HEAD)"
+if [[ "$release_sha" != "$current_sha" ]]; then
+  echo "--archive Git SHA must equal current Git HEAD." >&2
+  exit 1
+fi
 if ! git -C "$repository_root" rev-parse --verify --quiet "$release_sha^{commit}" >/dev/null; then
   echo "--archive Git SHA is not available in this repository." >&2
   exit 1
@@ -182,6 +189,10 @@ if ! cmp -s "$expected_archive" "$archive_file"; then
   exit 1
 fi
 rm -f "$expected_archive"
+if ! git -C "$repository_root" diff --quiet HEAD; then
+  echo "Refusing to deploy from a dirty tracked Git HEAD." >&2
+  exit 1
+fi
 
 service_file="$script_directory/../ops/oracle/pro7.service"
 caddy_template="$script_directory/../ops/oracle/Caddyfile.template"

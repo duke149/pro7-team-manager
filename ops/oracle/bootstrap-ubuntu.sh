@@ -1,7 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if [[ ${EUID} -ne 0 ]]; then
+session_check_only=0
+if [[ "${1:-}" == "--verify-session" ]]; then
+  session_check_only=1
+  shift
+fi
+
+if [[ ${EUID} -ne 0 && "$session_check_only" != "1" ]]; then
   echo "Run this script with sudo." >&2
   exit 1
 fi
@@ -30,10 +36,12 @@ if [[ ! "$OPERATOR_CIDR" =~ ^(.+)/32$ ]] || ! is_ipv4 "${BASH_REMATCH[1]}"; then
   exit 1
 fi
 
-source /etc/os-release
-if [[ "${ID:-}" != "ubuntu" ]]; then
-  echo "This bootstrap script supports Ubuntu only." >&2
-  exit 1
+if [[ "$session_check_only" != "1" ]]; then
+  source /etc/os-release
+  if [[ "${ID:-}" != "ubuntu" ]]; then
+    echo "This bootstrap script supports Ubuntu only." >&2
+    exit 1
+  fi
 fi
 
 if [[ -z "${SSH_CONNECTION:-}" || -z "${SUDO_USER:-}" ]]; then
@@ -57,6 +65,9 @@ fi
 if ! journalctl --since "10 minutes ago" _COMM=sshd --no-pager | grep -Fq "Accepted publickey for $SUDO_USER from $operator_session_ip"; then
   echo "A recent public-key SSH authentication for the current operator and source is required." >&2
   exit 1
+fi
+if [[ "$session_check_only" == "1" ]]; then
+  exit 0
 fi
 
 export DEBIAN_FRONTEND=noninteractive
