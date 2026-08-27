@@ -406,6 +406,7 @@ test("remote deployment retries delayed readiness and clears a failed first rele
     const binDirectory = path.join(fixtureDirectory, "bin");
     const stagingDirectory = path.join(fixtureDirectory, "staging");
     const logFile = path.join(fixtureDirectory, "remote.log");
+    const sandboxRoot = path.join(fixtureDirectory, "sandbox");
     t.after(() => rm(fixtureDirectory, { force: true, recursive: true }));
     await mkdir(binDirectory);
     await mkdir(stagingDirectory);
@@ -414,6 +415,12 @@ test("remote deployment retries delayed readiness and clears a failed first rele
       writeFile(
         path.join(binDirectory, "sudo"),
         "#!/usr/bin/env bash\n" +
+          "for argument; do\n" +
+          "  if [[ \"$argument\" == /* && \"$argument\" != \"$PRO7_TEST_ROOT\"/* ]]; then\n" +
+          "    echo \"unmapped absolute path: $argument\" >> \"$PRO7_TEST_LOG\"\n" +
+          "    exit 86\n" +
+          "  fi\n" +
+          "done\n" +
           "echo \"$*\" >> \"$PRO7_TEST_LOG\"\n" +
           "last=\"\"; for argument; do last=\"$argument\"; done\n" +
           "if [[ \"$1\" == \"install\" && \" $* \" == *\" -d \"* ]]; then mkdir -p \"$last\"; fi\n" +
@@ -439,27 +446,33 @@ test("remote deployment retries delayed readiness and clears a failed first rele
     }
     const result = spawnSync("bash", ["-s", "--", "a".repeat(40), stagingDirectory, "8.8.8.8.sslip.io"], {
       encoding: "utf8",
-      input: remoteScript,
+      input: remoteScript
+        .replaceAll("/opt/pro7", sandboxRoot + "/opt/pro7")
+        .replaceAll("/etc/systemd/system/pro7.service", sandboxRoot + "/etc/systemd/system/pro7.service")
+        .replaceAll("/etc/caddy/Caddyfile", sandboxRoot + "/etc/caddy/Caddyfile"),
       env: {
         ...process.env,
         PATH: binDirectory + ":" + process.env.PATH,
         PRO7_TEST_CURL_COUNT: path.join(fixtureDirectory, "curl-count"),
         PRO7_TEST_LOG: logFile,
         PRO7_TEST_READY_MODE: mode,
+        PRO7_TEST_ROOT: fixtureDirectory,
       },
     });
-    return { logFile, result };
+    return { currentPath: path.join(sandboxRoot, "opt/pro7/current"), logFile, result };
   };
 
   const delayed = await runRemote("delayed");
   assert.equal(delayed.result.status, 0);
   const delayedLog = await readFile(delayed.logFile, "utf8");
   assert.match(delayedLog, /systemctl restart pro7/u);
-  assert.doesNotMatch(delayedLog, /rm -f \/opt\/pro7\/current/u);
+  assert.doesNotMatch(delayedLog, new RegExp("rm -f " + delayed.currentPath, "u"));
+  assert.doesNotMatch(delayedLog, /unmapped absolute path/u);
 
   const exhausted = await runRemote("exhausted");
   assert.notEqual(exhausted.result.status, 0);
   const exhaustedLog = await readFile(exhausted.logFile, "utf8");
   assert.match(exhaustedLog, /systemctl stop pro7/u);
-  assert.match(exhaustedLog, /rm -f \/opt\/pro7\/current/u);
+  assert.match(exhaustedLog, new RegExp("rm -f " + exhausted.currentPath, "u"));
+  assert.doesNotMatch(exhaustedLog, /unmapped absolute path/u);
 });
