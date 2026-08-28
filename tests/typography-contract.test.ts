@@ -9,38 +9,49 @@ const globalsPath = new URL("../app/globals.css", import.meta.url);
 const responsivePath = new URL("../app/responsive.css", import.meta.url);
 const layoutPath = new URL("../app/layout.tsx", import.meta.url);
 const tokenPath = new URL("../app/design-tokens.css", import.meta.url);
-const fontPath = new URL("../public/fonts/be-vietnam-pro-variable.woff2", import.meta.url);
-const licensePath = new URL("../public/fonts/OFL.txt", import.meta.url);
+const openSansFontPath = new URL("../node_modules/@fontsource-variable/open-sans/files/open-sans-vietnamese-wght-normal.woff2", import.meta.url);
+const barlowFontPath = new URL("../node_modules/@fontsource/barlow/files/barlow-vietnamese-700-normal.woff2", import.meta.url);
+const openSansLicensePath = new URL("../node_modules/@fontsource-variable/open-sans/LICENSE", import.meta.url);
+const barlowLicensePath = new URL("../node_modules/@fontsource/barlow/LICENSE", import.meta.url);
 
-test("the root layout loads the final self-hosted Be Vietnam Pro layer", async () => {
-  const [layout, tokens, font, license] = await Promise.all([
+test("the root layout loads self-hosted Open Sans and Barlow layers", async () => {
+  const [layout, tokens, openSans, barlow, openSansLicense, barlowLicense] = await Promise.all([
     readFile(layoutPath, "utf8"),
     readFile(tokenPath, "utf8"),
-    readFile(fontPath),
-    readFile(licensePath, "utf8"),
+    readFile(openSansFontPath),
+    readFile(barlowFontPath),
+    readFile(openSansLicensePath, "utf8"),
+    readFile(barlowLicensePath, "utf8"),
   ]);
-  assert.ok(font.byteLength > 10_000, "variable font asset is unexpectedly small");
-  assert.equal(font.subarray(0, 4).toString("ascii"), "wOF2");
-  assert.match(license, /SIL OPEN FONT LICENSE/u);
+  assert.ok(openSans.byteLength > 10_000, "Open Sans asset is unexpectedly small");
+  assert.ok(barlow.byteLength > 5_000, "Barlow asset is unexpectedly small");
+  assert.equal(openSans.subarray(0, 4).toString("ascii"), "wOF2");
+  assert.equal(barlow.subarray(0, 4).toString("ascii"), "wOF2");
+  assert.match(openSansLicense, /SIL OPEN FONT LICENSE/u);
+  assert.match(barlowLicense, /SIL OPEN FONT LICENSE/u);
+  assert.ok(layout.indexOf('import "@fontsource-variable/open-sans/wght.css"') < layout.indexOf('import "./design-tokens.css"'));
+  assert.ok(layout.indexOf('import "@fontsource/barlow/600.css"') < layout.indexOf('import "./design-tokens.css"'));
+  assert.ok(layout.indexOf('import "@fontsource/barlow/700.css"') < layout.indexOf('import "./design-tokens.css"'));
+  assert.ok(layout.indexOf('import "@fontsource/barlow/800.css"') < layout.indexOf('import "./design-tokens.css"'));
   assert.ok(layout.indexOf('import "./design-tokens.css"') < layout.indexOf('import "./globals.css"'));
   assert.ok(layout.indexOf('import "./globals.css"') < layout.indexOf('import "./responsive.css"'));
   assert.ok(layout.indexOf('import "./responsive.css"') < layout.indexOf('import "./typography.css"'));
-  assert.match(layout, /href="\/fonts\/be-vietnam-pro-variable\.woff2"/u);
-  assert.match(layout, /as="font"/u);
-  assert.match(layout, /type="font\/woff2"/u);
-  assert.match(layout, /crossOrigin="anonymous"/u);
-  assert.match(tokens, /font-family:\s*"Be Vietnam Pro"/u);
-  assert.doesNotMatch(layout + tokens, /Roboto|fonts\.googleapis|fonts\.gstatic/iu);
+  assert.match(tokens, /--font-sans:\s*"Open Sans Variable"/u);
+  assert.match(tokens, /--font-display:\s*"Barlow"/u);
+  assert.match(tokens, /--font-numeric:\s*var\(--font-display\)/u);
+  assert.doesNotMatch(layout + tokens, /Be Vietnam Pro|Roboto|fonts\.googleapis|fonts\.gstatic/iu);
 });
 
 test("the typography layer exposes the approved semantic scale", async () => {
   const fixture = await loadPro7CssFixture({
     width: 375,
-    body: '<main><h1>Đội hình chính</h1><form class="match-form"><input /></form></main>',
+    body: '<main><h1>Đội hình chính</h1><strong class="numeric">123</strong><form class="match-form"><input /></form></main>',
   });
   try {
     const root = fixture.window.getComputedStyle(fixture.document.documentElement);
-    assert.match(fixture.window.getComputedStyle(fixture.document.body).fontFamily, /Be Vietnam Pro/u);
+    assert.match(fixture.window.getComputedStyle(fixture.document.body).fontFamily, /Open Sans Variable/u);
+    assert.match(fixture.window.getComputedStyle(fixture.document.querySelector("h1")!).fontFamily, /Barlow/u);
+    assert.match(fixture.window.getComputedStyle(fixture.document.querySelector(".numeric")!).fontFamily, /Barlow/u);
     assert.equal(root.getPropertyValue("--type-caption").trim(), "12px");
     assert.equal(root.getPropertyValue("--type-input").trim(), "16px");
     assert.equal(root.getPropertyValue("--weight-extrabold").trim(), "800");
@@ -56,7 +67,8 @@ test("form controls inherit the product font and phone inputs remain 16px", asyn
   assert.match(css, /button,\s*input,\s*select,\s*textarea[\s\S]*font:\s*inherit/iu);
   assert.match(css, /@media\s*\(max-width:\s*767px\)[\s\S]*--type-input:\s*16px/iu);
   assert.match(css, /input,\s*select,\s*textarea[\s\S]*font-size:\s*var\(--type-input\)/iu);
-  assert.equal((await stat(fontPath)).isFile(), true);
+  assert.equal((await stat(openSansFontPath)).isFile(), true);
+  assert.equal((await stat(barlowFontPath)).isFile(), true);
 
   const browserWindow = new Window();
   browserWindow.happyDOM.setViewport({ width: 375, height: 812 });

@@ -28,7 +28,7 @@ h3,
 h4,
 h5,
 h6 {
-  font-family: var(--font-sans);
+  font-family: var(--font-display);
   font-weight: var(--weight-bold);
   line-height: var(--leading-heading);
   letter-spacing: var(--tracking-tight);
@@ -43,6 +43,12 @@ h6 {
 [data-numeric="true"] {
   font-family: var(--font-numeric);
   font-variant-numeric: tabular-nums;
+}
+
+.logo,
+.login-brand strong,
+.account-profile-brand strong {
+  font-family: var(--font-display);
 }
 
 /* Product shell, account controls, and authentication */

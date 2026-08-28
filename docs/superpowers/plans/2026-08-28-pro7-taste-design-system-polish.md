@@ -4,7 +4,7 @@
 
 **Goal:** Normalize PRO7 typography, colour, spacing, sizing, responsive layout, and interaction polish without changing routes, permissions, CRUD behaviour, or approved component order.
 
-**Architecture:** Introduce one token file loaded before the existing component CSS, restore the approved self-hosted Be Vietnam Pro font, make `responsive.css` authoritative for the three shell ranges, and migrate existing selectors to the shared tokens in bounded module groups. Each group begins with executable CSS/DOM contract regressions and ends with focused tests plus a reviewable commit.
+**Architecture:** Introduce one token file loaded before the existing component CSS, bundle self-hosted Open Sans as the primary font and Barlow as the secondary display font, make `responsive.css` authoritative for the three shell ranges, and migrate existing selectors to the shared tokens in bounded module groups. Each group begins with executable CSS/DOM contract regressions and ends with focused tests plus a reviewable commit.
 
 **Tech Stack:** React 19, Vinext/Next-compatible App Router, vanilla CSS, Node test runner, Happy DOM, Playwright through the in-app Browser.
 
@@ -14,7 +14,7 @@
 
 - Preserve every route, permission condition, server query, API payload, RPC call, mutation outcome, and real-data binding.
 - Preserve visible module order and action order; semantic wrappers, ARIA attributes, and presentational state classes are permitted.
-- Use only self-hosted `public/fonts/be-vietnam-pro-variable.woff2`; do not add a remote font request or new UI dependency.
+- Use only bundled Fontsource Open Sans/Barlow assets; do not add a remote font request. Open Sans owns body/control copy, while Barlow owns headings, branding, and numeric display.
 - Brand colours are off-black/black, white, neutral gray, and PRO7 red; remove neon green, electric cyan, and generic blue accents.
 - Phone is `0–767px`, tablet is `768–1023px`, and desktop is `1024px+`; narrower component breakpoints must not redefine the shell.
 - Minimum interactive target is 44×44 px; phone inputs and primary form actions are at least 48 px high and phone input text is 16 px.
@@ -22,6 +22,12 @@
 - Every production change starts with a focused failing test and is verified on localhost before completion.
 - Do not mutate Supabase, production data, local demo data, Auth, Storage, migrations, or Edge Functions.
 - Preserve the pre-existing untracked `supabase/.temp/` directory.
+
+> **Binding typography amendment (2026-08-28):** The user-approved Open Sans +
+> Barlow pairing supersedes the Be Vietnam Pro implementation details recorded
+> in Task 1. The Task 1 text remains as checkpoint history; all later tests,
+> tokens, bundled assets, and acceptance evidence must use Open Sans as primary
+> and Barlow as secondary.
 
 ---
 

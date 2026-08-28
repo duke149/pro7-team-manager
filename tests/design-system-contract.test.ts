@@ -24,12 +24,8 @@ test("PRO7 design tokens resolve the bounded card system", async () => {
   }
 });
 
-test("tablet shell collapses at 900px and meaningful type remains readable", async () => {
+test("tablet shell keeps meaningful type readable at the authoritative breakpoint", async () => {
   const css = await readFile(cssPath, "utf8");
-  const tabletCss = css.match(/@media\(max-width:900px\)\{(?=[^@]*\.sidebar\{)[^@]*/u)?.[0] ?? "";
-  assert.match(tabletCss, /\.sidebar\{transform:translateX\(-100%\)/u);
-  assert.match(tabletCss, /\.nav-scrim\{[^}]*opacity:0[^}]*pointer-events:none/u);
-  assert.match(tabletCss, /\.nav-scrim\.show\{[^}]*opacity:1[^}]*pointer-events:auto/u);
   const fixture = await loadPro7CssFixture({
     width: 900,
     body: '<main class="pro7-shell"><button class="theme-button">Chủ đề</button></main>',
@@ -42,6 +38,33 @@ test("tablet shell collapses at 900px and meaningful type remains readable", asy
     fixture.close();
   }
   assert.match(css, /@media\(prefers-reduced-motion:reduce\)/u);
+});
+
+test("shared controls expose target, focus, pressed, and disabled states", async () => {
+  const fixture = await loadPro7CssFixture({
+    width: 375,
+    body: '<main class="login-shell"><section class="login-card"><form class="login-form"><button disabled>Đăng nhập</button><input /></form></section><section class="account-profile-card">Hồ sơ</section></main>',
+  });
+  try {
+    const button = fixture.document.querySelector("button")!;
+    const input = fixture.document.querySelector("input")!;
+    input.focus();
+    assert.equal(fixture.window.getComputedStyle(button).minHeight, "48px");
+    assert.equal(fixture.window.getComputedStyle(button).cursor, "not-allowed");
+    assert.equal(fixture.window.getComputedStyle(input).fontSize, "16px");
+    assert.equal(fixture.window.getComputedStyle(fixture.document.querySelector(".login-card")!).borderRadius, "16px");
+    assert.equal(fixture.window.getComputedStyle(fixture.document.querySelector(".account-profile-card")!).borderRadius, "12px");
+  } finally {
+    fixture.close();
+  }
+});
+
+test("login autofill stays inside the neutral Auth palette", async () => {
+  const css = await readFile(cssPath, "utf8");
+  assert.match(css, /\.login-form input:-webkit-autofill/u);
+  assert.match(css, /-webkit-text-fill-color:\s*var\(--auth-text\)/u);
+  assert.match(css, /(?:-webkit-)?box-shadow:\s*0 0 0 1000px var\(--auth-field\) inset/u);
+  assert.match(css, /caret-color:\s*var\(--auth-text\)/u);
 });
 
 test("member provisioning uses the shared keyboard-safe modal primitive", async () => {

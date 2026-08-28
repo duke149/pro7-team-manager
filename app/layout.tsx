@@ -1,4 +1,9 @@
 import type { Metadata } from "next";
+import "@fontsource-variable/open-sans/wght.css";
+import "@fontsource-variable/open-sans/wght-italic.css";
+import "@fontsource/barlow/600.css";
+import "@fontsource/barlow/700.css";
+import "@fontsource/barlow/800.css";
 import "./design-tokens.css";
 import "./globals.css";
 import "./responsive.css";
@@ -18,15 +23,6 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="vi">
-      <head>
-        <link
-          rel="preload"
-          href="/fonts/be-vietnam-pro-variable.woff2"
-          as="font"
-          type="font/woff2"
-          crossOrigin="anonymous"
-        />
-      </head>
       <body>{children}</body>
     </html>
   );

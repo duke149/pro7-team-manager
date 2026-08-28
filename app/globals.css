@@ -1082,3 +1082,50 @@
 
 /* Shared geometry supplied by the PRO7 token layer. */
 .card,.stat-card,.player-card,.add-player-card,.pitch-card{border-radius:var(--radius-card)}
+
+/* Shared Auth/Profile interaction and surface contract. */
+:is(button,a,input,select,textarea):focus-visible{outline:3px solid var(--color-focus);outline-offset:2px}
+:is(.primary-button,.soft-button,.dark-ghost,.text-button,.login-form button):active:not(:disabled){transform:translateY(1px)}
+:is(button,input,select,textarea):disabled{cursor:not-allowed;opacity:.62}
+.login-form button:disabled,.logout-button:disabled{cursor:not-allowed}
+
+.login-shell{
+  --auth-canvas:var(--color-canvas);
+  --auth-surface:var(--color-surface);
+  --auth-field:var(--color-surface);
+  --auth-text:var(--color-text);
+  --auth-muted:var(--color-text-muted);
+  --auth-border:var(--color-border);
+  background:var(--auth-canvas);
+  color:var(--auth-text);
+}
+.login-card{border-color:var(--auth-border);border-top-color:var(--color-accent);border-radius:var(--radius-dialog);background:var(--auth-surface);box-shadow:var(--shadow-overlay)}
+.login-brand small,.login-copy span,.login-footnote{color:var(--auth-muted)}
+.login-form input{border-color:var(--auth-border);border-radius:var(--radius-control);background:var(--auth-field);color:var(--auth-text)}
+.login-form input:-webkit-autofill,
+.login-form input:-webkit-autofill:hover,
+.login-form input:-webkit-autofill:focus{
+  -webkit-text-fill-color:var(--auth-text);
+  -webkit-box-shadow:0 0 0 1000px var(--auth-field) inset;
+  box-shadow:0 0 0 1000px var(--auth-field) inset;
+  caret-color:var(--auth-text);
+  transition:background-color 9999s ease-out 0s;
+}
+.login-form button{min-height:48px;border-radius:var(--radius-control)}
+.login-success{border-left-color:var(--color-accent);border-radius:var(--radius-control);background:var(--brand-red-50)}
+@media(prefers-color-scheme:dark){
+  .login-shell{--auth-canvas:#111113;--auth-surface:#1b1b1e;--auth-field:#242428;--auth-text:#f4f4f5;--auth-muted:#aaaab0;--auth-border:#38383d}
+}
+
+.account-profile-shell{
+  --profile-red:var(--color-accent);
+  --profile-red-dark:var(--color-accent-strong);
+  --profile-ink:var(--color-text);
+  --profile-muted:var(--color-text-muted);
+  --profile-line:var(--color-border);
+  background:var(--color-canvas);
+}
+.account-profile-card{border-color:var(--profile-line);border-radius:var(--radius-card);background:var(--color-surface);box-shadow:var(--shadow-card)}
+.account-profile-fields input,.account-position-fieldset span{border-radius:var(--radius-control)}
+.account-profile-shell.dark{--profile-ink:#f4f4f5;--profile-muted:#b1b1b7;--profile-line:#38383d;background:#101011}
+.modal{border-radius:var(--radius-dialog);box-shadow:var(--shadow-overlay)}

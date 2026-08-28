@@ -1,14 +1,7 @@
-@font-face {
-  font-family: "Be Vietnam Pro";
-  src: url("/fonts/be-vietnam-pro-variable.woff2") format("woff2-variations");
-  font-style: normal;
-  font-weight: 400 800;
-  font-display: swap;
-}
-
 :root {
-  --font-sans: "Be Vietnam Pro", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  --font-numeric: var(--font-sans);
+  --font-sans: "Open Sans Variable", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-display: "Barlow", var(--font-sans);
+  --font-numeric: var(--font-display);
 
   --type-caption: 12px;
   --type-label: 12px;

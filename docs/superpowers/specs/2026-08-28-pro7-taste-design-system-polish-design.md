@@ -32,12 +32,9 @@ backend behaviour.
   responsive behaviour.
 - Breakpoints include 390, 420, 520, 600, 700, 720, 760, 767, 900, 1023, and
   1100 px. The overlapping 760/767/900/1023 rules create cascade ambiguity.
-- The current typography layer loads Roboto even though the previously approved
-  typography specification and checked-in asset define Be Vietnam Pro as the
-  Vietnamese-first PRO7 family.
-- `public/fonts/be-vietnam-pro-variable.woff2` and its OFL license already exist.
-  The approved asset SHA-256 is
-  `7eac7000f8156452c799ba630a0b71153a9cd5001a95c56dd15468670e247d0a`.
+- The initial typography audit found competing Roboto and Be Vietnam Pro
+  sources. The user subsequently approved Open Sans as the primary family and
+  Barlow as the secondary display family; this later instruction is binding.
 - The QA extension reintroduces `--neon-green`, `--electric-cyan`, blue Zalo,
   green success, yellow-card, and cyan substitution treatments. These colours
   do not belong to the approved PRO7 brand palette.
@@ -72,7 +69,8 @@ Use **systematic polish**:
 
 1. Preserve existing page composition, route markup, module order, and action
    order.
-2. Restore Be Vietnam Pro and the already approved semantic type scale.
+2. Use self-hosted Open Sans for body/control copy and Barlow for headings,
+   branding, and numeric display while retaining the approved semantic scale.
 3. Establish one token source for colour, spacing, radii, shadows, control
    sizing, and z-index.
 4. Remove off-brand neon/cyan/blue presentation while retaining text and icon
@@ -89,11 +87,13 @@ the current cascade conflicts worse.
 
 ### Typography
 
-- Product family: `"Be Vietnam Pro"`, self-hosted from the checked-in variable
-  WOFF2 asset, weights 400–800, `font-display: swap`.
+- Primary family: `"Open Sans Variable"`, self-hosted from the pinned Fontsource
+  package, weights 300–800, `font-display: swap`.
+- Secondary family: `"Barlow"`, self-hosted from the pinned Fontsource package
+  at weights 600, 700, and 800 for headings, branding, and numeric display.
 - Fallback: `system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
   sans-serif`.
-- Numeric content uses the same family with tabular numerals.
+- Numeric content uses Barlow with tabular numerals.
 - Keep the approved semantic scale: caption 12, label 12/13, control 13/14,
   body-small 13/14, body 14/15, input 14/16, title-small 18, title-medium
   22/20, title-large 28/24, and display 32/28 px.
@@ -308,8 +308,8 @@ specific selectors.
 
 - Token contract proves one primitive/semantic source and rejects neon/cyan/blue
   QA variables.
-- Typography contract proves the checked-in Be Vietnam Pro asset, preload,
-  fallback, 400–800 range, tabular numeric mapping, and minimum sizes.
+- Typography contract proves bundled Open Sans/Barlow assets and licenses,
+  primary/secondary token mapping, tabular numeric mapping, and minimum sizes.
 - Responsive contract proves the phone/tablet/desktop shell boundaries,
   44×44 px controls, phone 16 px inputs, and flexible four/five-item bottom nav.
 - CSS contract proves global pseudo-element box sizing, bounded radius/shadow
@@ -351,8 +351,9 @@ an isolated test fixture.
 
 ## Acceptance Criteria
 
-1. The complete application uses self-hosted Be Vietnam Pro with full
-   Vietnamese rendering and no remote font dependency.
+1. The complete application uses self-hosted Open Sans as the primary family
+   and Barlow as the secondary family, both with Vietnamese rendering and no
+   remote font dependency.
 2. The visible design uses only black/off-black, white, neutral gray, and PRO7
    red as brand colours; no neon green, electric cyan, or generic blue accent
    remains.
