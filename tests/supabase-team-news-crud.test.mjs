@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-const migration = new URL("../supabase/migrations/20260828034001_manage_team_news.sql", import.meta.url);
+const migration = new URL("../supabase/migrations/20260828085808_manage_team_news.sql", import.meta.url);
 
 test("Team News migration adds archive lifecycle and one hardened mutation RPC", async () => {
   const sql = await readFile(migration, "utf8");

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-const migration = new URL("../supabase/migrations/20260828031423_update_team_settings_section.sql", import.meta.url);
+const migration = new URL("../supabase/migrations/20260828085801_update_team_settings_section.sql", import.meta.url);
 
 test("team settings section RPC is narrow, stale-safe, and least-privileged", async () => {
   const sql = await readFile(migration, "utf8");

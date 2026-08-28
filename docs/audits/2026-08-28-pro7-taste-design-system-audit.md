@@ -10,7 +10,7 @@ Theme: đen, trắng, đỏ; không dùng neon.
 - Nhánh kiểm tra: `codex/qa-backend-crud-completion`.
 - Baseline trước đợt Taste: commit `c186f6a`.
 - Font production được pin và self-host bằng `@fontsource-variable/open-sans@5.3.0` và `@fontsource/barlow@5.3.0`.
-- Đợt Taste ban đầu không thay đổi schema, dữ liệu Supabase, quyền RLS/RPC hoặc nghiệp vụ CRUD. Follow-up Matches bên dưới bổ sung một migration local-only, chưa áp dụng lên Supabase remote.
+- Đợt Taste ban đầu không thay đổi schema, dữ liệu Supabase, quyền RLS/RPC hoặc nghiệp vụ CRUD. Follow-up Matches bên dưới bổ sung migration RPC được kiểm tra local trước khi áp dụng production.
 - `supabase/.temp/` được giữ nguyên, không stage hay chỉnh sửa.
 
 ## Before/after source findings
@@ -51,7 +51,7 @@ Checklist được áp lại cho lịch sử trận, chi tiết trận và trìn
 - Diễn biến, thống kê cầu thủ và chỉ số đội giữ workflow snapshot atomic hiện tại, đồng thời có thêm/xóa rõ ràng; “Khôi phục” và “Lưu phân tích” chỉ bật khi nội dung thực sự thay đổi.
 - Không hard-delete bản ghi trận. Migration chỉ cho phép sửa metadata/tỉ số của trận `completed`; quyền `matches.manage`, audit, stale-token và ACL authenticated-only được giữ nguyên.
 
-TDD follow-up: focused 37/37 đạt; PostgreSQL 17 live 2/2 đạt (atomic revision, stale rejection, Member denial, audit và ACL); production build/render 7/7 đạt; ESLint phạm vi thay đổi và `git diff --check` đạt. Migration local `20260828083459_revise_completed_matches.sql` có SHA-256 `e9585513ef7dc5c18e60c88c3828cfd74cecc066fa5f7e1330300d1a463bc4d3` và chưa được apply remote.
+TDD follow-up: focused 37/37 đạt; PostgreSQL 17 live 2/2 đạt (atomic revision, stale rejection, Member denial, audit và ACL); production build/render 7/7 đạt; ESLint phạm vi thay đổi và `git diff --check` đạt. Migration production `20260828085817_revise_completed_matches.sql` có SHA-256 `e9585513ef7dc5c18e60c88c3828cfd74cecc066fa5f7e1330300d1a463bc4d3`; post-apply xác nhận RPC/ACL đúng và không làm đổi số lượng Settings, News hoặc Matches.
 
 Kiểm tra browser xác thực của màn chi tiết trận vẫn bị policy first-login chuyển đến `/account/change-password`. Không bypass hoặc tự đổi mật khẩu, vì vậy follow-up này chỉ tuyên bố bằng chứng SSR/hydration, mounted interaction, CSS contract, build và PostgreSQL local; chưa tuyên bố trực quan Admin/Member sau migration remote.
 
