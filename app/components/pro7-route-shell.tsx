@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 
 import type { TeamAccessContext } from "../../lib/teams/context";
 import type { TeamNotification } from "../../lib/notifications/model";
@@ -26,6 +26,7 @@ export function Pro7RouteShell({
   notifications?: readonly TeamNotification[];
 }) {
   const pathname = usePathname() || `/teams/${encodeURIComponent(team.slug)}/overview`;
+  const router = useRouter();
   const [theme, setTheme] = useState<Theme>(INITIAL_THEME);
   const currentTheme = useRef<Theme>(INITIAL_THEME);
   const themeResolutionTimer = useRef<number | null>(null);
@@ -75,6 +76,7 @@ export function Pro7RouteShell({
             setTheme(nextTheme);
           }}
           onOpenMenu={() => setMenuOpen(true)}
+          onRefreshNotifications={() => router.refresh()}
         />
         <div className="page-content">{children}</div>
       </div>

@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import { AVATAR_BUCKET, isCanonicalOwnAvatarPath } from "../account/avatar";
 import type { Database } from "../supabase/database.types";
 import type { SquadFilters } from "./filters";
 import type {
@@ -23,7 +24,12 @@ const PROFILE_SUMMARY_SELECT = "id,display_name,avatar_path,avatar_url";
 const PROFILE_DETAIL_SELECT =
   "id,display_name,avatar_path,avatar_url,phone,date_of_birth,height_cm,weight_kg,preferred_positions";
 
-type QueryDependencies = { supabase?: SupabaseClient<Database> };
+type QueryDependencies = {
+  supabase?: SupabaseClient<Database>;
+  signAvatarPaths?: (
+    paths: readonly string[],
+  ) => Promise<Readonly<Record<string, string | null>> | null>;
+};
 
 type MembershipRow = {
   user_id: string;
@@ -204,12 +210,13 @@ function sortPlayers(
 function mapSummary(
   membership: MembershipRow,
   profile: SummaryProfileRow,
+  signedAvatarUrl: string | null = null,
 ): SquadPlayerSummary {
   return Object.freeze({
     userId: membership.user_id,
     displayName: profile.display_name,
     avatarPath: profile.avatar_path,
-    avatarUrl: profile.avatar_url,
+    avatarUrl: signedAvatarUrl ?? profile.avatar_url,
     membershipStatus: membership.status,
     role: membership.role
       ? Object.freeze({
@@ -230,6 +237,40 @@ function mapSummary(
     playerStatus: membership.player.player_status,
     joinDate: membership.player.join_date,
   });
+}
+
+async function signedAvatarUrls(
+  client: SupabaseClient<Database>,
+  profiles: readonly SummaryProfileRow[],
+  dependencies: QueryDependencies,
+): Promise<Readonly<Record<string, string | null>>> {
+  const paths = [...new Set(profiles.flatMap((profile) => (
+    profile.avatar_path && isCanonicalOwnAvatarPath(profile.avatar_path, profile.id)
+      ? [profile.avatar_path]
+      : []
+  )))];
+  if (paths.length === 0) return Object.freeze({});
+
+  try {
+    if (dependencies.signAvatarPaths) {
+      return Object.freeze(await dependencies.signAvatarPaths(paths) ?? {});
+    }
+    const result = await client.storage.from(AVATAR_BUCKET).createSignedUrls(paths, 300);
+    if (result.error || !Array.isArray(result.data)) return Object.freeze({});
+    const urls: Record<string, string | null> = {};
+    for (const entry of result.data) {
+      if (
+        typeof entry.path === "string" &&
+        paths.includes(entry.path) &&
+        (entry.signedUrl === null || typeof entry.signedUrl === "string")
+      ) {
+        urls[entry.path] = entry.signedUrl;
+      }
+    }
+    return Object.freeze(urls);
+  } catch {
+    return Object.freeze({});
+  }
 }
 
 async function resolveClient(
@@ -369,7 +410,7 @@ async function loadMembershipRows(
     }
     if (result.data.length === 0) return rows;
 
-    for (const row of result.data) {
+    for (const row of result.data as unknown as MembershipRow[]) {
       if (cursor !== null && row.user_id <= cursor) return null;
       rows.push(row);
       cursor = row.user_id;
@@ -460,10 +501,15 @@ export async function listSquadPlayers(
     );
     if (!profiles) return { ok: false, error: "server" };
 
+    const avatarUrls = await signedAvatarUrls(client, profiles, dependencies);
     const profileById = new Map(profiles.map((profile) => [profile.id, profile]));
     const players = memberships.flatMap((membership) => {
       const profile = profileById.get(membership.user_id);
-      return profile ? [mapSummary(membership, profile)] : [];
+      return profile ? [mapSummary(
+        membership,
+        profile,
+        profile.avatar_path ? avatarUrls[profile.avatar_path] ?? null : null,
+      )] : [];
     });
     return { ok: true, players: sortPlayers(players, filters).slice(0, PAGE_SIZE) };
   } catch {
@@ -517,7 +563,14 @@ export async function getSquadPlayer(
       adminNotes = notes[0].admin_notes;
     }
 
-    const summary = mapSummary(membershipResult.data, profileResult.data);
+    const avatarUrls = await signedAvatarUrls(client, [profileResult.data], dependencies);
+    const summary = mapSummary(
+      membershipResult.data,
+      profileResult.data,
+      profileResult.data.avatar_path
+        ? avatarUrls[profileResult.data.avatar_path] ?? null
+        : null,
+    );
     const player: SquadPlayerDetail = Object.freeze({
       ...summary,
       phone: profileResult.data.phone,

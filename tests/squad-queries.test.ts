@@ -360,6 +360,43 @@ test("listSquadPlayers selects only safe columns, maps rows, and orders equal pr
   ]);
 });
 
+test("listSquadPlayers signs canonical private avatar paths for roster rendering", async () => {
+  const player = rosterFixture(1, {
+    profile: {
+      avatar_path: "00000000-0000-4000-8000-000000000001/avatar.jpg",
+      avatar_url: null,
+    },
+  });
+  const fixture = clientDouble({
+    memberships: [response([player.membership])],
+    profiles: [response([player.profile])],
+  });
+  const signedCalls: readonly string[][] = [];
+  const paths: string[][] = signedCalls as string[][];
+
+  const result = await listSquadPlayers(
+    "team-1",
+    parseSquadFilters(new URLSearchParams()),
+    {
+      supabase: fixture.client,
+      signAvatarPaths: async (requested: readonly string[]) => {
+        paths.push([...requested]);
+        return {
+          "00000000-0000-4000-8000-000000000001/avatar.jpg":
+            "https://signed.example/avatar.jpg?token=short-lived",
+        };
+      },
+    } as never,
+  );
+
+  assert.equal(result.ok, true);
+  assert.equal(
+    result.ok ? result.players[0]?.avatarUrl : null,
+    "https://signed.example/avatar.jpg?token=short-lived",
+  );
+  assert.deepEqual(paths, [["00000000-0000-4000-8000-000000000001/avatar.jpg"]]);
+});
+
 test("listSquadPlayers applies inactive membership separately from active player status and position", async () => {
   const inactive = clientDouble({ memberships: [response(playerRows({ status: "inactive" }))] });
   assert.equal(

@@ -18,6 +18,7 @@ export type Pro7RouteHeaderProps = {
   theme: Theme;
   onThemeChange: (theme: Theme) => void;
   onOpenMenu: () => void;
+  onRefreshNotifications?: () => void;
 };
 
 function isTeamRoute(pathname: string, slug: string, route: string) {
@@ -44,6 +45,7 @@ export function Pro7RouteHeader({
   theme,
   onThemeChange,
   onOpenMenu,
+  onRefreshNotifications,
 }: Pro7RouteHeaderProps) {
   const onSquad = isTeamRoute(pathname, team.slug, "squad");
   const onFunds = isTeamRoute(pathname, team.slug, "funds");
@@ -78,7 +80,7 @@ export function Pro7RouteHeader({
         >
           {theme === "light" ? <Moon size={19} /> : <Sun size={19} />}
         </button>
-        <NotificationCenter initialNotifications={notifications} />
+        <NotificationCenter initialNotifications={notifications} requestRefresh={onRefreshNotifications} />
         {contextualAction && <a className="primary-button header-cta" href={contextualAction.href}><Plus size={18} />{contextualAction.label}</a>}
         <AccountMenu
           email={email}

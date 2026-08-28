@@ -131,7 +131,7 @@ test.before(async () => {
       },
       load(id) {
         return id === "\0squad-page-navigation"
-          ? "export function notFound() { return 'SAFE_DENIAL'; }"
+          ? "export function notFound() { return 'SAFE_DENIAL'; } export function useRouter() { return { refresh() {} }; }"
           : null;
       },
     }],

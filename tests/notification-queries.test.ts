@@ -28,7 +28,7 @@ test("notifications are bounded, own-user/team scoped, strictly parsed, and coun
   assert.equal(result.ok ? result.unreadCount : -1, 1);
   assert.equal(result.ok ? result.notifications[0]?.targetPath : null, ROW.target_path);
   assert.deepEqual(query.calls, [
-    { method: "select", args: ["id,team_id,user_id,type,source_entity,source_id,title,body,target_path,read_at,created_at"] },
+    { method: "select", args: ["id,team_id,user_id,type,source_entity,source_id,title,body,read_at,created_at"] },
     { method: "eq", args: ["team_id", TEAM] },
     { method: "eq", args: ["user_id", USER] },
     { method: "order", args: ["created_at", { ascending: false }] },
@@ -37,17 +37,33 @@ test("notifications are bounded, own-user/team scoped, strictly parsed, and coun
   ]);
 });
 
-test("notifications fail closed on overflow, malformed rows, duplicate IDs, and cross-team paths", async () => {
+test("notifications fail closed on overflow, malformed rows, and duplicate IDs", async () => {
   const cases = [
     Array.from({ length: 21 }, (_, index) => ({ ...ROW, id: `00000000-0000-4000-8000-${(index + 10).toString(16).padStart(12, "0")}` })),
     [{ ...ROW, id: "bad" }],
     [ROW, ROW],
-    [{ ...ROW, target_path: `/teams/other-team/matches/${MATCH}` }],
   ];
   for (const data of cases) {
     const query = new QueryDouble({ data, error: null });
     assert.deepEqual(await listTeamNotifications(TEAM, USER, "pro7-fc", { from: () => query } as never), { ok: false, error: "server" });
   }
+});
+
+test("notifications derive the current team route instead of trusting a stale stored slug", async () => {
+  const query = new QueryDouble({
+    data: [{ ...ROW, target_path: `/teams/pro7-fc/matches/${MATCH}` }],
+    error: null,
+  });
+
+  const result = await listTeamNotifications(TEAM, USER, "nat-fc", {
+    from: () => query,
+  } as never);
+
+  assert.equal(result.ok, true);
+  assert.equal(
+    result.ok ? result.notifications[0]?.targetPath : null,
+    `/teams/nat-fc/matches/${MATCH}`,
+  );
 });
 
 test("the production notification query awaits the async server client factory", async () => {

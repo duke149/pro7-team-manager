@@ -8,7 +8,7 @@ import type { TeamNotification } from "../lib/notifications/model";
 
 const ID = "00000000-0000-4000-8000-000000000201";
 const notifications: TeamNotification[] = [{ id: ID, type: "match_invitation", sourceId: "00000000-0000-4000-8000-000000000101", title: "Mời tham gia trận", body: "FC NÁT vs FC Nat", targetPath: "/teams/nat-fc/matches/00000000-0000-4000-8000-000000000101", readAt: null, createdAt: "2026-10-10T08:00:00.000Z" }];
-let NotificationCenter: (props: { initialNotifications: readonly TeamNotification[]; markReadTimeoutMs?: number }) => React.ReactNode; let act: (callback: () => void | Promise<void>) => Promise<void>; let createElement: typeof import("react").createElement; let createRoot: (container: Element) => { render(node: React.ReactNode): void; unmount(): void }; let browserWindow: Window;
+let NotificationCenter: (props: { initialNotifications: readonly TeamNotification[]; markReadTimeoutMs?: number; refreshIntervalMs?: number; requestRefresh?: () => void }) => React.ReactNode; let act: (callback: () => void | Promise<void>) => Promise<void>; let createElement: typeof import("react").createElement; let createRoot: (container: Element) => { render(node: React.ReactNode): void; unmount(): void }; let browserWindow: Window;
 const initialHandles = new Set(process._getActiveHandles());
 
 test.before(async () => {
@@ -21,7 +21,18 @@ test.before(async () => {
 });
 test.after(async () => { await browserWindow.happyDOM.abort(); browserWindow.close(); for (const handle of process._getActiveHandles()) if (!initialHandles.has(handle) && handle.constructor.name === "MessagePort") (handle as MessagePort).close(); });
 
-async function mounted(markReadTimeoutMs?: number) { browserWindow.document.body.innerHTML = '<div id="root"></div>'; const container = browserWindow.document.getElementById("root"); assert.ok(container); const root = createRoot(container); await act(async () => root.render(createElement(NotificationCenter, { initialNotifications: notifications, markReadTimeoutMs }))); return { container, root }; }
+async function mounted(markReadTimeoutMs?: number, refreshIntervalMs?: number, requestRefresh?: () => void) { browserWindow.document.body.innerHTML = '<div id="root"></div>'; const container = browserWindow.document.getElementById("root"); assert.ok(container); const root = createRoot(container); await act(async () => root.render(createElement(NotificationCenter, { initialNotifications: notifications, markReadTimeoutMs, refreshIntervalMs, requestRefresh }))); return { container, root }; }
+
+test("notification center refreshes server data while visible and when opened", async () => {
+  let refreshes = 0;
+  const view = await mounted(undefined, 5, () => { refreshes += 1; });
+  await act(async () => { await new Promise((resolvePromise) => setTimeout(resolvePromise, 14)); });
+  const afterTimer = refreshes;
+  assert.ok(afterTimer >= 1);
+  await act(async () => view.container.querySelector<HTMLButtonElement>('button[aria-label="Thông báo"]')?.click());
+  assert.ok(refreshes > afterTimer);
+  await act(async () => view.root.unmount());
+});
 
 test("notification read state adopts only an authoritative timestamp", async () => {
   let attempt = 0; const calls: unknown[] = [];
