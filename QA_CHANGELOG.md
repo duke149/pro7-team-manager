@@ -1,8 +1,8 @@
 # QA HANDOVER & COMPREHENSIVE CHANGELOG
 
-> **Target Audience**: Codex / QA Engineers / Peer Reviewers  
-> **Repository**: `pro7-team-manager`  
-> **Environment**: Next.js / Vinext, Vite 8, React 19, Supabase SSR  
+> **Target Audience**: Codex / QA Engineers / Peer Reviewers
+> **Repository**: `pro7-team-manager`
+> **Environment**: Next.js / Vinext, Vite 8, React 19, Supabase SSR
 > **Change Boundary**: Frontend, CSS, query, permission, and client interaction changes. No remote database migration was approved or applied by this branch.
 
 ---
@@ -156,3 +156,9 @@ npm run test:unit -- tests/tactics-mounted.test.ts
 6. **Kiểm tra Chế Độ Tối (Dark Mode)**:
    - Bấm nút biểu tượng Mặt trăng / Mặt trời ở góc trên bên phải.
    - Kiểm tra toàn bộ thẻ, nút bấm, viền và huy hiệu hiển thị tương phản sắc nét.
+
+## Security release blocker
+
+- A previously committed QA credential must be rotated before production release.
+- Removing it from the latest tree does not invalidate copies in Git history.
+- Rotation and any history rewrite require separate explicit authorization.

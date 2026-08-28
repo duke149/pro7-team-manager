@@ -293,11 +293,11 @@ Run:
 npm run test:unit
 npm test
 npx eslint tests/qa-security-contract.test.mjs tests/overview-page.test.ts app/teams/[slug]/overview/overview-view.tsx
-git diff --check origin/main...HEAD
+git diff --check origin/main
 git status --short
 ```
 
-Expected: unit/build/render tests pass; ESLint reports no errors in the changed JavaScript/TypeScript source files; diff check is clean; only intentional work is present.
+Expected: unit/build/render tests pass; ESLint reports no errors in the changed JavaScript/TypeScript source files; the worktree-to-`origin/main` diff check is clean; only intentional work is present. After committing, rerun `git diff --check origin/main...HEAD`.
 
 - [ ] **Step 4: Review the Slice 0 diff**
 

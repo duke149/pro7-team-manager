@@ -196,7 +196,7 @@ function Statistics({ data, teamSlug, canReadMatches }: { data: OverviewData; te
     </article>
     {canReadMatches
       ? <a className="stat-card stat-card-interactive" href={matchesHref} title="Xem lịch sử và thông số các trận đã đấu">{recentContent}</a>
-      : <article className="stat-card stat-card-interactive overview-disabled-control" aria-disabled="true">{recentContent}</article>}
+      : <article className="stat-card stat-card-interactive overview-disabled-control">{recentContent}</article>}
     <article className="stat-card">
       <div className="stat-icon"><Target /></div>
       <span>VUA PHÁ LƯỚI</span>
