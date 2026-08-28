@@ -12,7 +12,7 @@ const USER_ID = "00000000-0000-4000-8000-000000000010";
 const DETAIL: MatchDetailModel = {
   match: { id: MATCH_ID, opponent: "Metro City", startsAt: "2026-10-19T12:30:00.000Z", venue: "Riverside", isHome: true, rsvpDeadline: "2026-10-18T12:30:00.000Z", status: "scheduled", teamScore: null, opponentScore: null, updatedAt: "2026-10-01T00:00:00.000Z", attendance: { invited: 1, available: 0, unavailable: 0, pending: 1 }, ownAttendance: { status: "pending", updatedAt: "2026-10-02T00:00:00.000Z" } },
   attendance: [{ userId: USER_ID, displayName: "Nguyễn An", status: "pending", note: null, respondedAt: null, updatedAt: "2026-10-02T00:00:00.000Z" }],
-  events: [], playerStats: [], teamMetrics: null, inviteCandidates: [],
+  events: [], playerStats: [], teamMetrics: null, inviteCandidates: [], analysisCandidates: [],
 };
 
 let MatchDetail: (props: { slug: string; teamName: string; userId: string; detail: MatchDetailModel; canManage: boolean; canRespond: boolean; now?: string }) => React.ReactNode;

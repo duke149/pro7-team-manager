@@ -835,3 +835,199 @@
 .pro7-shell.dark .history-action-btn.primary:hover {
   background: #d9d9dc;
 }
+
+/* Completed-match analysis editor — extends the existing PRO7 card system. */
+.match-analysis-editor {
+  padding: 22px;
+}
+.analysis-editor-head,
+.analysis-editor-panel-head,
+.analysis-editor-actions,
+.analysis-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.analysis-editor-head,
+.analysis-editor-panel-head {
+  justify-content: space-between;
+}
+.analysis-editor-copy {
+  margin: 0 0 18px;
+}
+.match-analysis-editor button {
+  min-height: 44px;
+}
+.analysis-editor-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(320px, .8fr);
+  gap: 16px;
+}
+.analysis-editor-panel {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 16px;
+  background: var(--white);
+}
+.analysis-editor-panel-head {
+  margin-bottom: 12px;
+}
+.analysis-editor-panel-head span {
+  color: var(--red);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: .08em;
+}
+.analysis-editor-panel-head h3 {
+  margin: 4px 0 0;
+  font-size: 17px;
+}
+.analysis-event-list,
+.analysis-stat-list {
+  display: grid;
+  gap: 10px;
+}
+.analysis-event-row,
+.analysis-stat-row,
+.analysis-metric-grid fieldset {
+  margin: 0;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 12px;
+  background: var(--paper);
+}
+.analysis-event-row legend,
+.analysis-stat-row legend,
+.analysis-metric-grid legend {
+  padding: 0 5px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+.analysis-event-fields {
+  display: grid;
+  grid-template-columns: 80px repeat(2, minmax(110px, 1fr));
+  gap: 10px;
+}
+.analysis-event-fields label,
+.analysis-stat-row label,
+.analysis-metric-grid label {
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+.analysis-event-fields input,
+.analysis-event-fields select,
+.analysis-stat-row input,
+.analysis-stat-row select,
+.analysis-metric-grid input {
+  width: 100%;
+  min-height: 44px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--white);
+  color: var(--ink);
+  padding: 0 10px;
+  font: inherit;
+  font-size: 14px;
+}
+.analysis-event-fields [aria-invalid="true"],
+.analysis-stat-row [aria-invalid="true"],
+.analysis-metric-grid [aria-invalid="true"] {
+  border-color: var(--red);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--red) 16%, transparent);
+}
+.analysis-note-field {
+  grid-column: 1 / -1;
+}
+.analysis-row-actions {
+  justify-content: flex-end;
+  margin-top: 8px;
+}
+.analysis-row-actions button,
+.analysis-remove-stat {
+  width: 44px;
+  min-width: 44px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--white);
+  color: var(--ink);
+}
+.analysis-row-actions button:last-child,
+.analysis-remove-stat {
+  color: var(--red);
+}
+.analysis-stat-row {
+  display: grid;
+  grid-template-columns: minmax(140px, 1.4fr) repeat(4, minmax(68px, .55fr)) auto 44px;
+  gap: 8px;
+  align-items: end;
+}
+.analysis-mvp-field {
+  min-height: 44px;
+  display: flex !important;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 7px !important;
+  color: var(--ink) !important;
+}
+.analysis-mvp-field input {
+  width: 18px;
+  min-height: 18px;
+}
+.analysis-metrics-panel {
+  margin-top: 16px;
+}
+.analysis-metric-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+.analysis-metric-grid fieldset {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.pro7-shell.dark .analysis-editor-panel,
+.pro7-shell.dark .analysis-event-row,
+.pro7-shell.dark .analysis-stat-row,
+.pro7-shell.dark .analysis-metric-grid fieldset {
+  background: var(--white);
+}
+@media (max-width: 1100px) {
+  .analysis-editor-grid,
+  .analysis-metric-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+  .analysis-stat-row {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+@media (max-width: 700px) {
+  .analysis-editor-grid,
+  .analysis-metric-grid,
+  .analysis-event-fields,
+  .analysis-stat-row {
+    grid-template-columns: 1fr;
+  }
+  .analysis-editor-head,
+  .analysis-editor-panel-head {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .analysis-editor-actions {
+    width: 100%;
+  }
+  .analysis-editor-actions button {
+    flex: 1;
+  }
+  .analysis-note-field {
+    grid-column: auto;
+  }
+  .analysis-metric-grid fieldset {
+    grid-template-columns: 1fr 1fr;
+  }
+}

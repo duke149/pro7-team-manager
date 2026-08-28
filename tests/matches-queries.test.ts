@@ -214,14 +214,14 @@ test("getMatchDetail explicitly loads authorized match analysis and active invit
       { method: "eq", arguments: ["match_id", MATCH_A.id] },
       { method: "order", arguments: ["minute", { ascending: true }] },
       { method: "order", arguments: ["sequence_no", { ascending: true }] },
-      { method: "limit", arguments: [300] },
+      { method: "limit", arguments: [201] },
     ] },
     { table: "match_player_stats", calls: [
       { method: "select", arguments: ["user_id,minutes_played,goals,assists,rating,is_mvp"] },
       { method: "eq", arguments: ["team_id", "team-1"] },
       { method: "eq", arguments: ["match_id", MATCH_A.id] },
       { method: "order", arguments: ["user_id", { ascending: true }] },
-      { method: "limit", arguments: [100] },
+      { method: "limit", arguments: [101] },
     ] },
     { table: "match_team_stats", calls: [
       { method: "select", arguments: ["schema_version,metrics"] },
@@ -311,4 +311,105 @@ test("getMatchDetail reports explicit overflow instead of truncating active invi
   });
   assert.deepEqual(await getMatchDetail("team-1", MATCH_A.id, USER_ID, true, { supabase: fixture.client }), { ok: false, error: "server" });
   assert.equal(fixture.calls.filter(({ table }) => table === "profiles").length, 0);
+});
+
+test("getMatchDetail builds Admin analysis candidates from active, invited, and historical event/stat identities", async () => {
+  const activeId = "00000000-0000-4000-8000-000000000020";
+  const historicalId = "00000000-0000-4000-8000-000000000021";
+  const scorerId = "00000000-0000-4000-8000-000000000022";
+  const assistId = "00000000-0000-4000-8000-000000000023";
+  const statOnlyId = "00000000-0000-4000-8000-000000000024";
+  const completed = {
+    ...MATCH_A,
+    status: "completed",
+    team_score: 2,
+    opponent_score: 1,
+    attendance: [{ user_id: historicalId, status: "available", note: null, responded_at: "2026-10-02T00:00:00+00:00", updated_at: "2026-10-02T00:00:00+00:00" }],
+  };
+  const fixture = clientDouble({
+    matches: [{ data: completed, error: null }],
+    match_events: [{ data: [{ id: "00000000-0000-4000-8000-000000000201", minute: 12, sequence_no: 1, event_type: "goal", team_side: "team", player_user_id: scorerId, secondary_user_id: assistId, note: null }], error: null }],
+    match_player_stats: [{ data: [{ user_id: statOnlyId, minutes_played: 90, goals: 0, assists: 0, rating: 7.5, is_mvp: false }], error: null }],
+    match_team_stats: [{ data: { schema_version: 1, metrics: {} }, error: null }],
+    memberships: [{ data: [{ user_id: activeId }], error: null }],
+    profiles: [{ data: [
+      { id: activeId, display_name: "An Active" },
+      { id: historicalId, display_name: "Cường Former" },
+      { id: scorerId, display_name: "Dũng Scorer" },
+      { id: assistId, display_name: "Bình Assist" },
+      { id: statOnlyId, display_name: "Em Stat" },
+    ], error: null }],
+  });
+  const result = await getMatchDetail("team-1", MATCH_A.id, USER_ID, true, { supabase: fixture.client });
+  assert.equal(result.ok, true);
+  if (!result.ok) return;
+  assert.deepEqual(result.detail.analysisCandidates, [
+    { userId: activeId, displayName: "An Active" },
+    { userId: assistId, displayName: "Bình Assist" },
+    { userId: historicalId, displayName: "Cường Former" },
+    { userId: scorerId, displayName: "Dũng Scorer" },
+    { userId: statOnlyId, displayName: "Em Stat" },
+  ]);
+  assert.deepEqual(result.detail.events[0], {
+    id: "00000000-0000-4000-8000-000000000201",
+    minute: 12,
+    sequenceNo: 1,
+    eventType: "goal",
+    teamSide: "team",
+    playerUserId: scorerId,
+    playerDisplayName: "Dũng Scorer",
+    secondaryUserId: assistId,
+    secondaryDisplayName: "Bình Assist",
+    note: null,
+  });
+});
+
+test("getMatchDetail resolves read-only historical names but omits analysis editor candidates for Members", async () => {
+  const historicalId = "00000000-0000-4000-8000-000000000021";
+  const scorerId = "00000000-0000-4000-8000-000000000022";
+  const completed = {
+    ...MATCH_A,
+    status: "completed",
+    team_score: 1,
+    opponent_score: 0,
+    attendance: [{ user_id: historicalId, status: "available", note: null, responded_at: "2026-10-02T00:00:00+00:00", updated_at: "2026-10-02T00:00:00+00:00" }],
+  };
+  const fixture = clientDouble({
+    matches: [{ data: completed, error: null }],
+    match_events: [{ data: [{ id: "00000000-0000-4000-8000-000000000201", minute: 12, sequence_no: 1, event_type: "goal", team_side: "team", player_user_id: scorerId, secondary_user_id: null, note: null }], error: null }],
+    match_player_stats: [{ data: [], error: null }],
+    match_team_stats: [{ data: null, error: null }],
+    profiles: [{ data: [
+      { id: historicalId, display_name: "Cường Former" },
+      { id: scorerId, display_name: "Dũng Scorer" },
+    ], error: null }],
+  });
+  const result = await getMatchDetail("team-1", MATCH_A.id, USER_ID, false, { supabase: fixture.client });
+  assert.equal(result.ok, true);
+  if (!result.ok) return;
+  assert.deepEqual(result.detail.analysisCandidates, []);
+  assert.equal(result.detail.events[0]?.playerDisplayName, "Dũng Scorer");
+  assert.equal(fixture.calls.some(({ table }) => table === "memberships"), false);
+});
+
+test("getMatchDetail fails closed on invalid metrics and analysis row overflow", async () => {
+  const validDetailMatch = {
+    ...MATCH_A,
+    attendance: MATCH_A.attendance.map((row) => ({ ...row, note: null, responded_at: row.status === "pending" ? null : "2026-10-02T00:00:00+00:00" })),
+  };
+  for (const value of [
+    { events: [], stats: [], metrics: { possession: { team: 60, opponent: 39 } } },
+    { events: [], stats: [], metrics: { shots: { team: -1, opponent: 2 } } },
+    { events: [], stats: [], metrics: { shots: { team: 2, opponent: 2 }, shots_on_target: { team: 3, opponent: 1 } } },
+    { events: Array.from({ length: 201 }, (_, index) => ({ id: `00000000-0000-4000-8000-${(index + 1).toString(16).padStart(12, "0")}`, minute: index % 121, sequence_no: Math.floor(index / 121) + 1, event_type: "note", team_side: "team", player_user_id: null, secondary_user_id: null, note: `Event ${index}` })), stats: [], metrics: null },
+    { events: [], stats: Array.from({ length: 101 }, (_, index) => ({ user_id: `00000000-0000-4000-8000-${(index + 1).toString(16).padStart(12, "0")}`, minutes_played: 1, goals: 0, assists: 0, rating: null, is_mvp: false })), metrics: null },
+  ]) {
+    const fixture = clientDouble({
+      matches: [{ data: validDetailMatch, error: null }],
+      match_events: [{ data: value.events, error: null }],
+      match_player_stats: [{ data: value.stats, error: null }],
+      match_team_stats: [{ data: value.metrics === null ? null : { schema_version: 1, metrics: value.metrics }, error: null }],
+    });
+    assert.deepEqual(await getMatchDetail("team-1", MATCH_A.id, USER_ID, false, { supabase: fixture.client }), { ok: false, error: "server" });
+  }
 });

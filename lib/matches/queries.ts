@@ -5,6 +5,7 @@ import type {
   AttendanceCounts,
   AttendanceStatus,
   InviteCandidate,
+  MatchAnalysisCandidate,
   MatchAttendance,
   MatchDetailResult,
   MatchEvent,
@@ -98,15 +99,41 @@ export async function listMatches(teamId: string, userId: string, dependencies: 
 type EventRow = { id: string; minute: number; sequence_no: number; event_type: MatchEvent["eventType"]; team_side: MatchEvent["teamSide"]; player_user_id: string | null; secondary_user_id: string | null; note: string | null };
 type PlayerStatRow = { user_id: string; minutes_played: number; goals: number; assists: number; rating: number | null; is_mvp: boolean };
 type ProfileRow = { id: string; display_name: string | null };
-function eventRow(value: unknown): value is EventRow { return isRecord(value) && isUuid(value.id) && smallint(value.minute, 0, 120) && smallint(value.sequence_no, 1, 100) && ["goal", "yellow_card", "red_card", "substitution", "note"].includes(String(value.event_type)) && (value.team_side === "team" || value.team_side === "opponent") && nullableUuid(value.player_user_id) && nullableUuid(value.secondary_user_id) && nullableBoundedText(value.note, 1, 500); }
+function eventRow(value: unknown): value is EventRow {
+  if (!isRecord(value) || !isUuid(value.id) || !smallint(value.minute, 0, 120) || !smallint(value.sequence_no, 1, 100)
+    || !["goal", "yellow_card", "red_card", "substitution", "note"].includes(String(value.event_type))
+    || (value.team_side !== "team" && value.team_side !== "opponent") || !nullableUuid(value.player_user_id)
+    || !nullableUuid(value.secondary_user_id) || !nullableBoundedText(value.note, 1, 500)) return false;
+  if (value.team_side === "opponent") {
+    return value.player_user_id === null && value.secondary_user_id === null
+      && (!(value.event_type === "substitution" || value.event_type === "note") || value.note !== null);
+  }
+  if (value.event_type === "goal") return value.player_user_id !== null && value.secondary_user_id !== value.player_user_id;
+  if (value.event_type === "yellow_card" || value.event_type === "red_card") return value.player_user_id !== null && value.secondary_user_id === null;
+  if (value.event_type === "substitution") return value.player_user_id !== null && value.secondary_user_id !== null && value.secondary_user_id !== value.player_user_id;
+  return value.secondary_user_id === null && value.note !== null;
+}
 function statRow(value: unknown): value is PlayerStatRow { return isRecord(value) && isUuid(value.user_id) && smallint(value.minutes_played, 0, 120) && smallint(value.goals, 0) && smallint(value.assists, 0) && (value.rating === null || (typeof value.rating === "number" && Number.isFinite(value.rating) && value.rating >= 0 && value.rating <= 10 && Math.abs(value.rating * 10 - Math.round(value.rating * 10)) < Number.EPSILON * 100)) && typeof value.is_mvp === "boolean"; }
 function profileRow(value: unknown): value is ProfileRow { return isRecord(value) && isUuid(value.id) && nullableString(value.display_name); }
-function metric(value: unknown): value is TeamMetric { return isRecord(value) && typeof value.team === "number" && Number.isFinite(value.team) && typeof value.opponent === "number" && Number.isFinite(value.opponent); }
+function metric(value: unknown, maximum: number): value is TeamMetric {
+  return isRecord(value) && Object.keys(value).length === 2 && "team" in value && "opponent" in value
+    && smallint(value.team, 0, maximum) && smallint(value.opponent, 0, maximum);
+}
 function metrics(value: unknown): MatchTeamMetrics | null {
   if (!isRecord(value)) return null;
   const allowed = ["possession", "shots", "shots_on_target", "corners"];
-  if (!Object.keys(value).every((key) => allowed.includes(key)) || !Object.values(value).every(metric)) return null;
-  return Object.freeze({ possession: value.possession as TeamMetric | undefined, shots: value.shots as TeamMetric | undefined, shotsOnTarget: value.shots_on_target as TeamMetric | undefined, corners: value.corners as TeamMetric | undefined });
+  if (!Object.keys(value).every((key) => allowed.includes(key))) return null;
+  if (value.possession !== undefined && !metric(value.possession, 100)) return null;
+  if (value.shots !== undefined && !metric(value.shots, 32767)) return null;
+  if (value.shots_on_target !== undefined && !metric(value.shots_on_target, 32767)) return null;
+  if (value.corners !== undefined && !metric(value.corners, 32767)) return null;
+  const possession = value.possession as TeamMetric | undefined;
+  const shots = value.shots as TeamMetric | undefined;
+  const shotsOnTarget = value.shots_on_target as TeamMetric | undefined;
+  const corners = value.corners as TeamMetric | undefined;
+  if (possession && possession.team + possession.opponent !== 100) return null;
+  if (shots && shotsOnTarget && (shotsOnTarget.team > shots.team || shotsOnTarget.opponent > shots.opponent)) return null;
+  return Object.freeze({ ...(possession ? { possession: Object.freeze(possession) } : {}), ...(shots ? { shots: Object.freeze(shots) } : {}), ...(shotsOnTarget ? { shotsOnTarget: Object.freeze(shotsOnTarget) } : {}), ...(corners ? { corners: Object.freeze(corners) } : {}) });
 }
 
 export async function getMatchDetail(teamId: string, matchId: string, userId: string, includeInviteCandidates: boolean, dependencies: Dependencies = {}): Promise<MatchDetailResult> {
@@ -118,11 +145,11 @@ export async function getMatchDetail(teamId: string, matchId: string, userId: st
     if (!matchRow(matchResult.data, true)) return { ok: false, error: "server" };
 
     const [eventsResult, statsResult, teamStatsResult] = await Promise.all([
-      supabase.from("match_events").select("id,minute,sequence_no,event_type,team_side,player_user_id,secondary_user_id,note").eq("team_id", teamId).eq("match_id", matchId).order("minute", { ascending: true }).order("sequence_no", { ascending: true }).limit(300),
-      supabase.from("match_player_stats").select("user_id,minutes_played,goals,assists,rating,is_mvp").eq("team_id", teamId).eq("match_id", matchId).order("user_id", { ascending: true }).limit(100),
+      supabase.from("match_events").select("id,minute,sequence_no,event_type,team_side,player_user_id,secondary_user_id,note").eq("team_id", teamId).eq("match_id", matchId).order("minute", { ascending: true }).order("sequence_no", { ascending: true }).limit(201),
+      supabase.from("match_player_stats").select("user_id,minutes_played,goals,assists,rating,is_mvp").eq("team_id", teamId).eq("match_id", matchId).order("user_id", { ascending: true }).limit(101),
       supabase.from("match_team_stats").select("schema_version,metrics").eq("team_id", teamId).eq("match_id", matchId).maybeSingle(),
     ]);
-    if (eventsResult.error || statsResult.error || teamStatsResult.error || !Array.isArray(eventsResult.data) || !eventsResult.data.every(eventRow) || !Array.isArray(statsResult.data) || !statsResult.data.every(statRow)) return { ok: false, error: "server" };
+    if (eventsResult.error || statsResult.error || teamStatsResult.error || !Array.isArray(eventsResult.data) || eventsResult.data.length > 200 || !eventsResult.data.every(eventRow) || !Array.isArray(statsResult.data) || statsResult.data.length > 100 || !statsResult.data.every(statRow)) return { ok: false, error: "server" };
     const eventRows = eventsResult.data as unknown as EventRow[];
     const statRows = statsResult.data as unknown as PlayerStatRow[];
     if (!unique(eventRows.map((row) => row.id)) || !unique(eventRows.map((row) => `${row.minute}:${row.sequence_no}`)) || !unique(statRows.map((row) => row.user_id)) || statRows.filter((row) => row.is_mvp).length > 1) return { ok: false, error: "server" };
@@ -144,7 +171,10 @@ export async function getMatchDetail(teamId: string, matchId: string, userId: st
         cursor = page.at(-1)!;
       }
     }
-    const profileIds = [...new Set([...memberIds, ...statRows.map((row) => row.user_id), ...(matchResult.data.attendance as DetailAttendanceRow[]).map((row) => row.user_id)])].sort();
+    const referencedEventIds = eventRows.flatMap((row) => [row.player_user_id, row.secondary_user_id]).filter((id): id is string => id !== null);
+    const attendanceRows = matchResult.data.attendance as DetailAttendanceRow[];
+    const historicalIds = [...new Set([...statRows.map((row) => row.user_id), ...attendanceRows.map((row) => row.user_id), ...referencedEventIds])];
+    const profileIds = [...new Set([...memberIds, ...historicalIds])].sort();
     const profiles: ProfileRow[] = [];
     for (let offset = 0; offset < profileIds.length; offset += PAGE_SIZE) {
       const requested = profileIds.slice(offset, offset + PAGE_SIZE);
@@ -156,12 +186,13 @@ export async function getMatchDetail(teamId: string, matchId: string, userId: st
       profiles.push(...page);
     }
     const names = new Map<string, string | null>(profiles.map((profile) => [profile.id, profile.display_name]));
-    const attendanceRows = matchResult.data.attendance as DetailAttendanceRow[];
     const attendance: MatchAttendance[] = attendanceRows.map((row) => Object.freeze({ userId: row.user_id, status: row.status, note: row.note, respondedAt: row.responded_at, updatedAt: row.updated_at, displayName: names.get(row.user_id) ?? null })).sort((a, b) => compareText(a.displayName, b.displayName) || compareText(a.userId, b.userId));
-    const events: MatchEvent[] = eventRows.map((row) => Object.freeze({ id: row.id, minute: row.minute, sequenceNo: row.sequence_no, eventType: row.event_type, teamSide: row.team_side, playerUserId: row.player_user_id, secondaryUserId: row.secondary_user_id, note: row.note }));
+    const events: MatchEvent[] = eventRows.map((row) => Object.freeze({ id: row.id, minute: row.minute, sequenceNo: row.sequence_no, eventType: row.event_type, teamSide: row.team_side, playerUserId: row.player_user_id, playerDisplayName: row.player_user_id ? names.get(row.player_user_id) ?? null : null, secondaryUserId: row.secondary_user_id, secondaryDisplayName: row.secondary_user_id ? names.get(row.secondary_user_id) ?? null : null, note: row.note }));
     const playerStats: MatchPlayerStat[] = statRows.map((row) => Object.freeze({ userId: row.user_id, displayName: names.get(row.user_id) ?? null, minutesPlayed: row.minutes_played, goals: row.goals, assists: row.assists, rating: row.rating, isMvp: row.is_mvp })).sort((a, b) => Number(b.isMvp) - Number(a.isMvp) || b.goals - a.goals || compareText(a.displayName, b.displayName) || compareText(a.userId, b.userId));
     const invited = new Set(attendanceRows.map((row) => row.user_id));
     const inviteCandidates: InviteCandidate[] = memberIds.map((candidateUserId) => Object.freeze({ userId: candidateUserId, displayName: names.get(candidateUserId) ?? null, invited: invited.has(candidateUserId) })).sort((a, b) => compareText(a.displayName, b.displayName) || compareText(a.userId, b.userId));
-    return { ok: true, detail: Object.freeze({ match: summary(matchResult.data as unknown as MatchRow, userId), attendance: Object.freeze(attendance), events: Object.freeze(events), playerStats: Object.freeze(playerStats), teamMetrics: teamStatsResult.data === null ? null : metrics(teamStatsResult.data.metrics), inviteCandidates: Object.freeze(inviteCandidates) }) };
+    const analysisIds = includeInviteCandidates ? [...new Set([...memberIds, ...historicalIds])] : [];
+    const analysisCandidates: MatchAnalysisCandidate[] = analysisIds.map((candidateUserId) => Object.freeze({ userId: candidateUserId, displayName: names.get(candidateUserId) ?? null })).sort((a, b) => compareText(a.displayName, b.displayName) || compareText(a.userId, b.userId));
+    return { ok: true, detail: Object.freeze({ match: summary(matchResult.data as unknown as MatchRow, userId), attendance: Object.freeze(attendance), events: Object.freeze(events), playerStats: Object.freeze(playerStats), teamMetrics: teamStatsResult.data === null ? null : metrics(teamStatsResult.data.metrics), inviteCandidates: Object.freeze(inviteCandidates), analysisCandidates: Object.freeze(analysisCandidates) }) };
   } catch { return { ok: false, error: "server" }; }
 }

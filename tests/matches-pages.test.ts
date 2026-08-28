@@ -50,6 +50,7 @@ const DETAIL: MatchDetail = {
     { userId: USER_ID, displayName: "Nguyễn An", invited: true },
     { userId: "00000000-0000-4000-8000-000000000011", displayName: "Bình", invited: false },
   ],
+  analysisCandidates: [],
 };
 
 type ListPage = { renderMatchesPage(args: {
@@ -77,6 +78,7 @@ let error: StateModule;
 let collectionRoute: CollectionRoute;
 let matchRoute: MatchRoute;
 let attendanceRoute: MatchRoute;
+let analysisRoute: MatchRoute;
 
 test.before(async () => {
   vite = await createServer({
@@ -90,7 +92,7 @@ test.before(async () => {
     resolve: { alias: { "next/navigation": resolve("tests/fixtures/squad-page-navigation.ts") } },
     server: { middlewareMode: true },
   });
-  [listPage, detailPage, loading, error, collectionRoute, matchRoute, attendanceRoute] = await Promise.all([
+  [listPage, detailPage, loading, error, collectionRoute, matchRoute, attendanceRoute, analysisRoute] = await Promise.all([
     vite.ssrLoadModule("/app/teams/[slug]/matches/page.tsx"),
     vite.ssrLoadModule("/app/teams/[slug]/matches/[matchId]/page.tsx"),
     vite.ssrLoadModule("/app/teams/[slug]/matches/loading.tsx"),
@@ -98,7 +100,8 @@ test.before(async () => {
     vite.ssrLoadModule("/app/api/teams/[slug]/matches/route.ts"),
     vite.ssrLoadModule("/app/api/teams/[slug]/matches/[matchId]/route.ts"),
     vite.ssrLoadModule("/app/api/teams/[slug]/matches/[matchId]/attendance/route.ts"),
-  ]) as [ListPage, DetailPage, StateModule, StateModule, CollectionRoute, MatchRoute, MatchRoute];
+    vite.ssrLoadModule("/app/api/teams/[slug]/matches/[matchId]/analysis/route.ts"),
+  ]) as [ListPage, DetailPage, StateModule, StateModule, CollectionRoute, MatchRoute, MatchRoute, MatchRoute];
 });
 test.after(async () => vite.close());
 function html(value: unknown) { return renderToStaticMarkup(value as React.ReactElement); }
@@ -174,11 +177,34 @@ test("match detail gates read access and keeps Admin lifecycle/invite controls o
   }
 });
 
+test("completed detail shows the analysis editor only to Admin and never fabricates missing metrics", async () => {
+  const completedDetail: MatchDetail = {
+    ...DETAIL,
+    match: COMPLETED,
+    analysisCandidates: [{ userId: USER_ID, displayName: "Nguyễn An" }],
+  };
+  for (const fixture of [
+    { context: ADMIN, editor: true },
+    { context: { ...ADMIN, permissions: ["matches.read", "matches.respond"] as const }, editor: false },
+  ]) {
+    const output = await detailPage.renderMatchDetailPage({
+      params: Promise.resolve({ slug: "pro7-fc", matchId: COMPLETED.id }),
+      requireTeamPermission: async () => fixture.context,
+      getMatchDetail: async () => ({ ok: true, detail: completedDetail }),
+      denied: () => "SAFE_DENIAL",
+    });
+    const markup = html(output);
+    assert.equal(markup.includes("Ghi nhận diễn biến &amp; thống kê"), fixture.editor);
+    assert.match(markup, /Chưa ghi nhận chỉ số hai đội/u);
+    assert.doesNotMatch(markup, />58%<|>42%<|>14<\/b>/u);
+  }
+});
+
 test("match API routes forward decoded targets to their server authority handlers", async () => {
   const request = new Request("https://pro7.example/api", { method: "POST" });
   const response = new Response("OK");
   assert.equal(await collectionRoute.mutateMatchesRoute(request, Promise.resolve({ slug: "pro7-fc" }), async (actualRequest, target) => { assert.equal(actualRequest, request); assert.deepEqual(target, { slug: "pro7-fc" }); return response; }), response);
-  for (const route of [matchRoute, attendanceRoute]) {
+  for (const route of [matchRoute, attendanceRoute, analysisRoute]) {
     assert.equal(await route.mutateMatchRoute(request, Promise.resolve({ slug: "pro7-fc", matchId: MATCH_ID }), async (actualRequest, target) => { assert.equal(actualRequest, request); assert.deepEqual(target, { slug: "pro7-fc", matchId: MATCH_ID }); return response; }), response);
   }
 });

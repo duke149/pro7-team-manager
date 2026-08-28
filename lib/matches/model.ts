@@ -48,7 +48,9 @@ export type MatchEvent = Readonly<{
   eventType: "goal" | "yellow_card" | "red_card" | "substitution" | "note";
   teamSide: "team" | "opponent";
   playerUserId: string | null;
+  playerDisplayName: string | null;
   secondaryUserId: string | null;
+  secondaryDisplayName: string | null;
   note: string | null;
 }>;
 
@@ -76,6 +78,11 @@ export type InviteCandidate = Readonly<{
   invited: boolean;
 }>;
 
+export type MatchAnalysisCandidate = Readonly<{
+  userId: string;
+  displayName: string | null;
+}>;
+
 export type MatchDetail = Readonly<{
   match: MatchSummary;
   attendance: readonly MatchAttendance[];
@@ -83,6 +90,7 @@ export type MatchDetail = Readonly<{
   playerStats: readonly MatchPlayerStat[];
   teamMetrics: MatchTeamMetrics | null;
   inviteCandidates: readonly InviteCandidate[];
+  analysisCandidates: readonly MatchAnalysisCandidate[];
 }>;
 
 export type MatchListResult =
