@@ -162,7 +162,7 @@ function AttendanceCard({ context, data, serverNow }: { context: TeamAccessConte
   const canRespond = canReadMatches && hasResponseAccess && match.status === "scheduled" && !deadlineClosed;
   const showClosed = canReadMatches && hasResponseAccess && match.status === "scheduled" && deadlineClosed;
   const matchHref = `/teams/${encodeURIComponent(team.slug)}/matches/${encodeURIComponent(match.id)}`;
-  const ringStyle = { background: `conic-gradient(var(--lime) 0 ${attendance.confirmedPercent}%, #e8edf2 ${attendance.confirmedPercent}% 100%)` } as CSSProperties;
+  const ringStyle = { background: `conic-gradient(var(--accent) 0 ${attendance.confirmedPercent}%, #e8edf2 ${attendance.confirmedPercent}% 100%)` } as CSSProperties;
 
   return <article className="card availability-card">
     <div className="section-head"><div><span>ĐỘI HÌNH</span><h2>Tình trạng tham gia</h2></div><strong>{attendance.available}/{attendance.invited}</strong></div>

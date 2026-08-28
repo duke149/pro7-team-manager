@@ -15,6 +15,11 @@ textarea {
   font: inherit;
 }
 
+button,
+label {
+  line-height: var(--leading-control);
+}
+
 input,
 select,
 textarea {

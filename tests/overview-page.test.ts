@@ -150,6 +150,8 @@ test("Overview preserves hosted card/control order with live data and real entit
   assert.match(markup, /match-hero[\s\S]*availability-card[\s\S]*stats-grid[\s\S]*TỈ LỆ THẮNG[\s\S]*PHONG ĐỘ GẦN ĐÂY[\s\S]*VUA PHÁ LƯỚI[\s\S]*THỨ HẠNG[\s\S]*Tin mới[\s\S]*Xem tất cả[\s\S]*Sắp diễn ra[\s\S]*Mở lịch/u);
   assert.match(markup, /PRO7 FC[\s\S]*Metro City[\s\S]*Riverside Turf/u);
   assert.match(markup, /10\/15[\s\S]*10[\s\S]*Sẵn sàng[\s\S]*3[\s\S]*Chờ trả lời[\s\S]*2[\s\S]*Vắng mặt/u);
+  assert.match(markup, /conic-gradient\(var\(--accent\) 0 67%/u);
+  assert.doesNotMatch(markup, /var\(--lime\)/u);
   assert.match(markup, /50%[\s\S]*3 thắng • 2 hòa • 1 thua/u);
   assert.match(markup, /Nguyễn An[\s\S]*7[\s\S]*BÀN/u);
   assert.match(markup, /Họp chiến thuật[\s\S]*Toàn đội tập trung trước trận/u);

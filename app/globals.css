@@ -1129,3 +1129,26 @@
 .account-profile-fields input,.account-position-fieldset span{border-radius:var(--radius-control)}
 .account-profile-shell.dark{--profile-ink:#f4f4f5;--profile-muted:#b1b1b7;--profile-line:#38383d;background:#101011}
 .modal{border-radius:var(--radius-dialog);box-shadow:var(--shadow-overlay)}
+
+/* Consistent vertical type rhythm: compact UI at 1.25, readable copy at 1.5. */
+body{line-height:var(--leading-body)}
+:is(.pro7-shell,.login-shell,.account-profile-shell) :is(h1,h2,h3,h4,h5,h6){line-height:var(--leading-heading)}
+:is(.pro7-shell,.login-shell,.account-profile-shell) :is(p,li,dd){line-height:var(--leading-body)}
+:is(.pro7-shell,.login-shell,.account-profile-shell) :is(button,input,select,textarea,label,small){line-height:var(--leading-heading)}
+
+/* Overview and Squad share one card-and-spacing rhythm. */
+.view-stack{gap:var(--space-5)}
+.squad-toolbar{gap:var(--space-3);padding:var(--space-4);border-color:var(--color-border);background:var(--color-surface)}
+.filter-row{overflow-x:auto;overscroll-behavior-inline:contain;scroll-snap-type:inline proximity;scrollbar-width:thin}
+.filter-row>*{flex:0 0 auto;scroll-snap-align:start}
+.squad-summary{border-color:var(--color-border);border-radius:var(--radius-card);background:var(--color-surface);box-shadow:var(--shadow-card)}
+.squad-summary>div{gap:var(--space-3);padding:var(--space-4) var(--space-5)}
+.squad-summary svg{color:var(--color-accent)}
+.player-grid{gap:var(--space-4)}
+.player-card,.add-player-card{border-color:var(--color-border);background:var(--color-surface)}
+.player-card-link{padding:var(--space-4)}
+.position-chip{background:var(--brand-red-50);color:var(--brand-red-700)}
+.role-chip{background:var(--neutral-100);color:var(--neutral-600)}
+.squad-filter-panel>form{z-index:var(--z-popover);padding:var(--space-4);border-radius:var(--radius-card);box-shadow:var(--shadow-overlay)}
+.dashboard-view :is(.card,.stat-card){border-color:var(--color-border);background:var(--color-surface);box-shadow:var(--shadow-card)}
+.pro7-shell.dark .dashboard-view :is(.card,.stat-card){border-color:#323236;background:#1b1b1e}

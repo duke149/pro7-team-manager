@@ -59,12 +59,54 @@ test("shared controls expose target, focus, pressed, and disabled states", async
   }
 });
 
+test("PRO7 uses one coherent 1.25/1.5 vertical type rhythm", async () => {
+  const fixture = await loadPro7CssFixture({
+    width: 390,
+    body: '<main><h1>Tiêu đề</h1><p>Nội dung mô tả</p><label>Nhãn</label><button>Thao tác</button></main>',
+  });
+  try {
+    const styles = (selector: string) => fixture.window.getComputedStyle(fixture.document.querySelector(selector)!);
+    assert.equal(styles("body").lineHeight, "1.5");
+    assert.equal(styles("h1").lineHeight, "1.25");
+    assert.equal(styles("p").lineHeight, "1.5");
+    assert.equal(styles("label").lineHeight, "1.25");
+    assert.equal(styles("button").lineHeight, "1.25");
+  } finally {
+    fixture.close();
+  }
+});
+
 test("login autofill stays inside the neutral Auth palette", async () => {
   const css = await readFile(cssPath, "utf8");
   assert.match(css, /\.login-form input:-webkit-autofill/u);
   assert.match(css, /-webkit-text-fill-color:\s*var\(--auth-text\)/u);
   assert.match(css, /(?:-webkit-)?box-shadow:\s*0 0 0 1000px var\(--auth-field\) inset/u);
   assert.match(css, /caret-color:\s*var\(--auth-text\)/u);
+});
+
+test("Overview and Squad use tokenized card rhythm", async () => {
+  const desktop = await loadPro7CssFixture({
+    width: 1440,
+    body: '<main class="view-stack"><article class="card"></article><form class="squad-toolbar"></form></main>',
+  });
+  const phone = await loadPro7CssFixture({
+    width: 390,
+    body: '<section class="squad-toolbar"><div class="filter-row"><a>Tất cả</a><a>GK</a><a>DEF</a><a>MID</a><a>ATT</a></div></section>',
+  });
+  try {
+    assert.equal(desktop.window.getComputedStyle(desktop.document.querySelector(".card")!).borderRadius, "12px");
+    assert.equal(desktop.window.getComputedStyle(desktop.document.querySelector(".view-stack")!).gap, "24px");
+    assert.equal(desktop.window.getComputedStyle(desktop.document.querySelector(".squad-toolbar")!).padding, "16px");
+    const filterRow = phone.window.getComputedStyle(phone.document.querySelector(".filter-row")!);
+    const links = [...phone.document.querySelectorAll(".filter-row > a")];
+    assert.equal(filterRow.overflowX, "auto");
+    assert.equal(filterRow.scrollSnapType, "inline proximity");
+    assert.equal(links.length, 5);
+    assert.ok(links.every((link) => phone.window.getComputedStyle(link).flexGrow === "0"));
+  } finally {
+    desktop.close();
+    phone.close();
+  }
 });
 
 test("member provisioning uses the shared keyboard-safe modal primitive", async () => {

@@ -65,7 +65,9 @@
   .squad-toolbar{grid-template-columns:minmax(0,1fr) auto}
   .search-box{grid-column:1/-1}
   .search-box input,.squad-filter-panel select,.modal :is(input,select,textarea),.login-form input,.settings-module :is(input,select),.account-profile-fields input{font-size:16px}
-  .filter-row{padding-bottom:2px}
+  .view-stack{gap:var(--space-4)}
+  .filter-row{display:flex;gap:var(--space-2);overflow-x:auto;overscroll-behavior-inline:contain;scroll-snap-type:inline proximity;scrollbar-width:thin;padding:0 var(--space-1) var(--space-2)}
+  .filter-row>*{flex:0 0 auto;scroll-snap-align:start}
   .squad-filter-panel>form{bottom:calc(84px + env(safe-area-inset-bottom))}
   .modal>label,.form-two label,.squad-filter-panel label,.account-profile-fields label,.account-position-fieldset legend,.login-form label{font-size:14px}
   .modal-head p,.account-profile-heading p,.account-avatar-card p,.account-profile-fields small,.account-position-fieldset>small,.account-profile-message,.account-profile-back{font-size:12px}
