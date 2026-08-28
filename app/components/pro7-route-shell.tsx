@@ -6,6 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import type { TeamAccessContext } from "../../lib/teams/context";
 import type { TeamNotification } from "../../lib/notifications/model";
 import type { PermissionCode } from "../../lib/teams/permissions";
+import { PushPermissionGate } from "./push-permission-gate";
 import { INITIAL_THEME, Pro7RouteHeader } from "./pro7-route-header";
 import { Pro7RouteNavigation } from "./pro7-route-navigation";
 import { resolveBrowserTheme, type Theme } from "./product-shell-controls";
@@ -17,6 +18,7 @@ export function Pro7RouteShell({
   permissions,
   email,
   notifications = [],
+  vapidPublicKey,
 }: {
   children: ReactNode;
   team: TeamAccessContext["team"];
@@ -24,6 +26,7 @@ export function Pro7RouteShell({
   permissions: readonly PermissionCode[];
   email?: string;
   notifications?: readonly TeamNotification[];
+  vapidPublicKey?: string;
 }) {
   const pathname = usePathname() || `/teams/${encodeURIComponent(team.slug)}/overview`;
   const router = useRouter();
@@ -88,6 +91,7 @@ export function Pro7RouteShell({
         currentPath={pathname}
         mobile
       />
+      <PushPermissionGate vapidPublicKey={vapidPublicKey} />
     </div>
   );
 }

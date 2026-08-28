@@ -16,6 +16,8 @@ export const metadata: Metadata = {
   title,
   description,
   icons: { icon: "/favicon.svg", shortcut: "/favicon.svg" },
+  manifest: "/manifest.webmanifest",
+  appleWebApp: { capable: true, title: "PRO7", statusBarStyle: "black-translucent" },
   openGraph: { title, description, type: "website" },
   twitter: { card: "summary", title, description },
 };

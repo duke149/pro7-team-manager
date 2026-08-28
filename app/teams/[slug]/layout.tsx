@@ -46,6 +46,7 @@ export async function renderTeamLayout({
       permissions={context.permissions}
       email={productUser.user.email}
       notifications={notificationResult?.ok ? notificationResult.notifications : []}
+      vapidPublicKey={process.env.NEXT_PUBLIC_PRO7_VAPID_PUBLIC_KEY?.trim() || undefined}
     >
       {children}
     </Pro7RouteShell>
