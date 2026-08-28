@@ -132,6 +132,24 @@ test("Matches and Tactics use the neutral PRO7 surface and touch rhythm", async 
   }
 });
 
+test("Funds, Settings, and feedback surfaces use shared density tokens", async () => {
+  const fixture = await loadPro7CssFixture({
+    width: 1440,
+    body: '<main class="pro7-shell"><article class="balance-card"></article><section class="settings-module"></section><aside class="notification-popover"></aside><section class="modal"></section><output class="toast"></output></main>',
+  });
+  try {
+    const styles = (selector: string) => fixture.window.getComputedStyle(fixture.document.querySelector(selector)!);
+    assert.equal(styles(".balance-card").borderRadius, "12px");
+    assert.equal(styles(".settings-module").padding, "24px");
+    assert.equal(styles(".notification-popover").boxShadow, "0 24px 64px rgba(23, 23, 25, 0.2)");
+    assert.equal(styles(".notification-popover").borderRadius, "16px");
+    assert.equal(styles(".modal").borderRadius, "16px");
+    assert.equal(styles(".toast").borderRadius, "8px");
+  } finally {
+    fixture.close();
+  }
+});
+
 test("member provisioning uses the shared keyboard-safe modal primitive", async () => {
   const [source, modal] = await Promise.all([readFile(squadPath, "utf8"), readFile(modalPath, "utf8")]);
   assert.match(source, /import \{ AccessibleModal \} from/u);

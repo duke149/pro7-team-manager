@@ -63,7 +63,7 @@
   --radius-card: 12px;
   --radius-dialog: 16px;
   --shadow-card: 0 8px 24px rgba(23, 23, 25, .06);
-  --shadow-overlay: 0 24px 64px rgba(23, 23, 25, .2);
+  --shadow-overlay: 0 24px 64px rgba(23, 23, 25, 0.2);
   --control-min-size: 44px;
   --z-header: 30;
   --z-navigation: 35;

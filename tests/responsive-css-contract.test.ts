@@ -138,6 +138,7 @@ test("phone keeps notification and fixed navigation operable with readable contr
     assert.equal(value(".mobile-nav", "grid-template-columns"), "repeat(auto-fit,minmax(0,1fr))");
     assert.equal(document.querySelectorAll(".mobile-nav a").length, 5);
     assert.ok((320 - 14) / 5 >= 44, "five Admin destinations must retain a 44px target at 320px");
+    assert.equal(cascadedProperty({ rules, element: document.querySelector(".mobile-nav a")!, property: "min-height", width: 320 }), "56px");
     assert.equal(value(".mobile-nav a", "font-size"), "12px");
     assert.equal(value(".search-submit", "width"), "44px");
     assert.equal(value(".filter-row a", "height"), "44px");

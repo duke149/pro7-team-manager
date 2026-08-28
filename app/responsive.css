@@ -89,11 +89,15 @@
   .squad-empty-state p{font-size:13px}
   .stats-grid{grid-template-columns:1fr}
   .fund-actions{grid-template-columns:1fr}
+  .fund-content-grid,.role-grid{grid-template-columns:1fr}
+  .fund-stats{display:grid;grid-template-columns:1fr;overflow:visible}
+  .fund-stats article{min-width:0;border-right:0;border-bottom:1px solid var(--line)}
+  .fund-stats article:last-child{border-bottom:0}
+  .due-row,.transaction{align-items:flex-start}
   .form-two{grid-template-columns:1fr}
-  .role-grid{grid-template-columns:1fr}
   .audit-list article{grid-template-columns:60px 1fr}
-  .audit-list code{grid-column:1/-1}
-  .settings-module{padding:18px}
+  .audit-list code{grid-column:1/-1;white-space:normal;overflow-wrap:anywhere}
+  .settings-module{padding:var(--space-4)}
   .tactics-toolbar :is(button,select),.mode-toggle button{min-height:44px}
   :is(.match-top-grid,.match-analysis-grid,.match-detail-grid,.tactics-layout){gap:var(--space-4)}
   :is(.confirmed-body,.rsvp-card,.fixtures-card,.match-attendance-card,.match-invite-card,.tactics-match-list,.instruction-card,.bench-card){padding:var(--space-4)}

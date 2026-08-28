@@ -1164,3 +1164,25 @@ body{line-height:var(--leading-body)}
 .tactics-side{gap:var(--space-5)}
 .pitch-card{padding:var(--space-4)}
 .instruction-card textarea{min-height:120px}
+
+/* Admin data and feedback surfaces share the same density and elevation. */
+:is(.funds-hero-grid,.fund-content-grid){gap:var(--space-5)}
+.balance-card,.balance-card.black-sport-card{border-radius:var(--radius-card)!important;box-shadow:var(--shadow-card)!important}
+.balance-card.black-sport-card{padding:var(--space-5)!important}
+.fund-actions{gap:var(--space-3)}
+.fund-actions button{padding:var(--space-5);border-color:var(--color-border);border-radius:var(--radius-card);background:var(--color-surface)}
+.fund-stats{border-color:var(--color-border);border-radius:var(--radius-card);background:var(--color-surface);box-shadow:var(--shadow-card)}
+.fund-stats article{gap:var(--space-3);padding:var(--space-4) var(--space-5)}
+:is(.dues-card,.transactions-card){padding:var(--space-5)}
+.due-row,.transaction{border-color:var(--color-border)}
+.settings-tabs{gap:var(--space-2);scroll-snap-type:inline proximity}
+.settings-tabs a{min-height:var(--control-min-size);border-radius:var(--radius-control);scroll-snap-align:start}
+.settings-module{padding:var(--space-5);border-color:var(--color-border);border-radius:var(--radius-card);background:var(--color-surface);box-shadow:var(--shadow-card)}
+.role-grid{gap:var(--space-4)}
+.role-grid article{padding:var(--space-4);border-color:var(--color-border);border-radius:var(--radius-card)}
+.audit-list article{gap:var(--space-3);padding:var(--space-3) 0}
+.danger-zone{border-color:#efb1ba}
+.notification-popover{z-index:var(--z-popover);border-color:var(--color-border);border-radius:var(--radius-dialog);background:var(--color-surface);box-shadow:var(--shadow-overlay)}
+.modal-layer{z-index:var(--z-dialog)}
+.modal{border-color:var(--color-border);border-radius:var(--radius-dialog);background:var(--color-surface);box-shadow:var(--shadow-overlay)}
+.toast{border-color:#38383d;border-radius:var(--radius-control);box-shadow:var(--shadow-overlay)}
