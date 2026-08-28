@@ -4,7 +4,7 @@ begin transaction read only;
 
 with migration_history as (
   select
-    '20260828120720'::text as expected_version,
+    '20260828132012'::text as expected_version,
     'pro7_web_push_rsvp'::text as expected_name,
     '8604e4d7a384d4de1ba528cbfd0a5374bc418d307e07fce110d1ad86a2b49fea'::text as source_sha256,
     (migration.version is not null) as is_applied,
@@ -12,7 +12,7 @@ with migration_history as (
     pg_catalog.md5(coalesce(pg_catalog.array_to_string(migration.statements, E'\n'), '')) as recorded_statements_md5
   from (values (true)) as singleton(present)
   left join supabase_migrations.schema_migrations as migration
-    on migration.version = '20260828120720'
+    on migration.version = '20260828132012'
 ), prerequisites as (
   select object_name, object_type, is_present
   from (values

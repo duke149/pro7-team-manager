@@ -745,7 +745,7 @@ export type Database = {
           auth: string
           created_at: string
           endpoint: string
-          endpoint_hash: string
+          endpoint_hash: string | null
           expiration_time: number | null
           failure_count: number
           id: string
@@ -759,7 +759,7 @@ export type Database = {
           auth: string
           created_at?: string
           endpoint: string
-          endpoint_hash?: never
+          endpoint_hash?: string | null
           expiration_time?: number | null
           failure_count?: number
           id?: string
@@ -773,7 +773,7 @@ export type Database = {
           auth?: string
           created_at?: string
           endpoint?: string
-          endpoint_hash?: never
+          endpoint_hash?: string | null
           expiration_time?: number | null
           failure_count?: number
           id?: string
@@ -1014,37 +1014,6 @@ export type Database = {
     }
     Functions: {
       accept_team_invitation: { Args: { token: string }; Returns: string }
-      claim_push_deliveries: {
-        Args: { p_limit: number }
-        Returns: {
-          attempt: number
-          auth: string
-          body: string
-          delivery_id: string
-          endpoint: string
-          event_kind: string
-          outbox_id: string
-          p256dh: string
-          target_path: string
-          title: string
-        }[]
-      }
-      delete_push_subscription: {
-        Args: { p_endpoint: string }
-        Returns: boolean
-      }
-      get_team_audit_events: {
-        Args: { p_limit?: number; p_team_id: string }
-        Returns: {
-          action: string
-          actor_display_name: string | null
-          actor_user_id: string | null
-          event_id: number
-          occurred_at: string
-          row_key: Json
-          table_name: string
-        }[]
-      }
       apply_match_tactic: {
         Args: {
           p_expected_updated_at: string
@@ -1067,6 +1036,21 @@ export type Database = {
         }
         Returns: undefined
       }
+      claim_push_deliveries: {
+        Args: { p_limit: number }
+        Returns: {
+          attempt: number
+          auth: string
+          body: string
+          delivery_id: string
+          endpoint: string
+          event_kind: string
+          outbox_id: string
+          p256dh: string
+          target_path: string
+          title: string
+        }[]
+      }
       create_team: {
         Args: { p_name: string; p_slug: string }
         Returns: {
@@ -1074,6 +1058,10 @@ export type Database = {
           name: string
           slug: string
         }[]
+      }
+      delete_push_subscription: {
+        Args: { p_endpoint: string }
+        Returns: boolean
       }
       get_current_team_access_contexts: {
         Args: never
@@ -1087,6 +1075,18 @@ export type Database = {
           team_slug: string
         }[]
       }
+      get_team_audit_events: {
+        Args: { p_limit?: number; p_team_id: string }
+        Returns: {
+          action: string
+          actor_display_name: string
+          actor_user_id: string
+          event_id: number
+          occurred_at: string
+          row_key: Json
+          table_name: string
+        }[]
+      }
       get_team_player_admin_detail: {
         Args: { p_team_id: string; p_user_id: string }
         Returns: {
@@ -1094,11 +1094,7 @@ export type Database = {
         }[]
       }
       invite_match_attendance: {
-        Args: {
-          p_match_id: string
-          p_team_id: string
-          p_user_ids: string[]
-        }
+        Args: { p_match_id: string; p_team_id: string; p_user_ids: string[] }
         Returns: number
       }
       manage_finance_entry: {
@@ -1169,7 +1165,7 @@ export type Database = {
         Returns: {
           body: string
           id: string
-          published_at: string | null
+          published_at: string
           status: string
           title: string
           updated_at: string
@@ -1190,10 +1186,7 @@ export type Database = {
         Returns: undefined
       }
       remind_match_attendance: {
-        Args: {
-          p_match_id: string
-          p_team_id: string
-        }
+        Args: { p_match_id: string; p_team_id: string }
         Returns: number
       }
       respond_match_attendance: {
@@ -1224,11 +1217,7 @@ export type Database = {
         Returns: string
       }
       settle_push_delivery: {
-        Args: {
-          p_delivery_id: string
-          p_error_code: string | null
-          p_outcome: string
-        }
+        Args: { p_delivery_id: string; p_error_code: string; p_outcome: string }
         Returns: undefined
       }
       update_team_settings_section: {
@@ -1244,9 +1233,9 @@ export type Database = {
         Args: {
           p_auth: string
           p_endpoint: string
-          p_expiration_time: number | null
+          p_expiration_time: number
           p_p256dh: string
-          p_user_agent: string | null
+          p_user_agent: string
         }
         Returns: string
       }
