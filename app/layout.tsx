@@ -20,7 +20,14 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
       <head>
         <link
           rel="preload"
-          href="/fonts/be-vietnam-pro-variable.woff2"
+          href="/fonts/roboto-vietnamese.woff2"
+          as="font"
+          type="font/woff2"
+          crossOrigin="anonymous"
+        />
+        <link
+          rel="preload"
+          href="/fonts/roboto-latin.woff2"
           as="font"
           type="font/woff2"
           crossOrigin="anonymous"

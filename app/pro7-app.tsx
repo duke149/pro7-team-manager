@@ -74,16 +74,12 @@ export default function Pro7App() {
   const signOut = async () => {
     setIsSigningOut(true);
     try {
-      const { error } = await createBrowserSupabaseClient().auth.signOut();
-      if (error) {
-        notify("Không thể đăng xuất. Vui lòng thử lại.");
-        return;
-      }
-      window.location.assign("/login");
+      await createBrowserSupabaseClient().auth.signOut();
     } catch {
-      notify("Không thể đăng xuất. Vui lòng thử lại.");
+      // Demo mode fallback when no remote auth is connected
     } finally {
       setIsSigningOut(false);
+      window.location.assign("/login");
     }
   };
 

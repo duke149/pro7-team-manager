@@ -7,21 +7,21 @@ const typographyPath = new URL("../app/typography.css", import.meta.url);
 const globalsPath = new URL("../app/globals.css", import.meta.url);
 const responsivePath = new URL("../app/responsive.css", import.meta.url);
 const layoutPath = new URL("../app/layout.tsx", import.meta.url);
-const fontPath = new URL("../public/fonts/be-vietnam-pro-variable.woff2", import.meta.url);
-const licensePath = new URL("../public/fonts/OFL.txt", import.meta.url);
+const fontPath = new URL("../public/fonts/roboto-latin.woff2", import.meta.url);
+const licensePath = new URL("../public/fonts/ROBOTO-LICENSE.txt", import.meta.url);
 
-test("the root layout loads the final self-hosted Be Vietnam Pro layer", async () => {
+test("the root layout loads the final self-hosted Roboto layer", async () => {
   const [layout, font, license] = await Promise.all([
     readFile(layoutPath, "utf8"),
     readFile(fontPath),
     readFile(licensePath, "utf8"),
   ]);
-  assert.ok(font.byteLength > 50_000, "variable font asset is unexpectedly small");
+  assert.ok(font.byteLength > 10_000, "variable font asset is unexpectedly small");
   assert.equal(font.subarray(0, 4).toString("ascii"), "wOF2");
-  assert.match(license, /SIL OPEN FONT LICENSE Version 1\.1/u);
+  assert.match(license, /Apache License|SIL OPEN FONT LICENSE/u);
   assert.ok(layout.indexOf('import "./globals.css"') < layout.indexOf('import "./responsive.css"'));
   assert.ok(layout.indexOf('import "./responsive.css"') < layout.indexOf('import "./typography.css"'));
-  assert.match(layout, /href="\/fonts\/be-vietnam-pro-variable\.woff2"/u);
+  assert.match(layout, /href="\/fonts\/roboto-.*\.woff2"/u);
   assert.match(layout, /as="font"/u);
   assert.match(layout, /type="font\/woff2"/u);
   assert.match(layout, /crossOrigin="anonymous"/u);
@@ -29,10 +29,10 @@ test("the root layout loads the final self-hosted Be Vietnam Pro layer", async (
 
 test("the typography layer exposes the approved semantic scale", async () => {
   const css = await readFile(typographyPath, "utf8");
-  assert.match(css, /font-family:\s*"Be Vietnam Pro"/u);
+  assert.match(css, /font-family:\s*"Roboto"/u);
   assert.match(css, /font-display:\s*swap/u);
   assert.match(css, /font-weight:\s*400 800/u);
-  assert.match(css, /--font-sans:\s*"Be Vietnam Pro"/u);
+  assert.match(css, /--font-sans:\s*"Roboto"/u);
   assert.match(css, /--font-numeric:\s*var\(--font-sans\)/u);
   assert.match(css, /--type-caption:\s*12px/u);
   assert.match(css, /--type-input:\s*14px/u);

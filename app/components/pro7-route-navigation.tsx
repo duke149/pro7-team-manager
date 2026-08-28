@@ -4,6 +4,7 @@ import {
   ChevronDown,
   LayoutDashboard,
   MoreHorizontal,
+  Settings,
   Settings2,
   Trophy,
   Users,
@@ -30,6 +31,7 @@ const navigationItems = [
   { label: "Trận đấu", short: "Trận", path: "matches", permission: "matches.read", icon: Trophy },
   { label: "Chiến thuật", short: "Sơ đồ", path: "tactics", permission: "tactics.read", icon: Settings2 },
   { label: "Quỹ đội", short: "Quỹ", path: "funds", permission: "finance.read", icon: WalletCards },
+  { label: "Cài đặt đội", short: "Cài đặt", path: "admin/settings", permission: "settings.read", icon: Settings },
 ] as const satisfies readonly {
   label: string;
   short: string;
@@ -68,9 +70,10 @@ export function Pro7RouteNavigation({
   const items = navigationItems.filter((item) => hasPermission({ permissions }, item.permission));
 
   if (mobile) {
+    const mobileItems = items.filter((item) => item.path !== "admin/settings");
     return (
       <nav className="mobile-nav" aria-label="Điều hướng đội trên thiết bị di động">
-        {items.map(({ label, short, path, icon: Icon }) => {
+        {mobileItems.map(({ label, short, path, icon: Icon }) => {
           const href = `${prefix}/${path}`;
           return (
             <a key={path} href={href} className={isCurrentPath(currentPath, href) ? "active" : undefined}>

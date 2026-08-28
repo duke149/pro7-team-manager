@@ -10,9 +10,10 @@ import {
   Users,
   X,
 } from "lucide-react";
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 
 import { AccessibleModal } from "../../../components/accessible-modal";
+import { createBrowserSupabaseClient } from "../../../../lib/supabase/client";
 import type { SquadFilters } from "../../../../lib/squad/filters";
 import { isUuid, type SquadAssignableRole, type SquadListResult, type SquadPlayerSummary } from "../../../../lib/squad/model";
 import { validateProvisionMemberPayload, type ProvisionMemberSuccess } from "../../../../lib/squad/provisioning";
@@ -56,20 +57,56 @@ export function SquadSummary({ players, loading = false }: { players: readonly S
   );
 }
 
-function PlayerCard({ slug, player }: { slug: string; player: SquadPlayerSummary }) {
+function PlayerCard({
+  slug,
+  player,
+  playerForm,
+}: {
+  slug: string;
+  player: SquadPlayerSummary;
+  playerForm?: { appearances: number; form: ("W" | "D" | "L")[] };
+}) {
   const name = player.displayName ?? "Cầu thủ chưa cập nhật tên";
   const avatarUrl = safeAvatarUrl(player.avatarUrl);
   const effectiveStatus = player.membershipStatus === "inactive" ? "Ngừng hoạt động" : PLAYER_STATUS_LABELS[player.playerStatus];
   const href = `/teams/${encodeURIComponent(slug)}/squad/${encodeURIComponent(player.userId)}`;
+  const posCode = (player.officialPosition ?? "").toLocaleUpperCase("vi-VN");
+  const posClass = posCode === "GK" ? "gk" : posCode === "DEF" ? "df" : posCode === "MID" ? "mf" : posCode === "ATT" ? "fw" : "";
+  const numStr = player.shirtNumber !== null ? (player.shirtNumber < 10 ? `0${player.shirtNumber}` : String(player.shirtNumber)) : "—";
+  const appearances = playerForm?.appearances ?? 0;
+  const formList = playerForm?.form ?? [];
+
   return (
-    <article className={`player-card ${player.playerStatus === "injured" ? "injured" : ""} ${player.membershipStatus === "inactive" ? "inactive" : ""}`}>
+    <article className={`player-card athlete-card ${player.playerStatus === "injured" ? "injured" : ""} ${player.membershipStatus === "inactive" ? "inactive" : ""}`}>
+      <span className="jersey-watermark" aria-hidden="true">{numStr}</span>
       <a className="player-card-link" href={href} aria-label={`Xem hồ sơ ${name}`}>
         <div className="player-top">
           {avatarUrl
             ? <span className="player-avatar-photo" style={{ backgroundImage: `url(${JSON.stringify(avatarUrl)})` }} aria-hidden="true" />
             : <div className="initial-avatar" aria-hidden="true">{initials(name)}</div>}
-          <div><h3>{name}</h3><span className="position-chip">{player.officialPosition ?? "—"}</span><span className="role-chip">{player.role.name}</span>{player.playerStatus === "injured" && <span className="injury-chip">Chấn thương</span>}</div>
+          <div>
+            <h3>{name}</h3>
+            <div style={{ display: "flex", gap: 6, alignItems: "center", marginTop: 4, flexWrap: "wrap" }}>
+              <span className={`position-pill ${posClass}`}>{player.officialPosition ?? "—"}</span>
+              <span className="role-chip">{player.role.name}</span>
+              {player.playerStatus === "injured" && <span className="injury-chip">Chấn thương</span>}
+            </div>
+          </div>
           <strong>{player.shirtNumber === null ? "#—" : `#${player.shirtNumber}`}</strong>
+        </div>
+        <div className="form-strip" aria-label="Phong độ thi đấu">
+          <span style={{ fontSize: 12, color: "var(--muted)", fontWeight: 700, marginRight: 2 }}>
+            {appearances > 0 ? `Phong độ (${appearances} trận):` : "Ra sân:"}
+          </span>
+          {formList.length > 0 ? (
+            formList.map((res, i) => (
+              <span key={i} className={`form-badge ${res === "W" ? "win" : res === "D" ? "draw" : "loss"}`}>
+                {res}
+              </span>
+            ))
+          ) : (
+            <span style={{ fontSize: 12, color: "var(--muted)", fontWeight: 500 }}>Chưa ra sân (0 trận)</span>
+          )}
         </div>
         <div className="player-stats"><span>GIA NHẬP<strong>{player.joinDate}</strong></span><span>TÌNH TRẠNG<strong>{effectiveStatus}</strong></span><span className="player-card-open" aria-hidden="true">→</span></div>
       </a>
@@ -247,7 +284,82 @@ export function SquadView({
   const players = result.ok ? result.players : [];
   const canManage = hasPermission({ permissions }, "players.manage") && hasPermission({ permissions }, "members.manage");
   const [provisioningOpen, setProvisioningOpen] = useState(showProvisioning && canManage);
+  const [playerForms, setPlayerForms] = useState<Record<string, { appearances: number; form: ("W" | "D" | "L")[] }>>({});
   const state = !result.ok ? "error" : players.length === 0 ? "empty" : "ready";
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    let isMounted = true;
+    async function loadForms() {
+      try {
+        const supabase = createBrowserSupabaseClient();
+        const { data: matches } = await supabase
+          .from("matches")
+          .select("id, team_score, opponent_score, starts_at")
+          .eq("team_id", team.id)
+          .eq("status", "completed")
+          .order("starts_at", { ascending: false })
+          .limit(20);
+        if (!matches || matches.length === 0) return;
+
+        const matchIds = matches.map((m) => m.id);
+        const [attRes, statsRes, eventsRes] = await Promise.all([
+          supabase.from("match_attendance").select("match_id, user_id, status").in("match_id", matchIds).eq("status", "available"),
+          supabase.from("match_player_stats").select("match_id, user_id, minutes_played").in("match_id", matchIds),
+          supabase.from("match_events").select("match_id, player_user_id, secondary_user_id").in("match_id", matchIds),
+        ]);
+
+        const formsMap: Record<string, { appearances: number; form: ("W" | "D" | "L")[] }> = {};
+
+        for (const match of matches) {
+          const teamScore = match.team_score ?? 0;
+          const opponentScore = match.opponent_score ?? 0;
+          const resultBadge: "W" | "D" | "L" = teamScore > opponentScore ? "W" : teamScore === opponentScore ? "D" : "L";
+
+          const participantIds = new Set<string>();
+          if (attRes.data) {
+            for (const row of attRes.data) {
+              if (row.match_id === match.id) participantIds.add(row.user_id);
+            }
+          }
+          if (statsRes.data) {
+            for (const row of statsRes.data) {
+              if (row.match_id === match.id && (row.minutes_played === null || row.minutes_played > 0)) {
+                participantIds.add(row.user_id);
+              }
+            }
+          }
+          if (eventsRes.data) {
+            for (const row of eventsRes.data) {
+              if (row.match_id === match.id) {
+                if (row.player_user_id) participantIds.add(row.player_user_id);
+                if (row.secondary_user_id) participantIds.add(row.secondary_user_id);
+              }
+            }
+          }
+
+          for (const userId of participantIds) {
+            if (!formsMap[userId]) {
+              formsMap[userId] = { appearances: 0, form: [] };
+            }
+            formsMap[userId].appearances += 1;
+            if (formsMap[userId].form.length < 5) {
+              formsMap[userId].form.push(resultBadge);
+            }
+          }
+        }
+
+        if (isMounted) {
+          setPlayerForms(formsMap);
+        }
+      } catch {
+        // safe fallback
+      }
+    }
+    void loadForms();
+    return () => { isMounted = false; };
+  }, [team.id]);
+
   function closeProvisioning(reload = false) {
     setProvisioningOpen(false);
     const url = new URL(window.location.href);
@@ -262,7 +374,14 @@ export function SquadView({
       <section className="player-grid" aria-live="polite" data-state={state}>
         {!result.ok && <article className="player-card squad-empty-state squad-error-state"><div><h2>Không thể tải đội hình</h2><p>Vui lòng tải lại trang để thử kết nối dữ liệu một lần nữa.</p></div></article>}
         {result.ok && players.length === 0 && <article className="player-card squad-empty-state"><div><h2>Chưa có cầu thủ</h2><p>Không có cầu thủ phù hợp với bộ lọc hiện tại.</p></div></article>}
-        {players.map((player) => <PlayerCard key={player.userId} slug={team.slug} player={player} />)}
+        {players.map((player) => (
+          <PlayerCard
+            key={player.userId}
+            slug={team.slug}
+            player={player}
+            playerForm={playerForms[player.userId]}
+          />
+        ))}
         {canManage && <a className="add-player-card" href={`/teams/${encodeURIComponent(team.slug)}/squad?add=player`}><span><UserPlus /></span><b>Thêm cầu thủ</b><small>Đăng ký thành viên mới</small></a>}
       </section>
       {provisioningOpen && canManage && (

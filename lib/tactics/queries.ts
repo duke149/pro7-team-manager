@@ -84,7 +84,7 @@ export async function getTacticsDetail(teamId: string, matchId: string, userId: 
     const supabase = await client(dependencies.supabase);
     const [matches, activePlayers] = await Promise.all([(dependencies.listMatches ?? listMatches)(teamId, userId), listActiveTacticsPlayers(supabase, teamId)]);
     if (!matches.ok || !activePlayers) return { ok: false, error: "server" };
-    const match = matches.matches.find((candidate) => candidate.id === matchId && candidate.status === "scheduled");
+    const match = matches.matches.find((candidate) => candidate.id === matchId && (candidate.status === "scheduled" || candidate.status === "completed"));
     if (!match) return { ok: false, error: "not_found" };
     let query = supabase.from("match_tactics").select(TACTICS_SELECT).eq("team_id", teamId).eq("match_id", matchId);
     if (!canManage) query = query.eq("status", "applied");
@@ -95,7 +95,7 @@ export async function getTacticsDetail(teamId: string, matchId: string, userId: 
     if (new Set(rows.map((row) => row.id)).size !== rows.length || new Set(rows.map((row) => `${row.mode}:${row.version}`)).size !== rows.length) return { ok: false, error: "server" };
     const players: readonly TacticsPlayer[] = activePlayers;
     const active = new Set(players.map((player) => player.userId));
-    if (rows.some((row) => row.slots.some((slot) => !active.has(slot.user_id)))) return { ok: false, error: "server" };
+    if (match.status === "scheduled" && rows.some((row) => row.slots.some((slot) => !active.has(slot.user_id)))) return { ok: false, error: "server" };
     const tactics: MatchTactic[] = rows.map((row) => Object.freeze({ id: row.id, mode: row.mode, formation: row.formation, instructions: row.instructions, version: row.version, pressing: row.pressing, defensiveLine: row.defensive_line, status: row.status, updatedAt: row.updated_at, appliedAt: row.applied_at, slots: Object.freeze(row.slots.map((slot): TacticSlot => Object.freeze({ userId: slot.user_id, slotKind: slot.slot_kind, slotKey: slot.slot_key, roleLabel: slot.role_label, shirtNumber: slot.shirt_number, x: slot.x, y: slot.y }))) }));
     return { ok: true, detail: Object.freeze({ match, players: Object.freeze(players), tactics: Object.freeze(tactics) }) };
   } catch { return { ok: false, error: "server" }; }
