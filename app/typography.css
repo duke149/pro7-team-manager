@@ -68,6 +68,10 @@ h6 {
   font-family: var(--font-sans);
 }
 
+.logo b {
+  font-family: var(--font-display);
+}
+
 .logo small,
 .team-picker > span,
 .nav-label,

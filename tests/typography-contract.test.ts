@@ -62,6 +62,18 @@ test("the typography layer exposes the approved semantic scale", async () => {
   }
 });
 
+test("the PRO7 wordmark keeps Barlow through the typography cascade", async () => {
+  const fixture = await loadPro7CssFixture({
+    width: 390,
+    body: '<a class="logo"><span>7</span><div><b>PRO7</b><small>TEAM MANAGER</small></div></a>',
+  });
+  try {
+    assert.match(fixture.window.getComputedStyle(fixture.document.querySelector(".logo b")!).fontFamily, /Barlow/u);
+  } finally {
+    fixture.close();
+  }
+});
+
 test("form controls inherit the product font and phone inputs remain 16px", async () => {
   const css = await readFile(typographyPath, "utf8");
   assert.match(css, /button,\s*input,\s*select,\s*textarea[\s\S]*font:\s*inherit/iu);

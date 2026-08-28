@@ -1,8 +1,8 @@
 # PRO7 Taste Design System Polish
 
-**Date:** 2026-08-28  
-**Status:** Approved in chat  
-**Design input:** `Leonxlnx/taste-skill` → `redesign-existing-projects`  
+**Date:** 2026-08-28
+**Status:** Approved in chat
+**Design input:** `Leonxlnx/taste-skill` → `redesign-existing-projects`
 **Related specifications:**
 
 - `docs/superpowers/specs/2026-08-26-pro7-typography-system-design.md`

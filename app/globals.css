@@ -384,12 +384,12 @@
   letter-spacing: 0.03em;
 }
 .position-pill.gk {
-  background: #e6fffa;
-  color: #0d9488;
+  background: var(--neutral-100);
+  color: var(--neutral-900);
 }
 .position-pill.df {
-  background: #fef3c7;
-  color: #b45309;
+  background: var(--brand-red-50);
+  color: var(--brand-red-700);
 }
 .position-pill.mf {
   background: var(--brand-red-50);
@@ -400,12 +400,12 @@
   color: #dc2626;
 }
 .pro7-shell.dark .position-pill.gk {
-  background: rgba(13, 148, 136, 0.2);
-  color: #2dd4bf;
+  background: #29292d;
+  color: #f4f4f5;
 }
 .pro7-shell.dark .position-pill.df {
-  background: rgba(180, 83, 9, 0.2);
-  color: #fbbf24;
+  background: rgba(215, 25, 53, 0.2);
+  color: #ff9baa;
 }
 .pro7-shell.dark .position-pill.mf {
   background: rgba(215, 25, 53, 0.2);
@@ -1186,3 +1186,6 @@ body{line-height:var(--leading-body)}
 .modal-layer{z-index:var(--z-dialog)}
 .modal{border-color:var(--color-border);border-radius:var(--radius-dialog);background:var(--color-surface);box-shadow:var(--shadow-overlay)}
 .toast{border-color:#38383d;border-radius:var(--radius-control);box-shadow:var(--shadow-overlay)}
+
+/* Password reveal stays inside the 48px field while meeting the 44px touch target. */
+.password-visibility{right:2px;top:2px;width:44px!important;height:44px!important}

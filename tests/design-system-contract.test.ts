@@ -110,6 +110,12 @@ test("Overview and Squad use tokenized card rhythm", async () => {
   }
 });
 
+test("Squad position badges stay inside the neutral and PRO7 red palette", async () => {
+  const css = await readFile(cssPath, "utf8");
+  assert.doesNotMatch(css, /#(?:0d9488|e6fffa|b45309|fef3c7|2dd4bf|fbbf24)\b/iu);
+  assert.doesNotMatch(css, /rgba\((?:13,\s*148,\s*136|180,\s*83,\s*9),/iu);
+});
+
 test("Matches and Tactics use the neutral PRO7 surface and touch rhythm", async () => {
   const [css, responsive] = await Promise.all([readFile(cssPath, "utf8"), readFile(responsivePath, "utf8")]);
   const desktop = await loadPro7CssFixture({

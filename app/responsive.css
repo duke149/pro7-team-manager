@@ -2,7 +2,7 @@
 .account-menu{position:relative}
 .account-menu-desktop{display:flex;align-items:center;gap:10px;min-width:0}
 .app-header .account-menu-desktop{display:none}
-.account-menu-trigger{display:none;width:42px;height:42px;padding:0;border:1px solid var(--line);border-radius:10px;background:#fff;color:var(--ink);place-items:center}
+.account-menu-trigger{display:none;width:44px;height:44px;padding:0;border:1px solid var(--line);border-radius:10px;background:#fff;color:var(--ink);place-items:center}
 .app-header .account-menu-trigger{display:grid}
 .account-menu-trigger:hover{border-color:var(--red);color:var(--accent-strong)}
 .account-menu-popover{position:absolute;right:0;top:52px;z-index:var(--z-popover);width:min(280px,calc(100vw - 28px));overflow:hidden;border:1px solid var(--line);border-radius:13px;background:#fff;color:var(--ink);box-shadow:var(--shadow-overlay)}

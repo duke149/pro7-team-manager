@@ -1,8 +1,8 @@
 # PRO7 Taste design-system audit
 
-Ngày audit: 2026-08-28  
-Phạm vi: Login, Account, Overview, Squad, Matches, Tactics, Funds, Admin Settings, shell điều hướng và các trạng thái loading/error/modal trên localhost.  
-Chuẩn tham chiếu: Taste (`redesign-existing-projects`), UI/UX Pro Max và Checklist Design.  
+Ngày audit: 2026-08-28
+Phạm vi: Login, Account, Overview, Squad, Matches, Tactics, Funds, Admin Settings, shell điều hướng và các trạng thái loading/error/modal trên localhost.
+Chuẩn tham chiếu: Taste (`redesign-existing-projects`), UI/UX Pro Max và Checklist Design.
 Theme: đen, trắng, đỏ; không dùng neon.
 
 ## Scope and versions
@@ -28,14 +28,16 @@ Theme: đen, trắng, đỏ; không dùng neon.
 
 ## Automated verification
 
-- Unit: 575 kiểm tra; 570 đạt; 0 lỗi; 5 kiểm tra PostgreSQL/Supabase phụ thuộc môi trường được skip có chủ đích.
+- Unit: 577 kiểm tra; 572 đạt; 0 lỗi; 5 kiểm tra PostgreSQL/Supabase phụ thuộc môi trường được skip có chủ đích.
 - Typography contract xác nhận font, semantic scale, line-height `1.5/1.25`, input mobile 16px và không còn microtype production.
-- Design-system/CSS audit: 13/13 đạt.
+- Design-system/CSS audit: 17/17 đạt.
 - Matches/Tactics focused: 104/104 đạt.
 - Admin/shared focused: 38/38 đạt.
 - ESLint toàn bộ phạm vi `app/layout.tsx`, `app/components`, `app/login`, `app/account`, `app/teams` và ba CSS contract: đạt, không warning.
 - `git diff --check`: đạt.
 - Production build/render được chạy ở gate cuối; các cảnh báo Node `DEP0205`, middleware deprecation và cổng Vite HMR là cảnh báo công cụ hiện hữu, không phải lỗi test.
+
+Review độc lập sau gate đầu đã phát hiện và xác nhận sửa ba regression cascade: badge vị trí GK/DEF không còn teal/vàng, nút hiện mật khẩu và account menu đạt 44×44px, và wordmark PRO7 giữ Barlow thay vì bị selector con trả về Open Sans.
 
 ## Member browser matrix
 

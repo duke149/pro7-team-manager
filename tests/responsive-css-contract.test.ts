@@ -116,6 +116,7 @@ async function stylesheetFixture() {
   window.document.body.innerHTML = `
     <div class="pro7-shell light">
       <header class="app-header"><div class="header-actions"><div class="notification-center"><button class="icon-button notification">N</button></div><div class="account-menu"><button class="account-menu-trigger">A</button></div></div></header>
+      <form class="login-form"><div class="password-field"><button class="password-visibility">P</button></div></form>
       <form class="squad-toolbar"><label class="search-box"><button class="search-submit">S</button><input /></label><div class="filter-row"><a href="#">GK</a></div></form>
       <nav class="mobile-nav"><a href="#">Tổng quan</a><a href="#">Đội hình</a><a href="#">Trận</a><a href="#">Sơ đồ</a><a href="#">Quỹ</a></nav>
       <main><form class="account-profile-fields"><label>Tên<input /></label></form></main>
@@ -142,6 +143,10 @@ test("phone keeps notification and fixed navigation operable with readable contr
     assert.equal(value(".mobile-nav a", "font-size"), "12px");
     assert.equal(value(".search-submit", "width"), "44px");
     assert.equal(value(".filter-row a", "height"), "44px");
+    assert.equal(value(".account-menu-trigger", "width"), "44px");
+    assert.equal(value(".account-menu-trigger", "height"), "44px");
+    assert.equal(value(".password-visibility", "width"), "44px");
+    assert.equal(value(".password-visibility", "height"), "44px");
     assert.equal(value(".account-profile-fields input", "font-size"), "16px");
   } finally {
     fixture.window.close();
