@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import test from "node:test";
 import { Window } from "happy-dom";
@@ -143,6 +144,11 @@ test("Login exposes no cosmetic session-persistence control", async () => {
   assert.equal(view.container.querySelector('input[name="remember"]'), null);
   assert.doesNotMatch(view.container.textContent ?? "", /Ghi nhớ đăng nhập/u);
   await act(async () => view.root.unmount());
+});
+
+test("Login does not advertise unauthenticated demo access", async () => {
+  const source = await readFile(new URL("../app/login/login-form.tsx", import.meta.url), "utf8");
+  assert.doesNotMatch(source, /href="\/demo"|demo-bypass-button|Trải nghiệm bản Demo|Không cần đăng nhập/u);
 });
 
 declare global {

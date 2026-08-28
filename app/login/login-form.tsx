@@ -110,10 +110,6 @@ export default function LoginForm({
         )}
       </button>
 
-      <a href="/demo" className="demo-bypass-button">
-        Trải nghiệm bản Demo ngay (Không cần đăng nhập) →
-      </a>
-
       <div className="login-help-text">
         <span>Chưa có tài khoản? Liên hệ ban quản trị đội bóng để được tạo tài khoản.</span>
       </div>
