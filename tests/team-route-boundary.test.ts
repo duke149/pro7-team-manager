@@ -610,7 +610,7 @@ test("team layout preserves a trusted requested deep link through authentication
     children: "child",
     params: Promise.resolve({ slug: "đội bóng" }),
     getReturnPath: async () =>
-      "/teams/%C4%91%E1%BB%99i%20b%C3%B3ng/matches/match-12?tab=attendance",
+      "/teams/%C4%91%E1%BB%99i%20b%C3%B3ng/matches/00000000-0000-4000-8000-000000000101/rsvp",
     requireProductUser: async (next) => {
       seen.push(next);
       return { user: { id: "user-1" }, requiresPasswordChange: false };
@@ -618,7 +618,7 @@ test("team layout preserves a trusted requested deep link through authentication
   });
 
   assert.deepEqual(seen, [
-    "/teams/%C4%91%E1%BB%99i%20b%C3%B3ng/matches/match-12?tab=attendance",
+    "/teams/%C4%91%E1%BB%99i%20b%C3%B3ng/matches/00000000-0000-4000-8000-000000000101/rsvp",
   ]);
 });
 

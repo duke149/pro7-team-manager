@@ -5,6 +5,7 @@ import {
   CalendarDays,
   Check,
   ClipboardList,
+  Clock3,
   MapPin,
   Save,
   Trophy,
@@ -12,12 +13,14 @@ import {
 } from "lucide-react";
 import { useState, type FormEvent } from "react";
 
+import { MatchShareButton } from "../../../../components/match-share-button";
 import type {
   AttendanceResponseStatus,
   MatchDetail as MatchDetailModel,
   MatchTeamMetrics,
   TeamMetric,
 } from "../../../../../lib/matches/model";
+import { UNCERTAIN_ATTENDANCE_NOTE } from "../../../../../lib/matches/model";
 import {
   formatVietnamMatchDateTime,
   fromVietnamDateTimeInput,
@@ -133,14 +136,14 @@ export function MatchDetail({
       return false;
     }
   }
-  async function rsvp(status: AttendanceResponseStatus) {
+  async function rsvp(status: AttendanceResponseStatus, note: string | null = null) {
     if (!own || rsvpClosed) return;
     await mutate(
       `${base}/attendance`,
       {
         action: "respond",
         status,
-        note: null,
+        note,
         expectedUpdatedAt: own.updatedAt,
       },
       "POST",
@@ -264,6 +267,17 @@ export function MatchDetail({
             >
               <ClipboardList size={16} /> Sa bàn chiến thuật
             </a>
+            {match.status === "scheduled" && (
+              <MatchShareButton
+                slug={slug}
+                matchId={match.id}
+                teamName={teamName}
+                opponent={match.opponent}
+                startsAt={match.startsAt}
+                venue={match.venue}
+                className="soft-button match-detail-share"
+              />
+            )}
             {outcome && (
               <span className={`match-detail-result match-result-pill ${outcome.className}`}>
                 {outcome.label} · {teamScore} – {awayScore}
@@ -280,15 +294,24 @@ export function MatchDetail({
               <h2>Bạn có tham gia?</h2>
             </div>
           </div>
-          <div className="rsvp-options two-options">
+          <div className="rsvp-options">
             <button
               type="button"
               disabled={state.pending || rsvpClosed}
-              className={own.status === "available" ? "active yes" : ""}
+              className={own.status === "available" && own.note !== UNCERTAIN_ATTENDANCE_NOTE ? "active yes" : ""}
               onClick={() => void rsvp("available")}
             >
               <Check />
               Có
+            </button>
+            <button
+              type="button"
+              disabled={state.pending || rsvpClosed}
+              className={own.status === "available" && own.note === UNCERTAIN_ATTENDANCE_NOTE ? "active maybe" : ""}
+              onClick={() => void rsvp("available", UNCERTAIN_ATTENDANCE_NOTE)}
+            >
+              <Clock3 />
+              Có thể
             </button>
             <button
               type="button"
@@ -435,16 +458,17 @@ export function MatchDetail({
               <span>THAM GIA</span>
               <h2>Danh sách xác nhận</h2>
             </div>
-            <strong>
-              {match.attendance.available}/{match.attendance.invited}
-            </strong>
+            <strong>{detail.attendance.filter((attendance) => attendance.status === "available" && attendance.note !== UNCERTAIN_ATTENDANCE_NOTE).length} chắc chắn</strong>
           </div>
           {detail.attendance.length === 0 ? (
             <p className="match-muted">Chưa mời thành viên.</p>
           ) : (
             (() => {
               const available = detail.attendance.filter(
-                (a) => a.status === "available",
+                (a) => a.status === "available" && a.note !== UNCERTAIN_ATTENDANCE_NOTE,
+              );
+              const tentative = detail.attendance.filter(
+                (a) => a.status === "available" && a.note === UNCERTAIN_ATTENDANCE_NOTE,
               );
               const others = detail.attendance.filter(
                 (a) => a.status !== "available",
@@ -484,6 +508,20 @@ export function MatchDetail({
                         >
                           <b>{attendance.displayName ?? "Thành viên"}</b>
                           <span className="bench-pill">Dự bị</span>
+                        </div>
+                      ))}
+                    </>
+                  )}
+                  {tentative.length > 0 && (
+                    <>
+                      <div className="rsvp-group-title" style={{ marginTop: 8 }}>
+                        <span>Chưa chắc chắn</span>
+                        <span className="tentative-pill">{tentative.length} cầu thủ</span>
+                      </div>
+                      {tentative.map((attendance) => (
+                        <div className="match-attendance-row" key={attendance.userId}>
+                          <b>{attendance.displayName ?? "Thành viên"}</b>
+                          <span className="tentative-pill">Có thể</span>
                         </div>
                       ))}
                     </>

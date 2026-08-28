@@ -1,5 +1,6 @@
 export const MATCH_STATUSES = ["scheduled", "completed", "cancelled"] as const;
 export const ATTENDANCE_STATUSES = ["pending", "available", "unavailable"] as const;
+export const UNCERTAIN_ATTENDANCE_NOTE = "Có thể tham gia — chưa chắc chắn.";
 
 export type MatchStatus = (typeof MATCH_STATUSES)[number];
 export type AttendanceStatus = (typeof ATTENDANCE_STATUSES)[number];

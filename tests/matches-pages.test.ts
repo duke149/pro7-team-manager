@@ -206,6 +206,25 @@ test("completed detail shows the analysis editor only to Admin and never fabrica
   }
 });
 
+test("Admin attendance reconciliation distinguishes tentative players from the confirmed seven", async () => {
+  const tentativeDetail: MatchDetail = {
+    ...DETAIL,
+    match: { ...DETAIL.match, attendance: { invited: 4, available: 2, unavailable: 1, pending: 1 } },
+    attendance: [
+      { userId: USER_ID, displayName: "Nguyễn An", status: "available", note: null, respondedAt: "2026-10-03T00:00:00.000Z", updatedAt: "2026-10-03T00:00:00.000Z" },
+      { userId: "00000000-0000-4000-8000-000000000011", displayName: "Bình", status: "available", note: "Có thể tham gia — chưa chắc chắn.", respondedAt: "2026-10-03T00:00:00.000Z", updatedAt: "2026-10-03T00:00:00.000Z" },
+      { userId: "00000000-0000-4000-8000-000000000012", displayName: "Cường", status: "unavailable", note: null, respondedAt: "2026-10-03T00:00:00.000Z", updatedAt: "2026-10-03T00:00:00.000Z" },
+      { userId: "00000000-0000-4000-8000-000000000013", displayName: "Dũng", status: "pending", note: null, respondedAt: null, updatedAt: "2026-10-03T00:00:00.000Z" },
+    ],
+  };
+  const output = await detailPage.renderMatchDetailPage({ params: Promise.resolve({ slug: "pro7-fc", matchId: MATCH_ID }), requireTeamPermission: async () => ADMIN, getMatchDetail: async () => ({ ok: true, detail: tentativeDetail }), denied: () => "SAFE_DENIAL" });
+  const markup = html(output);
+  assert.match(markup, /Đội hình chính \(7 người\)[\s\S]*1\/7/u);
+  assert.equal(markup.match(/>Đội chính</gu)?.length, 1);
+  assert.match(markup, /Chưa chắc chắn[\s\S]*Bình[\s\S]*Có thể/u);
+  assert.match(markup, /Vắng mặt &amp; Đang chờ[\s\S]*Cường[\s\S]*Vắng[\s\S]*Dũng[\s\S]*Đang chờ/u);
+});
+
 test("match API routes forward decoded targets to their server authority handlers", async () => {
   const request = new Request("https://pro7.example/api", { method: "POST" });
   const response = new Response("OK");

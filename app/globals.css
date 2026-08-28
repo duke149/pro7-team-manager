@@ -280,6 +280,15 @@
   font-size: 12px;
   font-weight: 800;
 }
+.tentative-pill {
+  padding: 3px 8px;
+  border: 1px solid #c9c9cf;
+  border-radius: 999px;
+  background: #f3f4f6;
+  color: #45454c;
+  font-size: 12px;
+  font-weight: 800;
+}
 .pro7-shell.dark .starting-pill {
   background: rgba(215, 25, 53, 0.2);
   color: #ff9baa;
@@ -287,6 +296,11 @@
 .pro7-shell.dark .bench-pill {
   background: rgba(255, 255, 255, 0.08);
   color: #d5d5da;
+}
+.pro7-shell.dark .tentative-pill {
+  background: #303036;
+  border-color: #56565e;
+  color: #f4f4f5;
 }
 .share-zalo-btn {
   display: inline-flex;
@@ -304,6 +318,124 @@
 }
 .share-zalo-btn:hover {
   opacity: 0.9;
+}
+.match-share-row {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: var(--space-3, 12px);
+}
+.match-share-control {
+  display: grid;
+  justify-items: end;
+  gap: 7px;
+  max-width: min(100%, 460px);
+}
+.match-share-control button svg {
+  width: 16px;
+  height: 16px;
+}
+.match-share-message {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.match-share-fallback {
+  width: min(100%, 460px);
+  min-height: 40px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--color-surface, #fff);
+  color: var(--ink);
+  padding: 8px 10px;
+  font: inherit;
+  font-size: 12px;
+}
+.match-detail-share {
+  margin: 0;
+}
+.match-rsvp-view {
+  min-height: min(72vh, 720px);
+  align-items: center;
+  justify-content: center;
+}
+.match-rsvp-card {
+  width: min(100%, 680px);
+  padding: clamp(22px, 4vw, 40px);
+}
+.match-rsvp-heading {
+  border-bottom: 1px solid var(--line);
+  padding-bottom: var(--space-4, 16px);
+}
+.match-rsvp-heading h1 {
+  margin: 7px 0;
+  font-family: var(--font-display, "Barlow", sans-serif);
+  font-size: clamp(28px, 5vw, 42px);
+  line-height: 1.1;
+}
+.match-rsvp-heading p,
+.match-rsvp-summary p,
+.match-rsvp-notice p {
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.5;
+}
+.match-rsvp-summary {
+  padding: var(--space-5, 20px) 0;
+}
+.match-rsvp-summary h2 {
+  margin: 0 0 14px;
+  font-size: clamp(20px, 4vw, 28px);
+}
+.match-rsvp-summary h2 em {
+  color: var(--muted);
+  font-size: 13px;
+  font-style: normal;
+}
+.match-rsvp-summary p {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 0 0;
+}
+.match-rsvp-summary svg {
+  width: 17px;
+  flex: 0 0 auto;
+}
+.match-rsvp-choices {
+  margin: 0;
+}
+.match-rsvp-choices button.active.maybe {
+  background: #f3f4f6;
+  border-color: #85858d;
+  color: #303036;
+}
+.match-rsvp-notice {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control, 10px);
+  background: var(--neutral-50, #f8f8f9);
+  padding: var(--space-4, 16px);
+}
+.match-rsvp-notice h2 {
+  margin: 0 0 6px;
+  font-size: 18px;
+}
+.match-rsvp-detail-link {
+  display: inline-flex;
+  margin-top: var(--space-4, 16px);
+  text-decoration: none;
+}
+.match-rsvp-detail-link svg {
+  width: 16px;
+}
+.pro7-shell.dark .match-share-fallback,
+.pro7-shell.dark .match-rsvp-notice {
+  background: #1b1b1e;
+  border-color: #38383d;
+  color: #f4f4f5;
+}
+.pro7-shell.dark .match-rsvp-choices button.active.maybe {
+  background: #56565e;
+  color: #fff;
 }
 
 /* Pro Athlete Card with Watermark & Form */
