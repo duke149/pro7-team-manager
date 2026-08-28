@@ -169,7 +169,7 @@
 
 /* Match Ticket Hero */
 .match-hero.ticket-style {
-  background: linear-gradient(135deg, #0b1320 0%, #151d2f 50%, #1a1218 100%);
+  background: linear-gradient(135deg, #0b0b0c 0%, #171719 58%, #241318 100%);
   border: 1px solid rgba(255,255,255,0.08);
   box-shadow: 0 16px 40px rgba(0,0,0,0.22);
 }
@@ -204,7 +204,7 @@
   border-radius: 999px;
 }
 .pro7-shell.dark .timeline-track {
-  background: #252836;
+  background: #29292d;
 }
 .timeline-progress {
   height: 100%;
@@ -241,8 +241,8 @@
   min-width: 32px;
 }
 .pro7-shell.dark .timeline-item {
-  background: #191c28;
-  border-color: #2a2e3f;
+  background: #1b1b1e;
+  border-color: #38383d;
   color: #f4f4f5;
 }
 
@@ -418,14 +418,12 @@
 
 /* Mowed Grass Pitch */
 .pitch.mowed-pitch {
-  background: repeating-linear-gradient(
-    180deg,
-    #1b6838 0px,
-    #1b6838 48px,
-    #175b31 48px,
-    #175b31 96px
-  ) !important;
-  border: 4px solid #144e2a !important;
+  background-color: #111113 !important;
+  background-image:
+    linear-gradient(rgba(215, 25, 53, .14) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(215, 25, 53, .14) 1px, transparent 1px) !important;
+  background-size: 36px 36px !important;
+  border: 3px solid var(--accent) !important;
   box-shadow: inset 0 0 40px rgba(0,0,0,0.35), 0 16px 36px rgba(0,0,0,0.18) !important;
 }
 .pitch-player.glow-active b {
@@ -676,7 +674,7 @@
   border-color: rgba(0, 0, 0, 0.12);
 }
 .pro7-shell.dark .match-history-card {
-  background: #141722;
+  background: #1b1b1e;
   border-color: rgba(255, 255, 255, 0.08);
 }
 .pro7-shell.dark .match-history-card:hover {
@@ -803,13 +801,13 @@
   transition: all 0.15s ease;
 }
 .history-action-btn.secondary {
-  background: #f8fafc;
+  background: var(--neutral-50);
   color: var(--ink);
   border: 1px solid var(--line);
 }
 .history-action-btn.secondary:hover {
-  background: #e2e8f0;
-  border-color: #cbd5e1;
+  background: var(--neutral-100);
+  border-color: var(--neutral-300);
 }
 .history-action-btn.primary {
   background: var(--navy);
@@ -817,16 +815,16 @@
   border: 1px solid transparent;
 }
 .history-action-btn.primary:hover {
-  background: #253047;
+  background: #252528;
   box-shadow: 0 4px 12px rgba(15, 23, 42, 0.15);
 }
 .pro7-shell.dark .history-action-btn.secondary {
-  background: #202434;
+  background: #242428;
   color: #f1f5f9;
   border-color: rgba(255, 255, 255, 0.1);
 }
 .pro7-shell.dark .history-action-btn.secondary:hover {
-  background: #2a3045;
+  background: #303034;
   border-color: rgba(255, 255, 255, 0.2);
 }
 .pro7-shell.dark .history-action-btn.primary {
@@ -1152,3 +1150,17 @@ body{line-height:var(--leading-body)}
 .squad-filter-panel>form{z-index:var(--z-popover);padding:var(--space-4);border-radius:var(--radius-card);box-shadow:var(--shadow-overlay)}
 .dashboard-view :is(.card,.stat-card){border-color:var(--color-border);background:var(--color-surface);box-shadow:var(--shadow-card)}
 .pro7-shell.dark .dashboard-view :is(.card,.stat-card){border-color:#323236;background:#1b1b1e}
+
+/* Match center and tactics keep the same PRO7 card, action, and spacing contract. */
+:is(.match-top-grid,.match-analysis-grid,.match-detail-grid,.tactics-layout){gap:var(--space-5)}
+:is(.confirmed-card,.analysis-card,.match-history-card){border-radius:var(--radius-card);box-shadow:var(--shadow-card)}
+:is(.rsvp-card,.fixtures-card,.match-attendance-card,.match-invite-card,.tactics-match-list,.instruction-card,.bench-card){padding:var(--space-5)}
+.share-zalo-btn,.history-action-btn,.formation-btn{min-height:var(--control-min-size)}
+.history-action-btn{height:auto;border-radius:var(--radius-control)}
+.tactics-toolbar{align-items:center;gap:var(--space-3);padding:var(--space-4)}
+.tactics-toolbar select,.mode-toggle button{min-height:var(--control-min-size)}
+.mode-toggle{gap:var(--space-1);padding:var(--space-1)}
+.mode-toggle button{padding:0 var(--space-4)}
+.tactics-side{gap:var(--space-5)}
+.pitch-card{padding:var(--space-4)}
+.instruction-card textarea{min-height:120px}

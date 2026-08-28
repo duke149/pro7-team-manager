@@ -4,6 +4,7 @@ import test from "node:test";
 import { loadPro7CssFixture } from "./css-contract-helpers";
 
 const cssPath = new URL("../app/globals.css", import.meta.url);
+const responsivePath = new URL("../app/responsive.css", import.meta.url);
 const squadPath = new URL("../app/teams/[slug]/squad/squad-view.tsx", import.meta.url);
 const modalPath = new URL("../app/components/accessible-modal.tsx", import.meta.url);
 
@@ -106,6 +107,28 @@ test("Overview and Squad use tokenized card rhythm", async () => {
   } finally {
     desktop.close();
     phone.close();
+  }
+});
+
+test("Matches and Tactics use the neutral PRO7 surface and touch rhythm", async () => {
+  const [css, responsive] = await Promise.all([readFile(cssPath, "utf8"), readFile(responsivePath, "utf8")]);
+  const desktop = await loadPro7CssFixture({
+    width: 1440,
+    body: '<main class="pro7-shell"><section class="match-top-grid two-col"><article class="confirmed-card"></article><article class="card"></article></section><section class="tactics-layout"><article class="pitch-card"><div class="pitch mowed-pitch"></div></article></section><section class="tactics-toolbar card"><select></select><div class="mode-toggle"><button>Có bóng</button></div></section><a class="history-action-btn primary">Xem</a></main>',
+  });
+  try {
+    assert.doesNotMatch(css, /#(?:1b6838|175b31|0b1320|151d2f)\b/iu);
+    assert.equal(desktop.window.getComputedStyle(desktop.document.querySelector(".match-top-grid")!).gap, "24px");
+    assert.equal(desktop.window.getComputedStyle(desktop.document.querySelector(".confirmed-card")!).borderRadius, "12px");
+    assert.equal(desktop.window.getComputedStyle(desktop.document.querySelector(".tactics-layout")!).gap, "24px");
+    assert.equal(desktop.window.getComputedStyle(desktop.document.querySelector(".tactics-toolbar")!).padding, "16px");
+    assert.equal(desktop.window.getComputedStyle(desktop.document.querySelector(".mode-toggle button")!).minHeight, "44px");
+    assert.equal(desktop.window.getComputedStyle(desktop.document.querySelector(".history-action-btn")!).minHeight, "44px");
+    assert.match(responsive, /\.match-history-card\{display:grid;grid-template-columns:1fr/u);
+    assert.match(responsive, /\.match-history-actions\{display:grid;grid-template-columns:1fr 1fr;width:100%/u);
+    assert.match(responsive, /\.tactics-toolbar>label,\.tactics-toolbar>\.mode-toggle,\.tactics-toolbar>div:last-child\{width:100%/u);
+  } finally {
+    desktop.close();
   }
 });
 

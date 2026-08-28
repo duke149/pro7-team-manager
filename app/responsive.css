@@ -95,6 +95,20 @@
   .audit-list code{grid-column:1/-1}
   .settings-module{padding:18px}
   .tactics-toolbar :is(button,select),.mode-toggle button{min-height:44px}
+  :is(.match-top-grid,.match-analysis-grid,.match-detail-grid,.tactics-layout){gap:var(--space-4)}
+  :is(.confirmed-body,.rsvp-card,.fixtures-card,.match-attendance-card,.match-invite-card,.tactics-match-list,.instruction-card,.bench-card){padding:var(--space-4)}
+  .share-zalo-btn{width:100%;justify-content:center}
+  .match-history-card{display:grid;grid-template-columns:1fr;gap:var(--space-3);padding:var(--space-4)}
+  .match-history-teams,.match-history-meta{flex-wrap:wrap}
+  .match-history-actions{display:grid;grid-template-columns:1fr 1fr;width:100%;gap:var(--space-2)}
+  .history-action-btn{width:100%;padding-inline:var(--space-3)}
+  .tactics-toolbar{display:grid;grid-template-columns:1fr;align-items:stretch;gap:var(--space-3);padding:var(--space-4)}
+  .tactics-toolbar>label,.tactics-toolbar>.mode-toggle,.tactics-toolbar>div:last-child{width:100%}
+  .tactics-toolbar>div:last-child{display:grid;grid-template-columns:1fr 1fr;gap:var(--space-2);margin-left:0}
+  .tactics-toolbar>div:last-child .soft-button{width:auto;padding-inline:var(--space-3);font-size:var(--type-control)}
+  .mode-toggle{order:initial}
+  .mode-toggle button{min-width:0;padding-inline:var(--space-2)}
+  .pitch-card{padding:var(--space-2)}
   .bench-player:is(button){min-height:48px}
   .account-profile-header{min-height:72px;padding:12px 14px}
   .account-profile-content{width:min(100% - 28px,680px);padding:24px 0 40px}
