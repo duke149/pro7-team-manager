@@ -40,24 +40,64 @@
 - Delete: `public/fonts/roboto-vietnamese.woff2`
 - Delete: `public/fonts/roboto-variable.woff2`
 - Delete: `public/fonts/ROBOTO-LICENSE.txt`
+- Create: `scripts/audit-pro7-css.mjs`
+- Create: `tests/css-contract-helpers.ts`
+- Create: `tests/css-audit.test.ts`
 - Test: `tests/typography-contract.test.ts`
 - Test: `tests/design-system-contract.test.ts`
 
 **Interfaces:**
 
 - Consumes: the checked-in Be Vietnam Pro WOFF2 and OFL license.
-- Produces: root tokens `--font-sans`, `--font-numeric`, `--type-*`, `--color-*`, `--space-*`, `--radius-*`, `--shadow-*`, `--control-min-size`, and `--z-*` for every later task.
+- Produces: root tokens `--font-sans`, `--font-numeric`, `--type-*`, `--color-*`, `--space-*`, `--radius-*`, `--shadow-*`, `--control-min-size`, and `--z-*` for every later task; `loadPro7CssFixture()` for computed-style tests; and `auditCss()` for an executable forbidden-colour audit.
 
 - [ ] **Step 1: Rewrite the font/token contracts so the current Roboto and neon baseline fails**
 
-Update the font paths and assertions in `tests/typography-contract.test.ts`:
+Create `tests/css-contract-helpers.ts` by extracting the real cascade parser from
+`tests/responsive-css-contract.test.ts` and exposing this interface:
+
+```ts
+export async function loadPro7CssFixture({ width, body }: { width: number; body: string }) {
+  const window = new Window();
+  window.happyDOM.setViewport({ width, height: 900 });
+  const css = (await Promise.all([
+    readFile(new URL("../app/design-tokens.css", import.meta.url), "utf8"),
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+    readFile(new URL("../app/responsive.css", import.meta.url), "utf8"),
+    readFile(new URL("../app/typography.css", import.meta.url), "utf8"),
+  ])).join("\n");
+  const style = window.document.createElement("style");
+  style.textContent = css;
+  window.document.head.append(style);
+  window.document.body.innerHTML = body;
+  return { close: () => window.close(), document: window.document, window };
+}
+```
+
+Create `tests/css-audit.test.ts` before its implementation. The audit must reject
+real parsed declarations, not grep an expected source line:
+
+```ts
+import { auditCss } from "../scripts/audit-pro7-css.mjs";
+
+test("the CSS audit rejects off-brand declaration values", () => {
+  assert.deepEqual(auditCss(".bad{color:#00e676;background:#0068ff}"), [
+    { property: "color", value: "#00e676" },
+    { property: "background", value: "#0068ff" },
+  ]);
+  assert.deepEqual(auditCss(".ok{color:#d71935;background:#171719}"), []);
+});
+```
+
+Update the font paths and computed-style assertions in
+`tests/typography-contract.test.ts`:
 
 ```ts
 const tokenPath = new URL("../app/design-tokens.css", import.meta.url);
 const fontPath = new URL("../public/fonts/be-vietnam-pro-variable.woff2", import.meta.url);
 const licensePath = new URL("../public/fonts/OFL.txt", import.meta.url);
 
-test("the root layout loads the token layer and self-hosted Be Vietnam Pro", async () => {
+test("the compiled style stack resolves Be Vietnam Pro and readable phone inputs", async () => {
   const [layout, tokens, font, license] = await Promise.all([
     readFile(layoutPath, "utf8"),
     readFile(tokenPath, "utf8"),
@@ -71,22 +111,35 @@ test("the root layout loads the token layer and self-hosted Be Vietnam Pro", asy
   assert.match(tokens, /font-family:\s*"Be Vietnam Pro"/u);
   assert.match(tokens, /font-weight:\s*400 800/u);
   assert.doesNotMatch(layout + tokens, /Roboto|fonts\.googleapis|fonts\.gstatic/iu);
+  const fixture = await loadPro7CssFixture({
+    width: 375,
+    body: '<main><h1>Đội hình chính</h1><form class="match-form"><input /></form></main>',
+  });
+  try {
+    assert.match(fixture.window.getComputedStyle(fixture.document.body).fontFamily, /Be Vietnam Pro/u);
+    assert.equal(fixture.window.getComputedStyle(fixture.document.querySelector("input")!).fontSize, "16px");
+  } finally {
+    fixture.close();
+  }
 });
 ```
 
-Update `tests/design-system-contract.test.ts` to read `design-tokens.css` and
-reject the QA colour variables:
+Update `tests/design-system-contract.test.ts` to assert final computed tokens and
+card geometry:
 
 ```ts
-test("PRO7 tokens expose the bounded visual system without QA accents", async () => {
-  const css = await readFile(new URL("../app/design-tokens.css", import.meta.url), "utf8");
-  assert.match(css, /--brand-red-500:\s*#d71935/iu);
-  assert.match(css, /--space-1:\s*4px/iu);
-  assert.match(css, /--space-7:\s*40px/iu);
-  assert.match(css, /--radius-control:\s*8px/iu);
-  assert.match(css, /--radius-card:\s*12px/iu);
-  assert.match(css, /--radius-dialog:\s*16px/iu);
-  assert.doesNotMatch(css, /neon|electric-cyan|#00e676|#00b4d8|#0068ff/iu);
+test("PRO7 tokens resolve the bounded visual system", async () => {
+  const fixture = await loadPro7CssFixture({ width: 1440, body: '<article class="card">Nội dung</article>' });
+  try {
+    const root = fixture.window.getComputedStyle(fixture.document.documentElement);
+    const card = fixture.window.getComputedStyle(fixture.document.querySelector(".card")!);
+    assert.equal(root.getPropertyValue("--brand-red-500").trim().toLowerCase(), "#d71935");
+    assert.equal(root.getPropertyValue("--space-1").trim(), "4px");
+    assert.equal(root.getPropertyValue("--space-7").trim(), "40px");
+    assert.equal(card.borderRadius, "12px");
+  } finally {
+    fixture.close();
+  }
 });
 ```
 
@@ -95,11 +148,11 @@ test("PRO7 tokens expose the bounded visual system without QA accents", async ()
 Run:
 
 ```bash
-npm run test:unit -- tests/typography-contract.test.ts tests/design-system-contract.test.ts
+npm run test:unit -- tests/css-audit.test.ts tests/typography-contract.test.ts tests/design-system-contract.test.ts
 ```
 
-Expected: FAIL because `app/design-tokens.css` is absent and the root layout
-still preloads Roboto.
+Expected: FAIL because the CSS audit module and token file are absent and the
+root layout still preloads Roboto.
 
 - [ ] **Step 3: Add the token layer and restore Be Vietnam Pro**
 
@@ -171,12 +224,18 @@ npm uninstall @fontsource-variable/roboto
 Delete only the tracked Roboto files listed above; keep Be Vietnam Pro and
 `public/fonts/OFL.txt`.
 
+Implement `scripts/audit-pro7-css.mjs` as a small declaration parser that strips
+comments, iterates rule bodies, lowercases property/value pairs, and returns an
+ordered violation for values containing `#00e676`, `#00b4d8`, `#0068ff`,
+`#38bdf8`, or `#2b54c8`. It must ignore selector text so a class name alone does
+not fail the audit.
+
 - [ ] **Step 4: Run focused tests and production build**
 
 Run:
 
 ```bash
-npm run test:unit -- tests/typography-contract.test.ts tests/design-system-contract.test.ts
+npm run test:unit -- tests/css-audit.test.ts tests/typography-contract.test.ts tests/design-system-contract.test.ts
 npm run build
 git diff --check
 ```
@@ -186,7 +245,7 @@ Expected: token/font contracts PASS, build exits 0, and diff check is clean.
 - [ ] **Step 5: Commit the foundation**
 
 ```bash
-git add app/design-tokens.css app/layout.tsx app/typography.css app/globals.css package.json package-lock.json public/fonts tests/typography-contract.test.ts tests/design-system-contract.test.ts
+git add app/design-tokens.css app/layout.tsx app/typography.css app/globals.css package.json package-lock.json public/fonts scripts/audit-pro7-css.mjs tests/css-contract-helpers.ts tests/css-audit.test.ts tests/typography-contract.test.ts tests/design-system-contract.test.ts
 git commit -m "style: restore PRO7 design foundations"
 ```
 
@@ -209,24 +268,34 @@ git commit -m "style: restore PRO7 design foundations"
 
 - [ ] **Step 1: Add failing cascade tests for shell boundaries and role-neutral bottom navigation**
 
-Extend `tests/responsive-css-contract.test.ts`:
+Replace its private parser with `loadPro7CssFixture()` and extend
+`tests/responsive-css-contract.test.ts` with computed cascade checks:
 
 ```ts
-test("the authoritative shell uses only the approved navigation ranges", async () => {
-  const css = await readFile(new URL("../app/responsive.css", import.meta.url), "utf8");
-  assert.match(css, /@media\s*\(max-width:\s*1023px\)/u);
-  assert.match(css, /@media\s*\(max-width:\s*767px\)/u);
-  assert.doesNotMatch(css, /@media\s*\(max-width:\s*(?:760|900)px\)[\s\S]*?\.(?:sidebar|mobile-nav|app-header)/u);
+test("the shell switches once between phone, tablet, and desktop navigation", async () => {
+  const body = '<aside class="sidebar"></aside><main class="app-main"><header class="app-header"></header><nav class="mobile-nav"><a>Tổng quan</a><a>Đội hình</a><a>Trận</a><a>Sơ đồ</a><a>Quỹ</a></nav></main>';
+  const phone = await loadPro7CssFixture({ width: 767, body });
+  const tablet = await loadPro7CssFixture({ width: 768, body });
+  const desktop = await loadPro7CssFixture({ width: 1024, body });
+  try {
+    assert.equal(phone.window.getComputedStyle(phone.document.querySelector(".mobile-nav")!).display, "grid");
+    assert.equal(tablet.window.getComputedStyle(tablet.document.querySelector(".mobile-nav")!).display, "none");
+    assert.equal(desktop.window.getComputedStyle(desktop.document.querySelector(".sidebar")!).position, "fixed");
+  } finally {
+    phone.close(); tablet.close(); desktop.close();
+  }
 });
 
-test("phone navigation works for both Member and Admin item counts", async () => {
-  const fixture = await stylesheetFixture();
+test("phone navigation works for the five-item Admin variant", async () => {
+  const fixture = await loadPro7CssFixture({ width: 320, body: '<nav class="mobile-nav"><a>1</a><a>2</a><a>3</a><a>4</a><a>5</a></nav>' });
   try {
     const nav = fixture.document.querySelector(".mobile-nav")!;
-    assert.equal(cascadedProperty({ rules: fixture.rules, element: nav, property: "grid-template-columns", width: 320 }), "repeat(auto-fit,minmax(0,1fr))");
-    assert.equal(cascadedProperty({ rules: fixture.rules, element: nav, property: "min-height", width: 320 }), "72px");
+    const links = [...fixture.document.querySelectorAll(".mobile-nav a")];
+    assert.equal(fixture.window.getComputedStyle(nav).gridTemplateColumns, "repeat(auto-fit, minmax(0px, 1fr))");
+    assert.equal(links.length, 5);
+    assert.ok(links.every((link) => fixture.window.getComputedStyle(link).minHeight === "56px"));
   } finally {
-    fixture.window.close();
+    fixture.close();
   }
 });
 ```
@@ -313,16 +382,26 @@ git commit -m "style: unify PRO7 responsive shell"
 
 - [ ] **Step 1: Add failing computed-style and source contracts**
 
-Add to `tests/design-system-contract.test.ts`:
+Add a real fixture to `tests/design-system-contract.test.ts`:
 
 ```ts
 test("shared controls expose target, focus, pressed, and disabled states", async () => {
-  const css = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
-  assert.match(css, /:is\([^}]*button[^}]*\):active[^}]*transform:\s*translateY\(1px\)/u);
-  assert.match(css, /:focus-visible[^}]*outline:\s*3px solid var\(--color-focus\)/u);
-  assert.match(css, /:disabled[^}]*cursor:\s*not-allowed/u);
-  assert.match(css, /\.login-card[^}]*border-radius:\s*var\(--radius-dialog\)/u);
-  assert.match(css, /\.account-profile-card[^}]*border-radius:\s*var\(--radius-card\)/u);
+  const fixture = await loadPro7CssFixture({
+    width: 375,
+    body: '<main class="login-shell"><section class="login-card"><form class="login-form"><button disabled>Đăng nhập</button><input /></form></section><section class="account-profile-card">Hồ sơ</section></main>',
+  });
+  try {
+    const button = fixture.document.querySelector("button")!;
+    const input = fixture.document.querySelector("input")!;
+    input.focus();
+    assert.equal(fixture.window.getComputedStyle(button).minHeight, "48px");
+    assert.equal(fixture.window.getComputedStyle(button).cursor, "not-allowed");
+    assert.equal(fixture.window.getComputedStyle(input).fontSize, "16px");
+    assert.equal(fixture.window.getComputedStyle(fixture.document.querySelector(".login-card")!).borderRadius, "16px");
+    assert.equal(fixture.window.getComputedStyle(fixture.document.querySelector(".account-profile-card")!).borderRadius, "12px");
+  } finally {
+    fixture.close();
+  }
 });
 ```
 
@@ -401,14 +480,21 @@ unnecessary markup diff.
 
 - [ ] **Step 1: Add failing contracts for compact empty cards and the filter row**
 
-Add CSS assertions to `tests/design-system-contract.test.ts`:
+Add computed-style assertions to `tests/design-system-contract.test.ts`:
 
 ```ts
 test("Overview and Squad use tokenized card rhythm", async () => {
-  const css = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
-  assert.match(css, /\.card,[^{]*\{[^}]*border-radius:\s*var\(--radius-card\)/u);
-  assert.match(css, /\.view-stack\{[^}]*gap:\s*var\(--space-5\)/u);
-  assert.match(css, /\.squad-toolbar\{[^}]*padding:\s*var\(--space-4\)/u);
+  const fixture = await loadPro7CssFixture({
+    width: 1440,
+    body: '<main class="view-stack"><article class="card"></article><form class="squad-toolbar"></form></main>',
+  });
+  try {
+    assert.equal(fixture.window.getComputedStyle(fixture.document.querySelector(".card")!).borderRadius, "12px");
+    assert.equal(fixture.window.getComputedStyle(fixture.document.querySelector(".view-stack")!).gap, "24px");
+    assert.equal(fixture.window.getComputedStyle(fixture.document.querySelector(".squad-toolbar")!).padding, "16px");
+  } finally {
+    fixture.close();
+  }
 });
 ```
 
@@ -488,15 +574,23 @@ git commit -m "style: polish overview and squad layouts"
 
 - [ ] **Step 1: Add failing off-brand colour and target-size regressions**
 
-Add to `tests/design-system-contract.test.ts`:
+Extend `tests/css-audit.test.ts` to run `auditCss()` against the concatenated
+production styles, and add a computed target-size fixture:
 
 ```ts
 test("match and tactics presentation contains no neon or generic blue accents", async () => {
-  const css = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
-  assert.doesNotMatch(css, /#00e676|#00b4d8|#0068ff|#38bdf8|#2b54c8/iu);
-  assert.match(css, /\.rsvp-options button[^}]*min-height:\s*var\(--control-min-size\)/u);
-  assert.match(css, /\.tactics-toolbar :is\(button,select\)[^}]*min-height:\s*var\(--control-min-size\)/u);
-  assert.match(css, /\.pitch[^}]*--pitch-line:\s*var\(--color-accent\)/u);
+  const fixture = await loadPro7CssFixture({
+    width: 375,
+    body: '<div class="rsvp-options"><button>Có</button></div><div class="tactics-toolbar"><button>Lưu</button><select><option>2-3-1</option></select></div><div class="pitch"></div>',
+  });
+  try {
+    assert.equal(fixture.window.getComputedStyle(fixture.document.querySelector(".rsvp-options button")!).minHeight, "44px");
+    assert.equal(fixture.window.getComputedStyle(fixture.document.querySelector(".tactics-toolbar button")!).minHeight, "44px");
+    assert.equal(fixture.window.getComputedStyle(fixture.document.querySelector(".tactics-toolbar select")!).minHeight, "44px");
+    assert.equal(fixture.window.getComputedStyle(fixture.document.querySelector(".pitch")!).getPropertyValue("--pitch-line").trim(), "var(--color-accent)");
+  } finally {
+    fixture.close();
+  }
 });
 ```
 
@@ -572,14 +666,21 @@ git commit -m "style: polish matches and tactics surfaces"
 
 Add a five-link 320 px fixture to `tests/responsive-css-contract.test.ts` that
 asserts each item has at least 44 px inline space and a 56 px minimum height.
-Add CSS source assertions:
+Add computed-style assertions:
 
 ```ts
 test("Funds and Settings use shared numeric, surface, and spacing tokens", async () => {
-  const css = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
-  assert.match(css, /\.balance-card[^}]*border-radius:\s*var\(--radius-card\)/u);
-  assert.match(css, /\.settings-module[^}]*padding:\s*var\(--space-5\)/u);
-  assert.match(css, /\.notification-popover[^}]*box-shadow:\s*var\(--shadow-overlay\)/u);
+  const fixture = await loadPro7CssFixture({
+    width: 1440,
+    body: '<article class="balance-card"></article><section class="settings-module"></section><aside class="notification-popover"></aside>',
+  });
+  try {
+    assert.equal(fixture.window.getComputedStyle(fixture.document.querySelector(".balance-card")!).borderRadius, "12px");
+    assert.equal(fixture.window.getComputedStyle(fixture.document.querySelector(".settings-module")!).padding, "24px");
+    assert.equal(fixture.window.getComputedStyle(fixture.document.querySelector(".notification-popover")!).boxShadow, "0 24px 64px rgba(23, 23, 25, 0.2)");
+  } finally {
+    fixture.close();
+  }
 });
 ```
 
