@@ -138,6 +138,13 @@ test("Login preserves ordinary email auth and rejects malformed usernames before
   await act(async () => invalidView.root.unmount());
 });
 
+test("Login exposes no cosmetic session-persistence control", async () => {
+  const view = await mounted();
+  assert.equal(view.container.querySelector('input[name="remember"]'), null);
+  assert.doesNotMatch(view.container.textContent ?? "", /Ghi nhớ đăng nhập/u);
+  await act(async () => view.root.unmount());
+});
+
 declare global {
   var __loginUsernameClient: unknown;
 }

@@ -58,6 +58,7 @@ const READY: OverviewResult = {
       { id: "00000000-0000-4000-8000-000000000202", title: "Tin đội ba", body: "Nội dung ba.", publishedAt: "2026-10-07T09:00:00.000Z" },
       { id: "00000000-0000-4000-8000-000000000201", title: "Tin đội bốn", body: "Nội dung bốn.", publishedAt: "2026-10-06T09:00:00.000Z" },
     ],
+    managedNews: null,
     calendar: [NEXT_MATCH],
   },
 };
@@ -69,6 +70,7 @@ const EMPTY: OverviewResult = {
     attendance: null,
     statistics: { completedMatches: 0, wins: 0, draws: 0, losses: 0, winRate: null, recentForm: [], recentPoints: 0, topScorer: null },
     news: [],
+    managedNews: null,
     calendar: [],
   },
 };
@@ -77,7 +79,7 @@ type OverviewPageModule = {
   renderOverviewPage(arguments_: {
     params: Promise<{ slug: string }>;
     requireTeamPermission: (slug: string, permission: PermissionCode) => Promise<TeamAccessContext | null>;
-    loadOverview: (teamId: string, userId: string, now: string) => Promise<OverviewResult>;
+    loadOverview: (teamId: string, userId: string, now: string, access: { matches: boolean; news: boolean; manageNews: boolean }) => Promise<OverviewResult>;
     denied: () => unknown;
     now?: string;
   }): Promise<unknown>;
@@ -111,8 +113,13 @@ async function render(context: TeamAccessContext, result: OverviewResult, expect
   return overview.renderOverviewPage({
     params: Promise.resolve({ slug: "pro7-fc" }),
     requireTeamPermission: async () => context,
-    loadOverview: async (teamId, userId, actualNow) => {
+    loadOverview: async (teamId, userId, actualNow, access) => {
       assert.deepEqual([teamId, userId, actualNow], ["team-1", USER_ID, expectedNow]);
+      assert.deepEqual(access, {
+        matches: context.permissions.includes("matches.read"),
+        news: context.permissions.includes("news.read"),
+        manageNews: context.permissions.includes("news.manage"),
+      });
       return result;
     },
     denied: () => "SAFE_DENIAL",

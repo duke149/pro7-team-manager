@@ -1,4 +1,11 @@
 import type { AttendanceCounts, MatchSummary } from "../matches/model";
+import type { ManagedTeamNewsPost } from "../news/model";
+
+export type OverviewAccess = Readonly<{
+  matches: boolean;
+  news: boolean;
+  manageNews: boolean;
+}>;
 
 export type OverviewAttendance = AttendanceCounts & Readonly<{
   confirmedPercent: number;
@@ -51,6 +58,7 @@ export type OverviewData = Readonly<{
   attendance: OverviewAttendance | null;
   statistics: OverviewStatistics;
   news: readonly OverviewNewsPost[];
+  managedNews: readonly ManagedTeamNewsPost[] | null;
   calendar: readonly MatchSummary[];
 }>;
 

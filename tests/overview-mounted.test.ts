@@ -14,7 +14,7 @@ const ADMIN: TeamAccessContext = {
   team: { id: "team-1", name: "PRO7 FC", slug: "pro7-fc" },
   userId: USER_ID,
   membership: { roleId: "role-admin", roleSlug: "admin", roleName: "Admin" },
-  permissions: ["team.read", "matches.read", "matches.manage", "matches.respond", "tactics.read", "news.read"],
+  permissions: ["team.read", "matches.read", "matches.manage", "matches.respond", "tactics.read", "news.read", "news.manage"],
 };
 const MEMBER: TeamAccessContext = {
   ...ADMIN,
@@ -38,6 +38,11 @@ const RESULT: OverviewResult = {
       body: `Nội dung ${index + 1}`,
       publishedAt: new Date(Date.UTC(2026, 9, 9 - index, 9)).toISOString(),
     })),
+    managedNews: [
+      { id: "00000000-0000-4000-8000-000000000301", title: "Bản nháp chiến thuật", body: "Nội dung đang soạn.", status: "draft", publishedAt: null, updatedAt: "2026-10-09T10:00:00.000Z" },
+      { id: "00000000-0000-4000-8000-000000000302", title: "Tin đã đăng", body: "Nội dung công khai.", status: "published", publishedAt: "2026-10-08T10:00:00.000Z", updatedAt: "2026-10-08T10:00:00.000Z" },
+      { id: "00000000-0000-4000-8000-000000000303", title: "Tin đã lưu trữ", body: "Nội dung cũ.", status: "archived", publishedAt: null, updatedAt: "2026-10-07T10:00:00.000Z" },
+    ],
     calendar: [],
   },
 };
@@ -83,6 +88,14 @@ async function mounted(context = ADMIN, serverNow = "2026-10-10T00:00:00.000Z", 
   const root = createRoot(container as unknown as Element); globalThis.__overviewRefreshes = 0;
   await act(async () => root.render(createElement(OverviewView, { context, result, serverNow })));
   return { container: container as unknown as HTMLElement, root };
+}
+
+async function input(control: HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement, value: string) {
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(Object.getPrototypeOf(control), "value")?.set?.call(control, value);
+    control.dispatchEvent(new browserWindow.Event("input", { bubbles: true }));
+    control.dispatchEvent(new browserWindow.Event("change", { bubbles: true }));
+  });
 }
 
 test("Admin reminder sends only match identity, shows pending/success, and refreshes", async () => {
@@ -188,6 +201,40 @@ test("Xem tất cả reveals every bounded news item in place and can collapse",
   await act(async () => collapse.click());
   assert.doesNotMatch(view.container.textContent ?? "", /Tin đội 4/u);
   await act(async () => view.root.unmount());
+});
+
+test("Admin creates a bounded News draft through the existing card and authoritative API", async () => {
+  const calls: { url: string; init?: RequestInit }[] = [];
+  globalThis.fetch = (async (request, init) => {
+    calls.push({ url: String(request), init });
+    return Response.json({ ok: true, post: { id: "00000000-0000-4000-8000-000000000304", title: "Lịch tập mới", body: "Toàn đội tập trung lúc 19 giờ.", status: "draft", publishedAt: null, updatedAt: "2026-10-10T08:00:00.000Z" } }, { status: 201 });
+  }) as typeof fetch;
+  const view = await mounted();
+  const trigger = [...view.container.querySelectorAll("button")].find((candidate) => candidate.textContent?.includes("Quản lý tin")); assert.ok(trigger); trigger.focus();
+  await act(async () => trigger.click());
+  const form = view.container.querySelector<HTMLFormElement>('form[data-form="team-news"]'); assert.ok(form);
+  await input(form.elements.namedItem("title") as HTMLInputElement, "Lịch tập mới");
+  await input(form.elements.namedItem("body") as HTMLTextAreaElement, "Toàn đội tập trung lúc 19 giờ.");
+  await act(async () => { form.dispatchEvent(new browserWindow.Event("submit", { bubbles: true, cancelable: true })); await new Promise((resolvePromise) => setTimeout(resolvePromise, 0)); });
+  assert.deepEqual(calls, [{ url: "/api/teams/pro7-fc/news", init: { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "create", title: "Lịch tập mới", body: "Toàn đội tập trung lúc 19 giờ." }) } }]);
+  assert.equal(globalThis.__overviewRefreshes, 1);
+  assert.match(view.container.textContent ?? "", /Đã tạo bản nháp/u);
+  await act(async () => document.dispatchEvent(new browserWindow.KeyboardEvent("keydown", { key: "Escape", bubbles: true }) as unknown as Event));
+  assert.equal(view.container.querySelector('[role="dialog"]'), null);
+  assert.equal(document.activeElement, trigger);
+  await act(async () => view.root.unmount());
+});
+
+test("Admin publishes the selected draft with its exact stale token; Member has no manager", async () => {
+  const calls: unknown[] = [];
+  globalThis.fetch = (async (_request, init) => { calls.push(JSON.parse(String(init?.body))); return Response.json({ ok: true, post: { ...RESULT.data.managedNews![0], status: "published", publishedAt: "2026-10-10T08:00:00.000Z", updatedAt: "2026-10-10T08:00:00.000Z" } }); }) as typeof fetch;
+  const view = await mounted(); const trigger = [...view.container.querySelectorAll("button")].find((candidate) => candidate.textContent?.includes("Quản lý tin")); assert.ok(trigger); await act(async () => trigger.click());
+  const select = view.container.querySelector<HTMLSelectElement>('select[name="newsId"]'); assert.ok(select); await input(select, "00000000-0000-4000-8000-000000000301");
+  const publish = [...view.container.querySelectorAll("button")].find((candidate) => candidate.textContent?.trim() === "Phát hành"); assert.ok(publish); await act(async () => { publish.click(); await new Promise((resolvePromise) => setTimeout(resolvePromise, 0)); });
+  assert.deepEqual(calls, [{ action: "publish", id: "00000000-0000-4000-8000-000000000301", expectedUpdatedAt: "2026-10-09T10:00:00.000Z" }]);
+  await act(async () => view.root.unmount());
+
+  const member = await mounted(MEMBER); assert.ok(![...member.container.querySelectorAll("button")].some((candidate) => candidate.textContent?.includes("Quản lý tin"))); assert.equal(member.container.querySelector('[data-form="team-news"]'), null); await act(async () => member.root.unmount());
 });
 
 declare global { var __overviewRefreshes: number | undefined; }

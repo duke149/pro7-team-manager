@@ -4,6 +4,8 @@ import {
   Activity,
   CalendarDays,
   ClipboardList,
+  Archive,
+  FilePenLine,
   MapPin,
   MessageCircle,
   Send,
@@ -13,9 +15,11 @@ import {
   Trophy,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useState, type CSSProperties, type ReactNode } from "react";
+import { useState, type CSSProperties, type FormEvent, type ReactNode } from "react";
 
+import { AccessibleModal } from "../../../components/accessible-modal";
 import type { MatchSummary } from "../../../../lib/matches/model";
+import { parseManagedTeamNewsResponse, type ManagedTeamNewsPost } from "../../../../lib/news/model";
 import type { OverviewData, OverviewNewsPost, OverviewResult } from "../../../../lib/overview/model";
 import type { TeamAccessContext } from "../../../../lib/teams/context";
 import { hasPermission } from "../../../../lib/teams/permissions";
@@ -218,14 +222,34 @@ function NewsItem({ post }: { post: OverviewNewsPost }) {
   return <div className="news-item"><span className="news-icon danger"><MessageCircle /></span><div><b>{post.title}</b><p>{post.body}</p><small>{publishedTime(post.publishedAt)}</small></div></div>;
 }
 
-function NewsCard({ news }: { news: OverviewData["news"] }) {
+type NewsManagerState = Readonly<{ pending: boolean; message: string; error: boolean; fieldErrors: Readonly<Record<string, string>> }>;
+
+function NewsManagerDialog({ slug, initialPosts, close }: { slug: string; initialPosts: readonly ManagedTeamNewsPost[]; close: () => void }) {
+  const router = useRouter(); const [posts, setPosts] = useState(initialPosts); const [selectedId, setSelectedId] = useState("new"); const [title, setTitle] = useState(""); const [body, setBody] = useState(""); const [state, setState] = useState<NewsManagerState>({ pending: false, message: "", error: false, fieldErrors: {} });
+  const selected = posts.find(({ id }) => id === selectedId) ?? null;
+  function choose(id: string) { const post = posts.find((value) => value.id === id) ?? null; setSelectedId(id); setTitle(post?.title ?? ""); setBody(post?.body ?? ""); setState({ pending: false, message: "", error: false, fieldErrors: {} }); }
+  async function mutate(payload: Record<string, unknown>, method: "POST" | "PATCH") {
+    setState({ pending: true, message: "", error: false, fieldErrors: {} });
+    try {
+      const response = await fetch(`/api/teams/${encodeURIComponent(slug)}/news`, { method, headers: { "content-type": "application/json" }, body: JSON.stringify(payload) }); const value: unknown = await response.json().catch(() => null);
+      if (!response.ok) { const message = typeof value === "object" && value !== null && "message" in value && typeof value.message === "string" ? value.message : "Không thể cập nhật tin đội."; const fieldErrors = typeof value === "object" && value !== null && "fieldErrors" in value && typeof value.fieldErrors === "object" && value.fieldErrors !== null ? value.fieldErrors as Record<string, string> : {}; setState({ pending: false, message, error: true, fieldErrors }); return; }
+      const post = parseManagedTeamNewsResponse(value); if (!post) { setState({ pending: false, message: "Không thể xác nhận tin đội mới.", error: true, fieldErrors: {} }); return; }
+      setPosts((current) => Object.freeze([post, ...current.filter(({ id }) => id !== post.id)])); setSelectedId(post.id); setTitle(post.title); setBody(post.body); setState({ pending: false, message: payload.action === "create" ? "Đã tạo bản nháp." : payload.action === "update" ? "Đã lưu nội dung." : payload.action === "publish" ? "Đã phát hành tin đội." : "Đã lưu trữ tin đội.", error: false, fieldErrors: {} }); router.refresh();
+    } catch { setState({ pending: false, message: "Không thể cập nhật tin đội.", error: true, fieldErrors: {} }); }
+  }
+  async function submit(event: FormEvent) { event.preventDefault(); if (selected) await mutate({ action: "update", id: selected.id, title, body, expectedUpdatedAt: selected.updatedAt }, "PATCH"); else await mutate({ action: "create", title, body }, "POST"); }
+  async function lifecycle(action: "publish" | "archive") { if (selected) await mutate({ action, id: selected.id, expectedUpdatedAt: selected.updatedAt }, "PATCH"); }
+  const titleError = state.fieldErrors.title; const bodyError = state.fieldErrors.body;
+  return <AccessibleModal labelledBy="news-manager-title" onClose={close} closeBlocked={state.pending} dialogClassName="news-manager-modal"><div className="modal-head"><div><span>ĐỘI BÓNG</span><h2 id="news-manager-title">Quản lý tin đội</h2><p>Tạo bản nháp, cập nhật, phát hành hoặc lưu trữ.</p></div><button type="button" onClick={close} disabled={state.pending} aria-label="Đóng">×</button></div><form data-form="team-news" onSubmit={(event) => void submit(event)}><label>Chọn tin<select name="newsId" value={selectedId} onChange={(event) => choose(event.target.value)} disabled={state.pending}><option value="new">+ Tạo bản nháp mới</option>{posts.map((post) => <option key={post.id} value={post.id}>{post.status === "draft" ? "Bản nháp" : post.status === "published" ? "Đã đăng" : "Lưu trữ"} — {post.title}</option>)}</select></label><label>Tiêu đề<input name="title" value={title} onChange={(event) => setTitle(event.target.value)} disabled={state.pending || selected?.status === "archived"} minLength={1} maxLength={160} required aria-invalid={Boolean(titleError)} aria-describedby={titleError ? "news-title-error" : undefined} /></label>{titleError && <small id="news-title-error" className="fund-field-error">{titleError}</small>}<label>Nội dung<textarea name="body" value={body} onChange={(event) => setBody(event.target.value)} disabled={state.pending || selected?.status === "archived"} minLength={1} maxLength={5000} required aria-invalid={Boolean(bodyError)} aria-describedby={bodyError ? "news-body-error" : undefined} /></label>{bodyError && <small id="news-body-error" className="fund-field-error">{bodyError}</small>}{state.message && <p className={`news-manager-message ${state.error ? "error" : "success"}`} role={state.error ? "alert" : "status"}>{state.message}</p>}<div className="news-manager-actions"><button type="button" className="soft-button" onClick={close} disabled={state.pending}>Đóng</button>{selected?.status === "draft" && <button type="button" className="soft-button" onClick={() => void lifecycle("publish")} disabled={state.pending}><Send size={16} />Phát hành</button>}{selected && selected.status !== "archived" && <button type="button" className="soft-button news-archive-button" onClick={() => void lifecycle("archive")} disabled={state.pending}><Archive size={16} />Lưu trữ</button>}{selected?.status !== "archived" && <button type="submit" className="primary-button" disabled={state.pending || !title.trim() || !body.trim()}>{state.pending ? "Đang lưu…" : selected ? "Lưu thay đổi" : "Tạo bản nháp"}</button>}</div></form></AccessibleModal>;
+}
+
+function NewsCard({ context, data }: { context: TeamAccessContext; data: OverviewData }) {
+  const news = data.news; const canRead = hasPermission(context, "news.read") || hasPermission(context, "news.manage"); const canManage = hasPermission(context, "news.manage") && data.managedNews !== null; const [managerOpen, setManagerOpen] = useState(false);
   const [showAll, setShowAll] = useState(false);
   const hasMore = news.length > NEWS_SUMMARY_LIMIT;
   const visible = showAll ? news : news.slice(0, NEWS_SUMMARY_LIMIT);
-  const control = hasMore
-    ? <button type="button" aria-expanded={showAll} onClick={() => setShowAll((current) => !current)}>{showAll ? "Thu gọn" : "Xem tất cả"} →</button>
-    : <span className="overview-section-control overview-disabled-control">Xem tất cả →</span>;
-  return <article className="card"><SectionHead label="ĐỘI BÓNG" title="Tin mới" control={control} /><div className="news-list">{news.length === 0 ? <p className="overview-muted">Chưa có tin mới</p> : visible.map((post) => <NewsItem key={post.id} post={post} />)}</div></article>;
+  const control = <div className="news-card-actions">{hasMore ? <button type="button" aria-expanded={showAll} onClick={() => setShowAll((current) => !current)}>{showAll ? "Thu gọn" : "Xem tất cả"} →</button> : <span className="overview-section-control overview-disabled-control">Xem tất cả →</span>}{canManage && <button type="button" onClick={() => setManagerOpen(true)}><FilePenLine size={15} />Quản lý tin</button>}</div>;
+  return <article className="card"><SectionHead label="ĐỘI BÓNG" title="Tin mới" control={control} /><div className="news-list">{!canRead ? <p className="overview-muted">Bạn không có quyền xem tin đội.</p> : news.length === 0 ? <p className="overview-muted">Chưa có tin mới</p> : visible.map((post) => <NewsItem key={post.id} post={post} />)}</div>{managerOpen && data.managedNews && <NewsManagerDialog slug={context.team.slug} initialPosts={data.managedNews} close={() => setManagerOpen(false)} />}</article>;
 }
 
 function CalendarItem({ team, match, canRead }: { team: TeamAccessContext["team"]; match: MatchSummary; canRead: boolean }) {
@@ -258,6 +282,6 @@ export function OverviewView({ context, result, serverNow }: { context: TeamAcce
   return <div className="dashboard-view view-stack" data-state={state}>
     <section className="dashboard-hero two-col hero-ratio"><MatchHero context={context} data={data} /><AttendanceCard context={context} data={data} serverNow={serverNow} /></section>
     <Statistics data={data} teamSlug={context.team.slug} canReadMatches={hasPermission(context, "matches.read")} />
-    <section className="two-col content-ratio"><NewsCard news={data.news} /><CalendarCard context={context} data={data} /></section>
+    <section className="two-col content-ratio"><NewsCard context={context} data={data} /><CalendarCard context={context} data={data} /></section>
   </div>;
 }

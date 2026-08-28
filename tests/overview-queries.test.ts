@@ -39,6 +39,7 @@ const NOW = "2026-10-10T00:00:00.000Z";
 const USER_ID = "00000000-0000-4000-8000-000000000010";
 const PLAYER_A = "00000000-0000-4000-8000-000000000020";
 const PLAYER_B = "00000000-0000-4000-8000-000000000021";
+const ACCESS = { matches: true, news: true, manageNews: false } as const;
 
 function summary(id: string, startsAt: string, overrides: Partial<MatchSummary> = {}): MatchSummary {
   return {
@@ -62,6 +63,28 @@ const COMPLETED_A = summary("00000000-0000-4000-8000-000000000101", "2026-10-01T
 const COMPLETED_B = summary("00000000-0000-4000-8000-000000000102", "2026-10-05T12:00:00.000Z", { status: "completed", teamScore: 1, opponentScore: 0 });
 const UPCOMING = summary("00000000-0000-4000-8000-000000000103", "2026-10-12T12:00:00.000Z");
 
+test("loadOverview skips every protected source when the verified context lacks its permissions", async () => {
+  const fixture = clientDouble({});
+  let matchCalls = 0;
+  const result = await loadOverview(
+    "team-1",
+    USER_ID,
+    NOW,
+    { matches: false, news: false, manageNews: false },
+    {
+      supabase: fixture.client,
+      listMatches: async () => { matchCalls += 1; throw new Error("must not query matches"); },
+    },
+  );
+
+  assert.equal(result.ok, true);
+  assert.equal(matchCalls, 0);
+  assert.deepEqual(fixture.calls, []);
+  assert.deepEqual(result.ok ? result.data.news : null, []);
+  assert.deepEqual(result.ok ? result.data.managedNews : "unexpected", null);
+  assert.equal(result.ok ? result.data.nextMatch : "unexpected", null);
+});
+
 test("loadOverview uses bounded explicit queries and returns only published current news with completed-match scorers", async () => {
   const fixture = clientDouble({
     match_player_stats: [{ data: [
@@ -70,10 +93,10 @@ test("loadOverview uses bounded explicit queries and returns only published curr
       { match_id: UPCOMING.id, user_id: PLAYER_A, goals: 99 },
     ], error: null }],
     team_news: [{ data: [
-      { id: "00000000-0000-4000-8000-000000000201", title: "Tin mới", body: "Nội dung thật", status: "published", published_at: "2026-10-09T09:00:00.000Z" },
-      { id: "00000000-0000-4000-8000-000000000200", title: "Tin cũ", body: "Nội dung cũ", status: "published", published_at: "2026-10-08T09:00:00.000Z" },
-      { id: "00000000-0000-4000-8000-000000000199", title: "Tin thứ ba", body: "Nội dung ba", status: "published", published_at: "2026-10-07T09:00:00.000Z" },
-      { id: "00000000-0000-4000-8000-000000000198", title: "Tin thứ tư", body: "Nội dung bốn", status: "published", published_at: "2026-10-06T09:00:00.000Z" },
+      { id: "00000000-0000-4000-8000-000000000201", title: "Tin mới", body: "Nội dung thật", status: "published", published_at: "2026-10-09T09:00:00.000Z", updated_at: "2026-10-09T09:00:00.000Z" },
+      { id: "00000000-0000-4000-8000-000000000200", title: "Tin cũ", body: "Nội dung cũ", status: "published", published_at: "2026-10-08T09:00:00.000Z", updated_at: "2026-10-08T09:00:00.000Z" },
+      { id: "00000000-0000-4000-8000-000000000199", title: "Tin thứ ba", body: "Nội dung ba", status: "published", published_at: "2026-10-07T09:00:00.000Z", updated_at: "2026-10-07T09:00:00.000Z" },
+      { id: "00000000-0000-4000-8000-000000000198", title: "Tin thứ tư", body: "Nội dung bốn", status: "published", published_at: "2026-10-06T09:00:00.000Z", updated_at: "2026-10-06T09:00:00.000Z" },
     ], error: null }],
     profiles: [{ data: [
       { id: PLAYER_A, display_name: "Bình" },
@@ -82,7 +105,7 @@ test("loadOverview uses bounded explicit queries and returns only published curr
   });
   const matchCalls: unknown[][] = [];
   const matches: MatchListResult = { ok: true, matches: [UPCOMING, COMPLETED_B, COMPLETED_A] };
-  const result = await loadOverview("team-1", USER_ID, NOW, {
+  const result = await loadOverview("team-1", USER_ID, NOW, ACCESS, {
     supabase: fixture.client,
     listMatches: async (...args) => { matchCalls.push(args); return matches; },
   });
@@ -101,13 +124,13 @@ test("loadOverview uses bounded explicit queries and returns only published curr
       { method: "limit", arguments: [1001] },
     ] },
     { table: "team_news", calls: [
-      { method: "select", arguments: ["id,title,body,status,published_at"] },
+      { method: "select", arguments: ["id,title,body,status,published_at,updated_at"] },
       { method: "eq", arguments: ["team_id", "team-1"] },
       { method: "eq", arguments: ["status", "published"] },
       { method: "lte", arguments: ["published_at", NOW] },
       { method: "order", arguments: ["published_at", { ascending: false }] },
       { method: "order", arguments: ["id", { ascending: false }] },
-      { method: "limit", arguments: [25] },
+      { method: "limit", arguments: [26] },
     ] },
     { table: "profiles", calls: [
       { method: "select", arguments: ["id,display_name"] },
@@ -123,7 +146,7 @@ test("loadOverview preserves honest zero/empty statistics without profile lookup
     match_player_stats: [{ data: [], error: null }],
     team_news: [{ data: [], error: null }],
   });
-  const result = await loadOverview("team-1", USER_ID, NOW, {
+  const result = await loadOverview("team-1", USER_ID, NOW, ACCESS, {
     supabase: fixture.client,
     listMatches: async () => ({ ok: true, matches: [] }),
   });
@@ -152,9 +175,10 @@ test("loadOverview accepts a published offset timestamp that is before now by in
       body: "Đã phát hành trước thời điểm tải.",
       status: "published",
       published_at: "2026-10-10T06:00:00+07:00",
+      updated_at: "2026-10-10T06:00:00+07:00",
     }], error: null }],
   });
-  const result = await loadOverview("team-1", USER_ID, NOW, {
+  const result = await loadOverview("team-1", USER_ID, NOW, ACCESS, {
     supabase: fixture.client,
     listMatches: async () => ({ ok: true, matches: [] }),
   });
@@ -169,14 +193,40 @@ test("loadOverview fails closed on match errors, inaccessible reads, overflow, a
     { results: { match_player_stats: [{ data: null, error: { code: "42501" } }], team_news: [{ data: [], error: null }] } },
     { results: { match_player_stats: [{ data: Array.from({ length: 1001 }, () => ({ match_id: COMPLETED_A.id, user_id: PLAYER_A, goals: 1 })), error: null }], team_news: [{ data: [], error: null }] } },
     { results: { match_player_stats: [{ data: [{ match_id: "bad", user_id: PLAYER_A, goals: -1 }], error: null }], team_news: [{ data: [], error: null }] } },
-    { results: { match_player_stats: [{ data: [], error: null }], team_news: [{ data: [{ id: "bad", title: " ", body: "x", status: "draft", published_at: null }], error: null }] } },
+    { results: { match_player_stats: [{ data: [], error: null }], team_news: [{ data: [{ id: "bad", title: " ", body: "x", status: "draft", published_at: null, updated_at: NOW }], error: null }] } },
   ];
 
   for (const fixtureCase of cases) {
     const fixture = clientDouble(fixtureCase.results);
-    assert.deepEqual(await loadOverview("team-1", USER_ID, NOW, {
+    assert.deepEqual(await loadOverview("team-1", USER_ID, NOW, ACCESS, {
       supabase: fixture.client,
       listMatches: async () => fixtureCase.matches ?? { ok: true, matches: [COMPLETED_A] },
     }), { ok: false, error: "server" });
   }
+});
+
+test("news manager receives bounded lifecycle rows while published summary excludes draft and archive", async () => {
+  const fixture = clientDouble({
+    match_player_stats: [{ data: [], error: null }],
+    team_news: [{ data: [
+      { id: "00000000-0000-4000-8000-000000000301", title: "Bản nháp", body: "Chưa phát hành", status: "draft", published_at: null, updated_at: "2026-10-09T10:00:00.000Z" },
+      { id: "00000000-0000-4000-8000-000000000302", title: "Tin công khai", body: "Đã phát hành", status: "published", published_at: "2026-10-08T10:00:00.000Z", updated_at: "2026-10-08T10:00:00.000Z" },
+      { id: "00000000-0000-4000-8000-000000000303", title: "Tin lưu trữ", body: "Đã ẩn", status: "archived", published_at: "2026-10-07T10:00:00.000Z", updated_at: "2026-10-07T10:00:00.000Z" },
+    ], error: null }],
+  });
+  const result = await loadOverview("team-1", USER_ID, NOW, { matches: true, news: true, manageNews: true }, {
+    supabase: fixture.client,
+    listMatches: async () => ({ ok: true, matches: [] }),
+  });
+
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.ok ? result.data.news.map(({ title }) => title) : [], ["Tin công khai"]);
+  assert.deepEqual(result.ok ? result.data.managedNews?.map(({ status }) => status) : null, ["draft", "published", "archived"]);
+  assert.deepEqual(fixture.calls.find(({ table }) => table === "team_news")?.query.calls, [
+    { method: "select", arguments: ["id,title,body,status,published_at,updated_at"] },
+    { method: "eq", arguments: ["team_id", "team-1"] },
+    { method: "order", arguments: ["updated_at", { ascending: false }] },
+    { method: "order", arguments: ["id", { ascending: false }] },
+    { method: "limit", arguments: [51] },
+  ]);
 });

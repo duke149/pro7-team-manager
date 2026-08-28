@@ -5,6 +5,7 @@ import { isUuid } from "../matches/model";
 import { listMatches as defaultListMatches } from "../matches/queries";
 import { isIsoTimestamp } from "../matches/validation";
 import type { Database } from "../supabase/database.types";
+import type { ManagedTeamNewsPost, TeamNewsStatus } from "../news/model";
 import {
   aggregateAttendance,
   aggregateResults,
@@ -13,11 +14,12 @@ import {
   selectNextMatch,
   selectUpcomingCalendar,
 } from "./aggregates";
-import type { OverviewGoalRow, OverviewNewsPost, OverviewResult } from "./model";
+import type { OverviewAccess, OverviewGoalRow, OverviewNewsPost, OverviewResult } from "./model";
 import "../matches/server-only";
 
 const MAX_STAT_ROWS = 1000;
 const NEWS_LIMIT = 25;
+const MANAGED_NEWS_LIMIT = 50;
 const PROFILE_PAGE_SIZE = 100;
 
 type Dependencies = {
@@ -26,7 +28,7 @@ type Dependencies = {
 };
 
 type GoalRow = { match_id: string; user_id: string; goals: number };
-type NewsRow = { id: string; title: string; body: string; status: "published"; published_at: string };
+type NewsRow = { id: string; title: string; body: string; status: TeamNewsStatus; published_at: string | null; updated_at: string };
 type ProfileRow = { id: string; display_name: string | null };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -50,13 +52,16 @@ function goalRow(value: unknown): value is GoalRow {
 }
 
 function newsRow(value: unknown, now: string): value is NewsRow {
-  return isRecord(value)
+  if (!(isRecord(value)
     && isUuid(value.id)
     && boundedText(value.title, 160)
     && boundedText(value.body, 5000)
-    && value.status === "published"
-    && isIsoTimestamp(value.published_at)
-    && Date.parse(value.published_at) <= Date.parse(now);
+    && (value.status === "draft" || value.status === "published" || value.status === "archived")
+    && (value.published_at === null || isIsoTimestamp(value.published_at))
+    && isIsoTimestamp(value.updated_at))) return false;
+  if (value.status === "draft" && value.published_at !== null) return false;
+  if (value.status === "published" && (value.published_at === null || Date.parse(value.published_at) > Date.parse(now))) return false;
+  return value.published_at === null || Date.parse(value.published_at) <= Date.parse(now);
 }
 
 function profileRow(value: unknown): value is ProfileRow {
@@ -113,32 +118,40 @@ export async function loadOverview(
   teamId: string,
   userId: string,
   now: string,
+  access: OverviewAccess,
   dependencies: Dependencies = {},
 ): Promise<OverviewResult> {
   try {
     if (!isIsoTimestamp(now)) return { ok: false, error: "server" };
-    const matchesResult = await (dependencies.listMatches ?? defaultListMatches)(teamId, userId);
+    const matchesResult: MatchListResult = access.matches
+      ? await (dependencies.listMatches ?? defaultListMatches)(teamId, userId)
+      : { ok: true, matches: [] };
     if (!matchesResult.ok) return { ok: false, error: "server" };
 
     const supabase = await resolveClient(dependencies.supabase);
-    const [statsResult, newsResult] = await Promise.all([
-      supabase
+    const statsPromise = access.matches
+      ? supabase
         .from("match_player_stats")
         .select("match_id,user_id,goals")
         .eq("team_id", teamId)
         .order("match_id", { ascending: true })
         .order("user_id", { ascending: true })
-        .limit(MAX_STAT_ROWS + 1),
-      supabase
+        .limit(MAX_STAT_ROWS + 1)
+      : Promise.resolve({ data: [], error: null });
+    const newsPromise = access.news || access.manageNews
+      ? (() => {
+        let query = supabase
         .from("team_news")
-        .select("id,title,body,status,published_at")
-        .eq("team_id", teamId)
-        .eq("status", "published")
-        .lte("published_at", now)
-        .order("published_at", { ascending: false })
-        .order("id", { ascending: false })
-        .limit(NEWS_LIMIT),
-    ]);
+          .select("id,title,body,status,published_at,updated_at")
+          .eq("team_id", teamId);
+        if (!access.manageNews) query = query.eq("status", "published").lte("published_at", now);
+        return query
+          .order(access.manageNews ? "updated_at" : "published_at", { ascending: false })
+          .order("id", { ascending: false })
+          .limit((access.manageNews ? MANAGED_NEWS_LIMIT : NEWS_LIMIT) + 1);
+      })()
+      : Promise.resolve({ data: [], error: null });
+    const [statsResult, newsResult] = await Promise.all([statsPromise, newsPromise]);
 
     if (statsResult.error
       || newsResult.error
@@ -146,7 +159,7 @@ export async function loadOverview(
       || statsResult.data.length > MAX_STAT_ROWS
       || !statsResult.data.every(goalRow)
       || !Array.isArray(newsResult.data)
-      || newsResult.data.length > NEWS_LIMIT
+      || newsResult.data.length > (access.manageNews ? MANAGED_NEWS_LIMIT : NEWS_LIMIT)
       || !newsResult.data.every((row) => newsRow(row, now))) return { ok: false, error: "server" };
 
     const rawGoalRows = statsResult.data as unknown as GoalRow[];
@@ -164,8 +177,12 @@ export async function loadOverview(
     const nextMatch = selectNextMatch(matchesResult.matches, now);
     const resultStatistics = aggregateResults(matchesResult.matches);
     const news: OverviewNewsPost[] = rawNewsRows
-      .map((row) => Object.freeze({ id: row.id, title: row.title, body: row.body, publishedAt: row.published_at }))
+      .filter((row) => row.status === "published" && row.published_at !== null)
+      .map((row) => Object.freeze({ id: row.id, title: row.title, body: row.body, publishedAt: row.published_at! }))
       .sort((left, right) => Date.parse(right.publishedAt) - Date.parse(left.publishedAt) || right.id.localeCompare(left.id));
+    const managedNews: readonly ManagedTeamNewsPost[] | null = access.manageNews
+      ? Object.freeze(rawNewsRows.map((row) => Object.freeze({ id: row.id, title: row.title, body: row.body, status: row.status, publishedAt: row.published_at, updatedAt: row.updated_at })))
+      : null;
 
     return {
       ok: true,
@@ -175,6 +192,7 @@ export async function loadOverview(
         attendance: aggregateAttendance(nextMatch),
         statistics: Object.freeze({ ...resultStatistics, topScorer: aggregateTopScorer(goalRows, displayNames) }),
         news: Object.freeze(news),
+        managedNews,
         calendar: selectUpcomingCalendar(matchesResult.matches, now),
       }),
     };

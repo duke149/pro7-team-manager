@@ -1085,6 +1085,24 @@ export type Database = {
         }
         Returns: string
       }
+      manage_team_news: {
+        Args: {
+          p_action: string
+          p_body: string
+          p_expected_updated_at: string
+          p_news_id: string
+          p_team_id: string
+          p_title: string
+        }
+        Returns: {
+          body: string
+          id: string
+          published_at: string | null
+          status: string
+          title: string
+          updated_at: string
+        }[]
+      }
       manage_team_player: {
         Args: {
           p_admin_notes: string

@@ -19,7 +19,6 @@ export default function LoginForm({
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [rememberMe, setRememberMe] = useState(true);
   const [errorMessage, setErrorMessage] = useState(initialError ?? "");
   const [isLoading, setIsLoading] = useState(false);
 
@@ -94,19 +93,6 @@ export default function LoginForm({
         >
           {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
         </button>
-      </div>
-
-      <div className="login-options-row">
-        <label className="login-remember-label">
-          <input
-            type="checkbox"
-            name="remember"
-            checked={rememberMe}
-            onChange={(e) => setRememberMe(e.target.checked)}
-            disabled={isLoading}
-          />
-          <span>Ghi nhớ đăng nhập</span>
-        </label>
       </div>
 
       <p className="login-error" role="alert" aria-live="polite">
