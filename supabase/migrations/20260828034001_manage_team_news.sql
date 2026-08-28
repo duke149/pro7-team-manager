@@ -36,7 +36,7 @@ begin
   if not private.has_team_permission(p_team_id, 'news.manage') then
     raise exception using errcode = '42501', message = 'News management permission required';
   end if;
-  if p_action not in ('create', 'update', 'publish', 'archive') then
+  if p_action not in ('create', 'update', 'publish', 'archive', 'restore') then
     raise exception using errcode = '22023', message = 'Invalid news action';
   end if;
 
@@ -109,6 +109,14 @@ begin
         end if;
         update public.team_news as news
         set status = 'archived'
+        where news.id = p_news_id and news.team_id = p_team_id
+        returning news.* into v_result;
+      when 'restore' then
+        if v_news.status <> 'archived' then
+          raise exception using errcode = '55000', message = 'Only archived news can be restored';
+        end if;
+        update public.team_news as news
+        set status = 'draft', published_at = null
         where news.id = p_news_id and news.team_id = p_team_id
         returning news.* into v_result;
       else

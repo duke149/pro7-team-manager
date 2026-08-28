@@ -42,6 +42,9 @@ test("News lifecycle, stale, permission, and malformed success fail closed", asy
   const publish = dependencies({ data: [{ id: ID, title: "Tin", body: "Nội dung", status: "published", published_at: NEXT, updated_at: NEXT }], error: null });
   assert.equal((await mutateTeamNews(request("PATCH", { action: "publish", id: ID, expectedUpdatedAt: TOKEN }), "pro7-fc", publish.value as never)).status, 200);
   assert.deepEqual(publish.calls[0], { name: "manage_team_news", args: { p_team_id: TEAM, p_action: "publish", p_news_id: ID, p_title: null, p_body: null, p_expected_updated_at: TOKEN } });
+  const restore = dependencies({ data: [{ id: ID, title: "Tin", body: "Nội dung", status: "draft", published_at: null, updated_at: NEXT }], error: null });
+  assert.equal((await mutateTeamNews(request("PATCH", { action: "restore", id: ID, expectedUpdatedAt: TOKEN }), "pro7-fc", restore.value as never)).status, 200);
+  assert.deepEqual(restore.calls[0], { name: "manage_team_news", args: { p_team_id: TEAM, p_action: "restore", p_news_id: ID, p_title: null, p_body: null, p_expected_updated_at: TOKEN } });
   for (const [code, status] of [["40001", 409], ["55000", 409], ["P0002", 404], ["42501", 403], ["22023", 422], ["XX000", 500]] as const) {
     const fixture = dependencies({ data: null, error: { code } });
     assert.equal((await mutateTeamNews(request("PATCH", { action: "archive", id: ID, expectedUpdatedAt: TOKEN }), "pro7-fc", fixture.value as never)).status, status);
@@ -61,4 +64,29 @@ test("News API rejects method mismatch and unsafe requests before permission or 
     assert.deepEqual(fixture.permissions, []);
     assert.deepEqual(fixture.calls, []);
   }
+});
+
+test("News API distinguishes unsupported content, oversized and malformed bodies, and denied permission", async () => {
+  const raw = (body: string, headers: Record<string, string>) => new Request("http://localhost:3000/api/teams/pro7-fc/news", {
+    method: "POST",
+    headers: { origin: "http://localhost:3000", ...headers },
+    body,
+  });
+  const cases = [
+    { request: raw("{}", { "content-type": "text/plain" }), status: 415 },
+    { request: raw("x".repeat(24 * 1024 + 1), { "content-type": "application/json" }), status: 413 },
+    { request: raw("{", { "content-type": "application/json" }), status: 400 },
+  ];
+  for (const item of cases) {
+    const fixture = dependencies({ data: null, error: null });
+    assert.equal((await mutateTeamNews(item.request, "pro7-fc", fixture.value as never)).status, item.status);
+    assert.deepEqual(fixture.permissions, []);
+    assert.deepEqual(fixture.calls, []);
+  }
+
+  const denied = dependencies({ data: null, error: null }, false);
+  const response = await mutateTeamNews(request("POST", { action: "create", title: "Tin", body: "Nội dung" }), "pro7-fc", denied.value as never);
+  assert.equal(response.status, 403);
+  assert.deepEqual(denied.permissions, ["news.manage"]);
+  assert.deepEqual(denied.calls, []);
 });

@@ -51,7 +51,7 @@ function goalRow(value: unknown): value is GoalRow {
     && (value.goals as number) <= 32_767;
 }
 
-function newsRow(value: unknown, now: string): value is NewsRow {
+function newsRow(value: unknown, now: string, allowFuturePublished: boolean): value is NewsRow {
   if (!(isRecord(value)
     && isUuid(value.id)
     && boundedText(value.title, 160)
@@ -60,8 +60,8 @@ function newsRow(value: unknown, now: string): value is NewsRow {
     && (value.published_at === null || isIsoTimestamp(value.published_at))
     && isIsoTimestamp(value.updated_at))) return false;
   if (value.status === "draft" && value.published_at !== null) return false;
-  if (value.status === "published" && (value.published_at === null || Date.parse(value.published_at) > Date.parse(now))) return false;
-  return value.published_at === null || Date.parse(value.published_at) <= Date.parse(now);
+  if (value.status === "published" && value.published_at === null) return false;
+  return allowFuturePublished || value.published_at === null || Date.parse(value.published_at) <= Date.parse(now);
 }
 
 function profileRow(value: unknown): value is ProfileRow {
@@ -160,7 +160,7 @@ export async function loadOverview(
       || !statsResult.data.every(goalRow)
       || !Array.isArray(newsResult.data)
       || newsResult.data.length > (access.manageNews ? MANAGED_NEWS_LIMIT : NEWS_LIMIT)
-      || !newsResult.data.every((row) => newsRow(row, now))) return { ok: false, error: "server" };
+      || !newsResult.data.every((row) => newsRow(row, now, access.manageNews))) return { ok: false, error: "server" };
 
     const rawGoalRows = statsResult.data as unknown as GoalRow[];
     const rawNewsRows = newsResult.data as unknown as NewsRow[];
@@ -177,7 +177,7 @@ export async function loadOverview(
     const nextMatch = selectNextMatch(matchesResult.matches, now);
     const resultStatistics = aggregateResults(matchesResult.matches);
     const news: OverviewNewsPost[] = rawNewsRows
-      .filter((row) => row.status === "published" && row.published_at !== null)
+      .filter((row) => row.status === "published" && row.published_at !== null && Date.parse(row.published_at) <= Date.parse(now))
       .map((row) => Object.freeze({ id: row.id, title: row.title, body: row.body, publishedAt: row.published_at! }))
       .sort((left, right) => Date.parse(right.publishedAt) - Date.parse(left.publishedAt) || right.id.localeCompare(left.id));
     const managedNews: readonly ManagedTeamNewsPost[] | null = access.manageNews

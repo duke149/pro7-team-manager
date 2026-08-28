@@ -23,6 +23,7 @@ test("tablet shell collapses at 900px and meaningful type remains readable", asy
   assert.match(css, /--font-caption:12px/u);
   assert.match(css, /@media\(max-width:900px\)[\s\S]*?--font-caption:13px/u);
   assert.match(css, /@media\(prefers-reduced-motion:reduce\)/u);
+  assert.match(css, /\.theme-button\{width:44px;min-height:44px/u);
 });
 
 test("member provisioning uses the shared keyboard-safe modal primitive", async () => {
@@ -32,5 +33,7 @@ test("member provisioning uses the shared keyboard-safe modal primitive", async 
   assert.doesNotMatch(source, /<section className="modal provision-(?:member|result)-modal" role="dialog"/u);
   assert.match(modal, /const onCloseRef = useRef\(onClose\)/u);
   assert.match(modal, /onCloseRef\.current\(\)/u);
-  assert.match(modal, /\}, \[closeBlocked\]\);/u);
+  assert.match(modal, /const closeBlockedRef = useRef\(closeBlocked\)/u);
+  assert.match(modal, /closeBlockedRef\.current = closeBlocked/u);
+  assert.match(modal, /\}, \[\]\);/u);
 });

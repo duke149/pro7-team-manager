@@ -230,3 +230,26 @@ test("news manager receives bounded lifecycle rows while published summary exclu
     { method: "limit", arguments: [51] },
   ]);
 });
+
+test("news manager tolerates a concurrently published row after the request snapshot without exposing it early", async () => {
+  const future = "2026-10-10T00:00:00.001Z";
+  const fixture = clientDouble({
+    match_player_stats: [{ data: [], error: null }],
+    team_news: [{ data: [{
+      id: "00000000-0000-4000-8000-000000000304",
+      title: "Vừa phát hành",
+      body: "Tin được phát hành đồng thời với lúc tải trang.",
+      status: "published",
+      published_at: future,
+      updated_at: future,
+    }], error: null }],
+  });
+  const result = await loadOverview("team-1", USER_ID, NOW, { matches: true, news: true, manageNews: true }, {
+    supabase: fixture.client,
+    listMatches: async () => ({ ok: true, matches: [] }),
+  });
+
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.ok ? result.data.news : null, []);
+  assert.deepEqual(result.ok ? result.data.managedNews?.map(({ title }) => title) : null, ["Vừa phát hành"]);
+});

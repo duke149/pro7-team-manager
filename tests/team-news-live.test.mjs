@@ -10,7 +10,9 @@ const repositoryPath = fileURLToPath(new URL("../", import.meta.url));
 const migrationsPath = join(repositoryPath, "supabase", "migrations");
 const OWNER = "93000000-0000-4000-8000-000000000001";
 const MEMBER = "93000000-0000-4000-8000-000000000002";
+const OTHER_OWNER = "93000000-0000-4000-8000-000000000003";
 const TEAM = "93000000-0000-4000-8000-000000000010";
+const OTHER_TEAM = "93000000-0000-4000-8000-000000000011";
 
 let clusterPath;
 let socketPath;
@@ -56,8 +58,9 @@ before(async () => {
   psql(["-c", bootstrapSql]);
   for (const migration of (await readdir(migrationsPath)).filter((name) => name.endsWith(".sql")).sort()) psql(["-f", join(migrationsPath, migration)]);
   psql(["-c", String.raw`
-    insert into auth.users (id, email) values ('${OWNER}', 'owner@example.com'), ('${MEMBER}', 'member@example.com');
+    insert into auth.users (id, email) values ('${OWNER}', 'owner@example.com'), ('${MEMBER}', 'member@example.com'), ('${OTHER_OWNER}', 'other-owner@example.com');
     insert into public.teams (id, name, slug, owner_user_id) values ('${TEAM}', 'PRO7 FC', 'pro7-fc', '${OWNER}');
+    insert into public.teams (id, name, slug, owner_user_id) values ('${OTHER_TEAM}', 'Other FC', 'other-fc', '${OTHER_OWNER}');
     insert into public.memberships (team_id, user_id, role_id)
     select '${TEAM}', '${MEMBER}', id from public.roles where team_id = '${TEAM}' and slug = 'member';
   `]);
@@ -104,13 +107,19 @@ test("Team News lifecycle is atomic, stale-safe, audited, and published-only for
   assert.equal(authenticated(MEMBER, `select count(*) from public.team_news where id = '${newsId}' and status = 'published'`).stdout.trim(), "1");
 
   const archived = authenticated(OWNER, `
-    select status from public.manage_team_news('${TEAM}', 'archive', '${newsId}', null, null, '${publishedToken}'::timestamptz)
+    select status::text || '|' || updated_at::text from public.manage_team_news('${TEAM}', 'archive', '${newsId}', null, null, '${publishedToken}'::timestamptz)
+  `).stdout.trim().split("|");
+  assert.equal(archived[0], "archived");
+  assert.equal(authenticated(MEMBER, `select count(*) from public.team_news where id = '${newsId}'`).stdout.trim(), "0");
+
+  const restored = authenticated(OWNER, `
+    select status from public.manage_team_news('${TEAM}', 'restore', '${newsId}', null, null, '${archived[1]}'::timestamptz)
   `).stdout.trim();
-  assert.equal(archived, "archived");
+  assert.equal(restored, "draft");
   assert.equal(authenticated(MEMBER, `select count(*) from public.team_news where id = '${newsId}'`).stdout.trim(), "0");
 
   const audit = psql(["-c", `select count(*)::text || '|' || count(*) filter (where coalesce(old_data, '{}'::jsonb) ? 'title' or coalesce(new_data, '{}'::jsonb) ? 'body')::text from private.audit_events where team_id = '${TEAM}' and table_name = 'team_news'`]).stdout.trim();
-  assert.equal(audit, "4|0");
+  assert.equal(audit, "5|0");
 });
 
 test("Member, anonymous, and direct authenticated Team News writes are denied", () => {
@@ -125,4 +134,25 @@ test("Member, anonymous, and direct authenticated Team News writes are denied", 
   const anonymous = psql(["-c", `begin; set local role anon; select * from public.manage_team_news('${TEAM}', 'create', null, 'Ẩn danh', 'Không được phép.', null); commit;`], { allowFailure: true });
   assert.notEqual(anonymous.status, 0);
   assert.match(anonymous.stderr, /permission denied/iu);
+});
+
+test("an authorized manager cannot mutate a foreign team or smuggle a foreign News identity", () => {
+  const foreign = authenticated(OTHER_OWNER, `
+    select id::text || '|' || updated_at::text
+    from public.manage_team_news('${OTHER_TEAM}', 'create', null, 'Tin đội khác', 'Không thuộc PRO7.', null)
+  `).stdout.trim().split("|");
+  assert.equal(foreign.length, 2);
+
+  const foreignTeam = authenticated(OWNER, `
+    select * from public.manage_team_news('${OTHER_TEAM}', 'archive', '${foreign[0]}', null, null, '${foreign[1]}'::timestamptz)
+  `, { allowFailure: true });
+  assert.notEqual(foreignTeam.status, 0);
+  assert.match(foreignTeam.stderr, /News management permission required/iu);
+
+  const foreignIdentity = authenticated(OWNER, `
+    select * from public.manage_team_news('${TEAM}', 'archive', '${foreign[0]}', null, null, '${foreign[1]}'::timestamptz)
+  `, { allowFailure: true });
+  assert.notEqual(foreignIdentity.status, 0);
+  assert.match(foreignIdentity.stderr, /Team news not found/iu);
+  assert.equal(psql(["-c", `select status from public.team_news where id = '${foreign[0]}'`]).stdout.trim(), "draft");
 });

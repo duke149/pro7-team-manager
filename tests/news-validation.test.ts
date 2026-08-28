@@ -12,6 +12,7 @@ test("News validation accepts only exact bounded lifecycle intents", () => {
   assert.deepEqual(validateNewsMutation({ action: "update", id: ID, title: "Lịch tập cập nhật", body: "Tập trung lúc 19 giờ.", expectedUpdatedAt: TOKEN }), { ok: true, value: { action: "update", id: ID, title: "Lịch tập cập nhật", body: "Tập trung lúc 19 giờ.", expectedUpdatedAt: TOKEN } });
   assert.deepEqual(validateNewsMutation({ action: "publish", id: ID, expectedUpdatedAt: TOKEN }), { ok: true, value: { action: "publish", id: ID, expectedUpdatedAt: TOKEN } });
   assert.deepEqual(validateNewsMutation({ action: "archive", id: ID, expectedUpdatedAt: TOKEN }), { ok: true, value: { action: "archive", id: ID, expectedUpdatedAt: TOKEN } });
+  assert.deepEqual(validateNewsMutation({ action: "restore", id: ID, expectedUpdatedAt: TOKEN }), { ok: true, value: { action: "restore", id: ID, expectedUpdatedAt: TOKEN } });
 });
 
 test("News validation rejects unknown keys, malformed identity/token, and unsafe text", () => {

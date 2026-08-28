@@ -8,7 +8,7 @@ import type { TeamNotification } from "../lib/notifications/model";
 
 const ID = "00000000-0000-4000-8000-000000000201";
 const notifications: TeamNotification[] = [{ id: ID, type: "match_invitation", sourceId: "00000000-0000-4000-8000-000000000101", title: "Mời tham gia trận", body: "FC NÁT vs FC Nat", targetPath: "/teams/nat-fc/matches/00000000-0000-4000-8000-000000000101", readAt: null, createdAt: "2026-10-10T08:00:00.000Z" }];
-let NotificationCenter: (props: { initialNotifications: readonly TeamNotification[] }) => React.ReactNode; let act: (callback: () => void | Promise<void>) => Promise<void>; let createElement: typeof import("react").createElement; let createRoot: (container: Element) => { render(node: React.ReactNode): void; unmount(): void }; let browserWindow: Window;
+let NotificationCenter: (props: { initialNotifications: readonly TeamNotification[]; markReadTimeoutMs?: number }) => React.ReactNode; let act: (callback: () => void | Promise<void>) => Promise<void>; let createElement: typeof import("react").createElement; let createRoot: (container: Element) => { render(node: React.ReactNode): void; unmount(): void }; let browserWindow: Window;
 const initialHandles = new Set(process._getActiveHandles());
 
 test.before(async () => {
@@ -21,7 +21,7 @@ test.before(async () => {
 });
 test.after(async () => { await browserWindow.happyDOM.abort(); browserWindow.close(); for (const handle of process._getActiveHandles()) if (!initialHandles.has(handle) && handle.constructor.name === "MessagePort") (handle as MessagePort).close(); });
 
-async function mounted() { browserWindow.document.body.innerHTML = '<div id="root"></div>'; const container = browserWindow.document.getElementById("root"); assert.ok(container); const root = createRoot(container); await act(async () => root.render(createElement(NotificationCenter, { initialNotifications: notifications }))); return { container, root }; }
+async function mounted(markReadTimeoutMs?: number) { browserWindow.document.body.innerHTML = '<div id="root"></div>'; const container = browserWindow.document.getElementById("root"); assert.ok(container); const root = createRoot(container); await act(async () => root.render(createElement(NotificationCenter, { initialNotifications: notifications, markReadTimeoutMs }))); return { container, root }; }
 
 test("notification read state adopts only an authoritative timestamp", async () => {
   let attempt = 0; const calls: unknown[] = [];
@@ -31,4 +31,64 @@ test("notification read state adopts only an authoritative timestamp", async () 
   await act(async () => { mark.click(); await new Promise((resolvePromise) => setTimeout(resolvePromise, 0)); }); assert.match(view.container.textContent ?? "", /1/u); assert.match(view.container.textContent ?? "", /Không thể cập nhật trạng thái/u);
   await act(async () => { mark.click(); await new Promise((resolvePromise) => setTimeout(resolvePromise, 0)); }); assert.equal(view.container.querySelector(".notification-badge"), null); assert.equal(calls.length, 2);
   await act(async () => document.dispatchEvent(new browserWindow.KeyboardEvent("keydown", { key: "Escape", bubbles: true }) as unknown as Event)); assert.equal(view.container.querySelector(".notification-popover"), null); assert.equal(document.activeElement, trigger); await act(async () => view.root.unmount());
+});
+
+test("notification read state rejects a valid timestamp unless the response shape is exact and successful", async () => {
+  let attempt = 0;
+  globalThis.fetch = (async () => {
+    attempt += 1;
+    return attempt === 1
+      ? Response.json({ ok: false, readAt: "2026-10-10T08:10:00.000Z" })
+      : Response.json({ ok: true, readAt: "2026-10-10T08:10:00.000Z", extra: true });
+  }) as typeof fetch;
+  const view = await mounted();
+  await act(async () => view.container.querySelector<HTMLButtonElement>('button[aria-label="Thông báo"]')?.click());
+  const mark = [...view.container.querySelectorAll("button")].find((button) => button.textContent?.includes("Đánh dấu đã đọc")); assert.ok(mark);
+  for (let index = 0; index < 2; index += 1) {
+    await act(async () => { mark.click(); await new Promise((resolvePromise) => setTimeout(resolvePromise, 0)); });
+    assert.ok(view.container.querySelector(".notification-badge"));
+    assert.match(view.container.textContent ?? "", /Không thể cập nhật trạng thái/u);
+  }
+  await act(async () => view.root.unmount());
+});
+
+test("opening an unread notification attempts mark-read before local navigation", async () => {
+  let resolveResponse: ((value: Response) => void) | undefined;
+  const calls: string[] = [];
+  globalThis.fetch = (async (request) => {
+    calls.push(String(request));
+    return new Promise<Response>((resolvePromise) => { resolveResponse = resolvePromise; });
+  }) as typeof fetch;
+  browserWindow.history.replaceState(null, "", "/teams/nat-fc/overview");
+  const view = await mounted();
+  await act(async () => view.container.querySelector<HTMLButtonElement>('button[aria-label="Thông báo"]')?.click());
+  const link = view.container.querySelector<HTMLAnchorElement>(`.notification-row a[href="${notifications[0].targetPath}"]`); assert.ok(link);
+  await act(async () => { link.click(); link.click(); await Promise.resolve(); });
+  assert.deepEqual(calls, [`/api/notifications/${ID}`]);
+  assert.equal(browserWindow.location.pathname, "/teams/nat-fc/overview");
+  await act(async () => { resolveResponse?.(Response.json({ ok: true, readAt: "2026-10-10T08:10:00.000Z" })); await new Promise((resolvePromise) => setTimeout(resolvePromise, 0)); });
+  assert.equal(browserWindow.location.pathname, notifications[0].targetPath);
+  await act(async () => view.root.unmount());
+});
+
+test("a stalled mark-read attempt times out before local navigation", async () => {
+  globalThis.fetch = (async () => new Promise<Response>(() => {})) as typeof fetch;
+  browserWindow.history.replaceState(null, "", "/teams/nat-fc/overview");
+  const view = await mounted(5);
+  await act(async () => view.container.querySelector<HTMLButtonElement>('button[aria-label="Thông báo"]')?.click());
+  const link = view.container.querySelector<HTMLAnchorElement>(`.notification-row a[href="${notifications[0].targetPath}"]`); assert.ok(link);
+  await act(async () => { link.click(); await new Promise((resolvePromise) => setTimeout(resolvePromise, 15)); });
+  assert.equal(browserWindow.location.pathname, notifications[0].targetPath);
+  await act(async () => view.root.unmount());
+});
+
+test("mark-read timeout also bounds a successful response whose JSON body stalls", async () => {
+  globalThis.fetch = (async () => ({ ok: true, json: async () => new Promise<unknown>(() => {}) }) as Response) as typeof fetch;
+  browserWindow.history.replaceState(null, "", "/teams/nat-fc/overview");
+  const view = await mounted(5);
+  await act(async () => view.container.querySelector<HTMLButtonElement>('button[aria-label="Thông báo"]')?.click());
+  const link = view.container.querySelector<HTMLAnchorElement>(`.notification-row a[href="${notifications[0].targetPath}"]`); assert.ok(link);
+  await act(async () => { link.click(); await new Promise((resolvePromise) => setTimeout(resolvePromise, 15)); });
+  assert.equal(browserWindow.location.pathname, notifications[0].targetPath);
+  await act(async () => view.root.unmount());
 });

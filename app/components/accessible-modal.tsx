@@ -28,10 +28,20 @@ export function AccessibleModal({
 }) {
   const dialog = useRef<HTMLElement>(null);
   const onCloseRef = useRef(onClose);
+  const closeBlockedRef = useRef(closeBlocked);
 
   useEffect(() => {
     onCloseRef.current = onClose;
   }, [onClose]);
+
+  useEffect(() => {
+    closeBlockedRef.current = closeBlocked;
+    if (!closeBlocked) return;
+    const node = dialog.current;
+    const active = document.activeElement;
+    const activeDisabled = active instanceof HTMLElement && "disabled" in active && Boolean((active as HTMLButtonElement).disabled);
+    if (node && (!(active instanceof HTMLElement) || !node.contains(active) || activeDisabled)) node.focus();
+  }, [closeBlocked]);
 
   useEffect(() => {
     const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
@@ -40,7 +50,7 @@ export function AccessibleModal({
     focusable()[0]?.focus();
 
     function onKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape" && !closeBlocked) {
+      if (event.key === "Escape" && !closeBlockedRef.current) {
         event.preventDefault();
         onCloseRef.current();
         return;
@@ -68,7 +78,7 @@ export function AccessibleModal({
       document.removeEventListener("keydown", onKeyDown);
       previous?.focus();
     };
-  }, [closeBlocked]);
+  }, []);
 
   return (
     <div className={`modal-layer ${layerClassName}`.trim()}>

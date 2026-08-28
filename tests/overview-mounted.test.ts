@@ -191,6 +191,29 @@ test("Member RSVP affordance requires a scheduled match", async () => {
   await act(async () => view.root.unmount());
 });
 
+test("Overview distinguishes missing match permission from genuinely empty match data", async () => {
+  const noMatchAccess: TeamAccessContext = {
+    ...MEMBER,
+    permissions: ["team.read", "news.read"],
+  };
+  const empty: OverviewResult = {
+    ok: true,
+    data: {
+      nextMatch: null,
+      countdown: null,
+      attendance: null,
+      statistics: { completedMatches: 0, wins: 0, draws: 0, losses: 0, winRate: null, recentForm: [], recentPoints: 0, topScorer: null },
+      news: [],
+      managedNews: null,
+      calendar: [],
+    },
+  };
+  const view = await mounted(noMatchAccess, "2026-10-10T00:00:00.000Z", empty);
+  assert.match(view.container.textContent ?? "", /Bạn không có quyền xem (?:lịch thi đấu|tình trạng tham gia|kết quả trận đấu)/u);
+  assert.doesNotMatch(view.container.textContent ?? "", /Chưa có trận sắp tới|Chưa có trận để tổng hợp|Chưa có kết quả hoàn tất|Chưa có lịch sắp tới/u);
+  await act(async () => view.root.unmount());
+});
+
 test("Xem tất cả reveals every bounded news item in place and can collapse", async () => {
   const view = await mounted();
   assert.doesNotMatch(view.container.textContent ?? "", /Tin đội 4/u);
@@ -225,6 +248,23 @@ test("Admin creates a bounded News draft through the existing card and authorita
   await act(async () => view.root.unmount());
 });
 
+test("News dialog keeps focus inside while every control is pending-disabled", async () => {
+  let resolveResponse: ((value: Response) => void) | undefined;
+  globalThis.fetch = (async () => new Promise<Response>((resolvePromise) => { resolveResponse = resolvePromise; })) as typeof fetch;
+  const view = await mounted();
+  const trigger = [...view.container.querySelectorAll("button")].find((candidate) => candidate.textContent?.includes("Quản lý tin")); assert.ok(trigger); trigger.focus(); await act(async () => trigger.click());
+  const form = view.container.querySelector<HTMLFormElement>('form[data-form="team-news"]'); assert.ok(form);
+  await input(form.elements.namedItem("title") as HTMLInputElement, "Lịch tập mới");
+  await input(form.elements.namedItem("body") as HTMLTextAreaElement, "Toàn đội tập trung đúng giờ.");
+  const submit = form.querySelector<HTMLButtonElement>('button[type="submit"]'); assert.ok(submit); submit.focus();
+  await act(async () => { form.dispatchEvent(new browserWindow.Event("submit", { bubbles: true, cancelable: true })); await Promise.resolve(); });
+  const dialog = view.container.querySelector<HTMLElement>('[role="dialog"]'); assert.ok(dialog);
+  assert.equal(document.activeElement, dialog);
+  assert.notEqual(document.activeElement, trigger);
+  await act(async () => { resolveResponse?.(Response.json({ ok: false }, { status: 500 })); await new Promise((resolvePromise) => setTimeout(resolvePromise, 0)); });
+  await act(async () => view.root.unmount());
+});
+
 test("Admin publishes the selected draft with its exact stale token; Member has no manager", async () => {
   const calls: unknown[] = [];
   globalThis.fetch = (async (_request, init) => { calls.push(JSON.parse(String(init?.body))); return Response.json({ ok: true, post: { ...RESULT.data.managedNews![0], status: "published", publishedAt: "2026-10-10T08:00:00.000Z", updatedAt: "2026-10-10T08:00:00.000Z" } }); }) as typeof fetch;
@@ -235,6 +275,22 @@ test("Admin publishes the selected draft with its exact stale token; Member has 
   await act(async () => view.root.unmount());
 
   const member = await mounted(MEMBER); assert.ok(![...member.container.querySelectorAll("button")].some((candidate) => candidate.textContent?.includes("Quản lý tin"))); assert.equal(member.container.querySelector('[data-form="team-news"]'), null); await act(async () => member.root.unmount());
+});
+
+test("Admin can restore an archived News item to an editable draft", async () => {
+  const calls: unknown[] = [];
+  globalThis.fetch = (async (_request, init) => {
+    calls.push(JSON.parse(String(init?.body)));
+    return Response.json({ ok: true, post: { ...RESULT.data.managedNews![2], status: "draft", publishedAt: null, updatedAt: "2026-10-10T08:00:00.000Z" } });
+  }) as typeof fetch;
+  const view = await mounted();
+  const trigger = [...view.container.querySelectorAll("button")].find((candidate) => candidate.textContent?.includes("Quản lý tin")); assert.ok(trigger); await act(async () => trigger.click());
+  const select = view.container.querySelector<HTMLSelectElement>('select[name="newsId"]'); assert.ok(select); await input(select, "00000000-0000-4000-8000-000000000303");
+  const restore = [...view.container.querySelectorAll("button")].find((candidate) => candidate.textContent?.trim() === "Khôi phục"); assert.ok(restore);
+  await act(async () => { restore.click(); await new Promise((resolvePromise) => setTimeout(resolvePromise, 0)); });
+  assert.deepEqual(calls, [{ action: "restore", id: "00000000-0000-4000-8000-000000000303", expectedUpdatedAt: "2026-10-07T10:00:00.000Z" }]);
+  assert.equal(view.container.querySelector<HTMLInputElement>('input[name="title"]')?.disabled, false);
+  await act(async () => view.root.unmount());
 });
 
 declare global { var __overviewRefreshes: number | undefined; }

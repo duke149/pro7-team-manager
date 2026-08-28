@@ -41,7 +41,8 @@ test("initial theme control markup is light and stays identical through first hy
   assert.equal(serverMarkup, firstClientMarkup);
   assert.match(serverMarkup, /aria-pressed="false"/u);
   assert.match(serverMarkup, /aria-label="Bật giao diện tối"/u);
-  assert.match(serverMarkup, />Tối<\/button>/u);
+  assert.match(serverMarkup, /<svg[^>]*aria-hidden="true"/u);
+  assert.doesNotMatch(serverMarkup, />\s*(?:Sáng|Tối)\s*<\/button>/u);
 });
 
 test("theme resolves stored dark after hydration", () => {

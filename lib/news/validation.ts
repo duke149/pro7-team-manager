@@ -4,7 +4,7 @@ import { isIsoTimestamp } from "../matches/validation";
 export type NewsMutation =
   | Readonly<{ action: "create"; title: string; body: string }>
   | Readonly<{ action: "update"; id: string; title: string; body: string; expectedUpdatedAt: string }>
-  | Readonly<{ action: "publish" | "archive"; id: string; expectedUpdatedAt: string }>;
+  | Readonly<{ action: "publish" | "archive" | "restore"; id: string; expectedUpdatedAt: string }>;
 
 type ValidationResult = Readonly<{ ok: true; value: NewsMutation }> | Readonly<{ ok: false; fieldErrors: Readonly<Record<string, string>> }>;
 
@@ -30,7 +30,7 @@ export function validateNewsMutation(value: unknown): ValidationResult {
     if (!isIsoTimestamp(expectedUpdatedAt)) parsed.fieldErrors.expectedUpdatedAt = "Phiên bản tin không hợp lệ.";
     return Object.keys(parsed.fieldErrors).length ? { ok: false, fieldErrors: parsed.fieldErrors } : { ok: true, value: { action: "update", id, title: parsed.title, body: parsed.body, expectedUpdatedAt } };
   }
-  if ((value.action === "publish" || value.action === "archive") && exact(value, ["action", "id", "expectedUpdatedAt"])) {
+  if ((value.action === "publish" || value.action === "archive" || value.action === "restore") && exact(value, ["action", "id", "expectedUpdatedAt"])) {
     const id = typeof value.id === "string" ? value.id.trim() : ""; const expectedUpdatedAt = typeof value.expectedUpdatedAt === "string" ? value.expectedUpdatedAt : ""; const fieldErrors: Record<string, string> = {};
     if (!isUuid(id)) fieldErrors.id = "Tin đội không hợp lệ.";
     if (!isIsoTimestamp(expectedUpdatedAt)) fieldErrors.expectedUpdatedAt = "Phiên bản tin không hợp lệ.";

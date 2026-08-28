@@ -14,7 +14,7 @@ test("Team News migration adds archive lifecycle and one hardened mutation RPC",
   assert.match(sql, /auth\.uid\(\)[\s\S]*private\.has_team_permission\(p_team_id, 'news\.manage'\)/iu);
   assert.match(sql, /where news\.id = p_news_id[\s\S]*and news\.team_id = p_team_id[\s\S]*for update/iu);
   assert.match(sql, /p_expected_updated_at is distinct from v_news\.updated_at[\s\S]*errcode = '40001'/iu);
-  assert.match(sql, /p_action = 'create'[\s\S]*when 'update'[\s\S]*when 'publish'[\s\S]*when 'archive'/iu);
+  assert.match(sql, /p_action = 'create'[\s\S]*when 'update'[\s\S]*when 'publish'[\s\S]*when 'archive'[\s\S]*when 'restore'/iu);
   assert.match(sql, /insert into private\.audit_events/iu);
   assert.match(sql, /revoke execute on function public\.manage_team_news\(uuid, text, uuid, text, text, timestamptz\)[\s\S]*from public, anon, authenticated, service_role/iu);
   assert.match(sql, /grant execute on function public\.manage_team_news\(uuid, text, uuid, text, text, timestamptz\) to authenticated/iu);

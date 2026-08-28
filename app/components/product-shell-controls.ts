@@ -1,3 +1,4 @@
+import { Moon, Sun } from "lucide-react";
 import { createElement } from "react";
 
 export const INITIAL_THEME = "light" as const;
@@ -68,7 +69,7 @@ export function ThemeToggle({ theme, onToggle }: { theme: Theme; onToggle: () =>
       "aria-label": isDark ? "Bật giao diện sáng" : "Bật giao diện tối",
       onClick: onToggle,
     },
-    isDark ? "Sáng" : "Tối",
+    createElement(isDark ? Sun : Moon, { size: 18, "aria-hidden": true }),
   );
 }
 
