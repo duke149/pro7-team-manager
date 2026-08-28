@@ -42,7 +42,7 @@
 - Delete: `public/fonts/ROBOTO-LICENSE.txt`
 - Create: `scripts/audit-pro7-css.mjs`
 - Create: `tests/css-contract-helpers.ts`
-- Create: `tests/css-audit.test.ts`
+- Create: `tests/css-audit.test.mjs`
 - Test: `tests/typography-contract.test.ts`
 - Test: `tests/design-system-contract.test.ts`
 
@@ -74,7 +74,7 @@ export async function loadPro7CssFixture({ width, body }: { width: number; body:
 }
 ```
 
-Create `tests/css-audit.test.ts` before its implementation. The audit must reject
+Create `tests/css-audit.test.mjs` before its implementation. The audit must reject
 real parsed declarations, not grep an expected source line:
 
 ```ts
@@ -148,7 +148,7 @@ test("PRO7 tokens resolve the bounded visual system", async () => {
 Run:
 
 ```bash
-npm run test:unit -- tests/css-audit.test.ts tests/typography-contract.test.ts tests/design-system-contract.test.ts
+npm run test:unit -- tests/css-audit.test.mjs tests/typography-contract.test.ts tests/design-system-contract.test.ts
 ```
 
 Expected: FAIL because the CSS audit module and token file are absent and the
@@ -235,7 +235,7 @@ not fail the audit.
 Run:
 
 ```bash
-npm run test:unit -- tests/css-audit.test.ts tests/typography-contract.test.ts tests/design-system-contract.test.ts
+npm run test:unit -- tests/css-audit.test.mjs tests/typography-contract.test.ts tests/design-system-contract.test.ts
 npm run build
 git diff --check
 ```
@@ -245,7 +245,7 @@ Expected: token/font contracts PASS, build exits 0, and diff check is clean.
 - [ ] **Step 5: Commit the foundation**
 
 ```bash
-git add app/design-tokens.css app/layout.tsx app/typography.css app/globals.css package.json package-lock.json public/fonts scripts/audit-pro7-css.mjs tests/css-contract-helpers.ts tests/css-audit.test.ts tests/typography-contract.test.ts tests/design-system-contract.test.ts
+git add app/design-tokens.css app/layout.tsx app/typography.css app/globals.css package.json package-lock.json public/fonts scripts/audit-pro7-css.mjs tests/css-contract-helpers.ts tests/css-audit.test.mjs tests/typography-contract.test.ts tests/design-system-contract.test.ts docs/superpowers/plans/2026-08-28-pro7-taste-design-system-polish.md
 git commit -m "style: restore PRO7 design foundations"
 ```
 

@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import "./design-tokens.css";
 import "./globals.css";
 import "./responsive.css";
 import "./typography.css";
@@ -20,14 +21,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
       <head>
         <link
           rel="preload"
-          href="/fonts/roboto-vietnamese.woff2"
-          as="font"
-          type="font/woff2"
-          crossOrigin="anonymous"
-        />
-        <link
-          rel="preload"
-          href="/fonts/roboto-latin.woff2"
+          href="/fonts/be-vietnam-pro-variable.woff2"
           as="font"
           type="font/woff2"
           crossOrigin="anonymous"
