@@ -55,6 +55,10 @@ Funds và Admin Settings đã được recheck bằng phiên Admin thật ở de
 
 Sau khi hoàn tất provisioning, Owner/Admin đã chủ động kiểm tra CRUD hồ sơ đội bằng cách đổi `PRO7 FC / pro7-fc` thành `FC NÁT / nat-fc`. Dữ liệu liên kết theo `team_id` vẫn được giữ nguyên. Các artifact onboarding cố ý tiếp tục pin slug ban đầu `pro7-fc`, nên một lần chạy lại sẽ fail-closed cho tới khi slug được khôi phục hoặc một plan onboarding mới được duyệt.
 
+## Addendum 2026-08-28 — Taste design-system polish
+
+Phần typography “Be Vietnam Pro” phía trên là bằng chứng lịch sử và đã được thay thế theo quyết định mới của sản phẩm. Production hiện dùng Open Sans cho body/control và Barlow cho display/heading/numeric; body/copy dùng line-height `1.5`, còn heading/label/control dùng `1.25`. Audit mới, bằng chứng responsive và các ngoại lệ browser được ghi tại [PRO7 Taste design-system audit](./2026-08-28-pro7-taste-design-system-audit.md).
+
 ## Phát hiện ưu tiên
 
 1. 🔴 Responsive ở vùng tablet hẹp bị vỡ. Tại viewport browser khoảng 803px, sidebar desktop vẫn chiếm 250px nhưng header chưa chuyển sang mobile cho tới 760px; tiêu đề bị xuống từng từ và cụm tài khoản/đăng xuất bị cắt khỏi màn hình.
