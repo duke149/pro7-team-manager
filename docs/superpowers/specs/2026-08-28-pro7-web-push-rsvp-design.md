@@ -84,7 +84,7 @@ One logical event per match/user/milestone:
 - local RSVP target path and bounded notification payload
 - claim/retry timestamps, attempt count, terminal status, and bounded error code
 
-Automatic and invitation keys are unique per match/user/milestone. Manual reminder keys include the durable notification revision timestamp, allowing an Admin to issue later reminders without collision while a double-submit remains idempotent.
+Automatic and invitation keys are unique per match/user/milestone. Manual reminder keys use a UTC minute bucket, allowing an Admin to issue later reminders while retries or double-submits within the same minute remain idempotent.
 
 ### `private.push_deliveries`
 
@@ -100,7 +100,7 @@ The additive migration replaces the existing functions without changing their pu
 
 - Invitation notification targets change to the dedicated RSVP path.
 - Each inserted/refreshed notification produces a matching outbox event in the same transaction when the team's corresponding notification setting is enabled.
-- Manual reminders continue to update the single durable in-app reminder row but create a new idempotent push event keyed to that revision.
+- Manual reminders continue to update the single durable in-app reminder row but create a new idempotent push event keyed to the current UTC minute bucket.
 - Existing callers and response shapes remain compatible.
 
 ### Scheduled reminders
@@ -119,7 +119,7 @@ The scheduler never changes attendance and never sends over the network inside t
 
 ### Queue claiming and settlement
 
-Service-only, `SECURITY DEFINER` functions with fixed empty `search_path`:
+Public-schema Data API RPCs callable only by `service_role`, implemented as `SECURITY DEFINER` functions with a fixed empty `search_path`:
 
 - claim a bounded event/delivery batch with `FOR UPDATE SKIP LOCKED`;
 - reclaim locks after a bounded timeout;

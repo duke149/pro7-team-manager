@@ -740,6 +740,59 @@ export type Database = {
         }
         Relationships: []
       }
+      push_subscriptions: {
+        Row: {
+          auth: string
+          created_at: string
+          endpoint: string
+          endpoint_hash: string
+          expiration_time: number | null
+          failure_count: number
+          id: string
+          last_success_at: string | null
+          p256dh: string
+          updated_at: string
+          user_agent: string | null
+          user_id: string
+        }
+        Insert: {
+          auth: string
+          created_at?: string
+          endpoint: string
+          endpoint_hash?: never
+          expiration_time?: number | null
+          failure_count?: number
+          id?: string
+          last_success_at?: string | null
+          p256dh: string
+          updated_at?: string
+          user_agent?: string | null
+          user_id: string
+        }
+        Update: {
+          auth?: string
+          created_at?: string
+          endpoint?: string
+          endpoint_hash?: never
+          expiration_time?: number | null
+          failure_count?: number
+          id?: string
+          last_success_at?: string | null
+          p256dh?: string
+          updated_at?: string
+          user_agent?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "push_subscriptions_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       role_permissions: {
         Row: {
           permission_code: string
@@ -961,6 +1014,25 @@ export type Database = {
     }
     Functions: {
       accept_team_invitation: { Args: { token: string }; Returns: string }
+      claim_push_deliveries: {
+        Args: { p_limit: number }
+        Returns: {
+          attempt: number
+          auth: string
+          body: string
+          delivery_id: string
+          endpoint: string
+          event_kind: string
+          outbox_id: string
+          p256dh: string
+          target_path: string
+          title: string
+        }[]
+      }
+      delete_push_subscription: {
+        Args: { p_endpoint: string }
+        Returns: boolean
+      }
       get_team_audit_events: {
         Args: { p_limit?: number; p_team_id: string }
         Returns: {
@@ -1151,12 +1223,30 @@ export type Database = {
         }
         Returns: string
       }
+      settle_push_delivery: {
+        Args: {
+          p_delivery_id: string
+          p_error_code: string | null
+          p_outcome: string
+        }
+        Returns: undefined
+      }
       update_team_settings_section: {
         Args: {
           p_expected_updated_at: string
           p_section: string
           p_team_id: string
           p_value: Json
+        }
+        Returns: string
+      }
+      upsert_push_subscription: {
+        Args: {
+          p_auth: string
+          p_endpoint: string
+          p_expiration_time: number | null
+          p_p256dh: string
+          p_user_agent: string | null
         }
         Returns: string
       }
