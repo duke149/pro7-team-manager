@@ -130,6 +130,9 @@ test("matches list denies before querying and renders hosted hierarchy from live
   assert.match(markup, /PRO7 FC[\s\S]*Metro City[\s\S]*Riverside Turf/u);
   assert.match(markup, /10<\/strong>\/15 đã xác nhận/u);
   assert.match(markup, /3[\s\S]*–[\s\S]*1[\s\S]*Rovers FC/u);
+  assert.match(markup, /analysis-outcome win[^>]*>THẮNG</u);
+  assert.match(markup, /score-board win/u);
+  assert.match(markup, /match-history-score-pill win[^>]*>3 – 1<\/span>[\s\S]*match-result-pill win[^>]*>THẮNG/u);
   assert.match(markup, new RegExp(`/teams/pro7-fc/matches/${MATCH_ID}`, "u"));
   assert.doesNotMatch(markup, /FC Spartans|J\. Smith|Northside FC|Có thể/u);
 });
@@ -194,6 +197,9 @@ test("completed detail shows the analysis editor only to Admin and never fabrica
       denied: () => "SAFE_DENIAL",
     });
     const markup = html(output);
+    assert.match(markup, /analysis-outcome win[^>]*>THẮNG/u);
+    assert.match(markup, /score-board win/u);
+    assert.match(markup, /match-detail-result match-result-pill win[^>]*>THẮNG · 3 – 1/u);
     assert.equal(markup.includes("Ghi nhận diễn biến &amp; thống kê"), fixture.editor);
     assert.match(markup, /Chưa ghi nhận chỉ số hai đội/u);
     assert.doesNotMatch(markup, />58%<|>42%<|>14<\/b>/u);

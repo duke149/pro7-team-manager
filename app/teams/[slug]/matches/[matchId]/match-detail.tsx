@@ -18,6 +18,7 @@ import type {
   MatchTeamMetrics,
   TeamMetric,
 } from "../../../../../lib/matches/model";
+import { getMatchOutcome } from "../../../../../lib/matches/outcome";
 import { reloadAuthoritativeRoute } from "../authoritative-refresh";
 import { useRsvpDeadlineClosed } from "../rsvp-deadline";
 import { MatchAnalysisEditor } from "./match-analysis-editor";
@@ -203,6 +204,7 @@ export function MatchDetail({
   const awayScore = match.isHome ? match.opponentScore : match.teamScore;
   const firstTeam = match.isHome ? teamName : match.opponent;
   const secondTeam = match.isHome ? match.opponent : teamName;
+  const outcome = getMatchOutcome(match);
 
   return (
     <div className="view-stack match-center match-detail-view">
@@ -252,9 +254,9 @@ export function MatchDetail({
             >
               <ClipboardList size={16} /> Sa bàn chiến thuật
             </a>
-            {match.status === "completed" && (
-              <span className="starting-pill">
-                Trận đấu đã hoàn tất ({teamScore} – {awayScore})
+            {outcome && (
+              <span className={`match-detail-result match-result-pill ${outcome.className}`}>
+                {outcome.label} · {teamScore} – {awayScore}
               </span>
             )}
           </div>
@@ -303,14 +305,14 @@ export function MatchDetail({
         <article className="analysis-card">
           <div className="analysis-score">
             <span>PHÂN TÍCH TRẬN ĐẤU</span>
-            <small>
-              {match.status === "completed"
-                ? "KẾT THÚC"
+            <small className={outcome ? `analysis-outcome ${outcome.className}` : undefined}>
+              {outcome
+                ? outcome.label
                 : match.status === "cancelled"
                   ? "ĐÃ HỦY"
                   : "SẮP DIỄN RA"}
             </small>
-            <div className="score-board">
+            <div className={`score-board${outcome ? ` ${outcome.className}` : ""}`}>
               <b>{firstTeam}</b>
               <strong>
                 {teamScore ?? "—"} <em>–</em> {awayScore ?? "—"}

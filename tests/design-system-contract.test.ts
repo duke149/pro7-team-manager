@@ -116,6 +116,31 @@ test("Squad position badges stay inside the neutral and PRO7 red palette", async
   assert.doesNotMatch(css, /rgba\((?:13,\s*148,\s*136|180,\s*83,\s*9),/iu);
 });
 
+test("match result badges use semantic win, draw, and loss colors", async () => {
+  const fixture = await loadPro7CssFixture({
+    width: 390,
+    body: '<main class="pro7-shell light"><div class="form-badges"><b class="win">W</b><b class="draw">D</b><b class="loss">L</b></div><div class="form-strip"><span class="form-badge win">W</span></div><div class="analysis-score"><small class="analysis-outcome win">THẮNG</small><div class="score-board win"><strong>3 – 1</strong></div></div><span class="match-history-score-pill win">3–1</span><span class="match-result-pill win">THẮNG</span></main><main class="pro7-shell dark"><div class="analysis-score"><small class="analysis-outcome win">THẮNG</small><div class="score-board win"><strong>3 – 1</strong></div></div><span class="match-history-score-pill win">3–1</span><span class="match-result-pill win">THẮNG</span></main>',
+  });
+  try {
+    const styles = (selector: string) => fixture.window.getComputedStyle(fixture.document.querySelector(selector)!);
+    assert.equal(styles(".form-badges .win").backgroundColor, "#15803d");
+    assert.equal(styles(".form-badge.win").backgroundColor, "#15803d");
+    assert.equal(styles(".form-badges .win").color, "#ffffff");
+    assert.equal(styles(".pro7-shell.light .match-history-score-pill.win").backgroundColor, "#dcfce7");
+    assert.equal(styles(".pro7-shell.light .match-history-score-pill.win").color, "#166534");
+    assert.equal(styles(".pro7-shell.light .match-result-pill.win").color, "#166534");
+    assert.equal(styles(".pro7-shell.dark .match-history-score-pill.win").color, "#86efac");
+    assert.equal(styles(".pro7-shell.dark .match-result-pill.win").color, "#86efac");
+    assert.equal(styles(".pro7-shell.light .score-board.win strong").color, "#86efac");
+    assert.equal(styles(".pro7-shell.light .analysis-outcome.win").color, "#86efac");
+    assert.equal(styles(".pro7-shell.dark .score-board.win strong").color, "#86efac");
+    assert.notEqual(styles(".form-badges .draw").backgroundColor, styles(".form-badges .win").backgroundColor);
+    assert.notEqual(styles(".form-badges .loss").backgroundColor, styles(".form-badges .win").backgroundColor);
+  } finally {
+    fixture.close();
+  }
+});
+
 test("Matches and Tactics use the neutral PRO7 surface and touch rhythm", async () => {
   const [css, responsive] = await Promise.all([readFile(cssPath, "utf8"), readFile(responsivePath, "utf8")]);
   const desktop = await loadPro7CssFixture({

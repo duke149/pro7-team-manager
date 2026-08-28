@@ -24,11 +24,12 @@ Theme: đen, trắng, đỏ; không dùng neon.
 | Touch target | Một số control nhỏ hoặc không đồng nhất | Control tương tác mobile tối thiểu 44px; form input mobile 48px |
 | Responsive shell | Navigation và content có nguy cơ lệch ở tablet/mobile | Sidebar/drawer/bottom navigation có breakpoint rõ; 4 mục Member và 5 mục Admin có contract riêng |
 | Palette | Còn màu pitch xanh và token cũ sai nghĩa | Đen–trắng–đỏ/trung tính; pitch đen với grid đỏ; không còn neon có nghĩa trong production CSS |
+| Kết quả trận | Win/Draw/Loss cùng dùng đỏ thương hiệu ở một số card | Win xanh lá, Draw xám trung tính, Loss đỏ trên Overview, Squad, Matches và chi tiết trận; cùng nghĩa ở light/dark |
 | Login | Có CTA “Trải nghiệm bản Demo” | CTA quảng bá demo đã xóa; login chỉ còn luồng xác thực thật |
 
 ## Automated verification
 
-- Unit: 577 kiểm tra; 572 đạt; 0 lỗi; 5 kiểm tra PostgreSQL/Supabase phụ thuộc môi trường được skip có chủ đích.
+- Unit: 580 kiểm tra; 575 đạt; 0 lỗi; 5 kiểm tra PostgreSQL/Supabase phụ thuộc môi trường được skip có chủ đích.
 - Typography contract xác nhận font, semantic scale, line-height `1.5/1.25`, input mobile 16px và không còn microtype production.
 - Design-system/CSS audit: 17/17 đạt.
 - Matches/Tactics focused: 104/104 đạt.
@@ -59,10 +60,12 @@ Các breakpoint 320, 375, 390, 414, 768, 1024 và 1440px được khóa thêm b�
 - Không tự đổi mật khẩu và không bypass policy chỉ để chụp giao diện.
 - Vì vậy Funds/Admin Settings và bottom navigation 5 mục chưa được tuyên bố là đã re-verify bằng browser trong phiên này.
 - Contract test vẫn xác nhận 5 mục Admin có `min-height: 56px`, phân bố đều tại 320/375/390/414px và không làm đổi boundary permission.
+- Route Matches thật trong phiên Admin hiện chuyển tới `/account/change-password`; vì vậy vòng sửa màu này xác nhận browser trên trạng thái Overview công khai nội bộ và dùng render/CSS contract cho list/detail Matches thay vì bypass policy xác thực.
 
 ## Theme and accessibility results
 
 - Light/dark dùng chung semantic token và cùng hierarchy; primary palette đen–trắng–đỏ.
+- Xanh lá chỉ là ngoại lệ ngữ nghĩa cho trạng thái thắng; không được dùng làm màu thương hiệu hay CTA. Hòa dùng xám, thua dùng đỏ để người dùng không hiểu nhầm kết quả.
 - Focus-visible vẫn hiện rõ trên button, link, input và segmented control.
 - Copy dùng line-height 1.5 để đọc đoạn dài; heading/label/control dùng 1.25 để giữ baseline và chiều cao control ổn định.
 - Mobile input giữ 16px để tránh Safari tự zoom.
