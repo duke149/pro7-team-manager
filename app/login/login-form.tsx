@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useState } from "react";
-import { Eye, EyeOff } from "lucide-react";
+import { Eye, EyeOff, Loader2 } from "lucide-react";
 
 import { normalizeLoginIdentifier } from "../../lib/account/login-identifier";
 import { createBrowserSupabaseClient } from "../../lib/supabase/client";
@@ -19,6 +19,7 @@ export default function LoginForm({
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [rememberMe, setRememberMe] = useState(true);
   const [errorMessage, setErrorMessage] = useState(initialError ?? "");
   const [isLoading, setIsLoading] = useState(false);
 
@@ -67,7 +68,10 @@ export default function LoginForm({
         required
       />
 
-      <div className="login-label-row"><label htmlFor="login-password">Mật khẩu</label><a href="/account/forgot-password">Quên mật khẩu?</a></div>
+      <div className="login-label-row">
+        <label htmlFor="login-password">Mật khẩu</label>
+        <a href="/account/forgot-password">Quên mật khẩu?</a>
+      </div>
       <div className="password-field">
         <input
           id="login-password"
@@ -80,9 +84,29 @@ export default function LoginForm({
           disabled={isLoading}
           required
         />
-        <button type="button" className="password-visibility" aria-label={showPassword ? "Ẩn mật khẩu" : "Hiện mật khẩu"} aria-pressed={showPassword} onClick={() => setShowPassword((current) => !current)} disabled={isLoading}>
+        <button
+          type="button"
+          className="password-visibility"
+          aria-label={showPassword ? "Ẩn mật khẩu" : "Hiện mật khẩu"}
+          aria-pressed={showPassword}
+          onClick={() => setShowPassword((current) => !current)}
+          disabled={isLoading}
+        >
           {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
         </button>
+      </div>
+
+      <div className="login-options-row">
+        <label className="login-remember-label">
+          <input
+            type="checkbox"
+            name="remember"
+            checked={rememberMe}
+            onChange={(e) => setRememberMe(e.target.checked)}
+            disabled={isLoading}
+          />
+          <span>Ghi nhớ đăng nhập</span>
+        </label>
       </div>
 
       <p className="login-error" role="alert" aria-live="polite">
@@ -90,8 +114,23 @@ export default function LoginForm({
       </p>
 
       <button type="submit" disabled={isLoading} aria-busy={isLoading}>
-        {isLoading ? "Đang đăng nhập…" : "Đăng nhập"}
+        {isLoading ? (
+          <>
+            <Loader2 className="login-spinner" size={16} />
+            <span>Đang đăng nhập…</span>
+          </>
+        ) : (
+          "Đăng nhập"
+        )}
       </button>
+
+      <a href="/demo" className="demo-bypass-button">
+        Trải nghiệm bản Demo ngay (Không cần đăng nhập) →
+      </a>
+
+      <div className="login-help-text">
+        <span>Chưa có tài khoản? Liên hệ ban quản trị đội bóng để được tạo tài khoản.</span>
+      </div>
     </form>
   );
 }

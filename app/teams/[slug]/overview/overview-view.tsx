@@ -174,13 +174,40 @@ function AttendanceCard({ context, data, serverNow }: { context: TeamAccessConte
   </article>;
 }
 
-function Statistics({ data }: { data: OverviewData }) {
+function Statistics({ data, teamSlug }: { data: OverviewData; teamSlug: string }) {
   const statistics = data.statistics;
+  const matchesHref = `/teams/${encodeURIComponent(teamSlug)}/matches`;
   return <section className="stats-grid">
-    <article className="stat-card"><div className="stat-icon"><TrendingUp /></div><span>TỈ LỆ THẮNG</span>{statistics.winRate === null ? <><div><strong>—</strong></div><small>Chưa có kết quả hoàn tất</small></> : <><div><strong>{statistics.winRate}%</strong></div><small>{statistics.wins} thắng • {statistics.draws} hòa • {statistics.losses} thua</small></>}</article>
-    <article className="stat-card"><div className="stat-icon"><Activity /></div><span>PHONG ĐỘ GẦN ĐÂY</span>{statistics.recentForm.length === 0 ? <small className="overview-stat-empty">Chưa có phong độ</small> : <><div className="form-badges">{statistics.recentForm.map((value, index) => <b className={value === "D" ? "draw" : value === "L" ? "loss" : undefined} key={`${value}-${index}`}>{value}</b>)}</div><small>{statistics.recentPoints} điểm trong {statistics.recentForm.length} trận gần nhất</small></>}</article>
-    <article className="stat-card"><div className="stat-icon"><Target /></div><span>VUA PHÁ LƯỚI</span>{statistics.topScorer ? <div className="player-brief"><div className="initial-avatar dark-avatar">{initials(statistics.topScorer.displayName)}</div><div><b>{statistics.topScorer.displayName ?? "Chưa cập nhật tên"}</b><small>Cầu thủ</small></div><strong>{statistics.topScorer.goals}<small>BÀN</small></strong></div> : <small className="overview-stat-empty">Chưa có dữ liệu ghi bàn</small>}</article>
-    <article className="stat-card"><div className="stat-icon"><ShieldCheck /></div><span>THỨ HẠNG</span><div><strong>—</strong></div><small>Chưa có dữ liệu xếp hạng</small></article>
+    <article className="stat-card">
+      <div className="stat-icon"><TrendingUp /></div>
+      <span>TỈ LỆ THẮNG</span>
+      <div className="stat-body">
+        {statistics.winRate === null ? <strong>—</strong> : <strong>{statistics.winRate}%</strong>}
+      </div>
+      <small>{statistics.winRate === null ? "Chưa có kết quả hoàn tất" : `${statistics.wins} thắng • ${statistics.draws} hòa • ${statistics.losses} thua`}</small>
+    </article>
+    <a className="stat-card stat-card-interactive" href={matchesHref} title="Xem lịch sử và thông số các trận đã đấu">
+      <div className="stat-icon"><Activity /></div>
+      <span>PHONG ĐỘ GẦN ĐÂY</span>
+      <div className="stat-body">
+        {statistics.recentForm.length === 0 ? <span className="overview-stat-empty">Chưa có phong độ</span> : <div className="form-badges">{statistics.recentForm.map((value, index) => <b className={value === "D" ? "draw" : value === "L" ? "loss" : "win"} key={`${value}-${index}`}>{value}</b>)}</div>}
+      </div>
+      <small className="stat-card-hint">{statistics.recentPoints} điểm trong {statistics.recentForm.length} trận gần nhất <span className="arrow-glyph">→</span></small>
+    </a>
+    <article className="stat-card">
+      <div className="stat-icon"><Target /></div>
+      <span>VUA PHÁ LƯỚI</span>
+      <div className="stat-body">
+        {statistics.topScorer ? <div className="player-brief"><div className="initial-avatar dark-avatar">{initials(statistics.topScorer.displayName)}</div><div><b>{statistics.topScorer.displayName ?? "Chưa cập nhật tên"}</b><small>Cầu thủ</small></div><strong>{statistics.topScorer.goals}<small>BÀN</small></strong></div> : <small className="overview-stat-empty">Chưa có dữ liệu ghi bàn</small>}
+      </div>
+      <small>{statistics.topScorer ? "Thống kê mùa giải hiện tại" : "Chưa có dữ liệu"}</small>
+    </article>
+    <article className="stat-card">
+      <div className="stat-icon"><ShieldCheck /></div>
+      <span>THỨ HẠNG</span>
+      <div className="stat-body"><strong>—</strong></div>
+      <small>Chưa có dữ liệu xếp hạng</small>
+    </article>
   </section>;
 }
 
@@ -227,7 +254,7 @@ export function OverviewView({ context, result, serverNow }: { context: TeamAcce
   const state = data.nextMatch === null && data.statistics.completedMatches === 0 && data.news.length === 0 && data.calendar.length === 0 ? "empty" : "ready";
   return <div className="dashboard-view view-stack" data-state={state}>
     <section className="dashboard-hero two-col hero-ratio"><MatchHero context={context} data={data} /><AttendanceCard context={context} data={data} serverNow={serverNow} /></section>
-    <Statistics data={data} />
+    <Statistics data={data} teamSlug={context.team.slug} />
     <section className="two-col content-ratio"><NewsCard news={data.news} /><CalendarCard context={context} data={data} /></section>
   </div>;
 }
