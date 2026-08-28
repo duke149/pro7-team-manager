@@ -118,8 +118,11 @@ test("bundle scanning accepts the public Supabase URL and publishable-key shape"
 
 test("production deploy accepts only Supabase public values and the public VAPID key", async () => {
   const deployScript = await readFile(new URL("../scripts/deploy-cloudflare-worker.sh", import.meta.url), "utf8");
+  const envExample = await readFile(new URL("../.env.example", import.meta.url), "utf8");
   assert.match(deployScript, /NEXT_PUBLIC_PRO7_VAPID_PUBLIC_KEY/u);
   assert.match(deployScript, /\^\[A-Za-z0-9_\\-\]\{80,120\}\$/u);
   assert.match(deployScript, /exactly the three approved public variable names/u);
   assert.doesNotMatch(deployScript, /PRO7_VAPID_PRIVATE_KEY/u);
+  assert.match(envExample, /^NEXT_PUBLIC_PRO7_VAPID_PUBLIC_KEY=/mu);
+  assert.doesNotMatch(envExample, /PRO7_VAPID_PRIVATE_KEY/u);
 });
