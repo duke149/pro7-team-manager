@@ -33,12 +33,15 @@ env_names="$(awk -F= '
     if (key != "") print key
   }
 ' "$env_file" | LC_ALL=C sort)"
-expected_names=$'NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY\nNEXT_PUBLIC_SUPABASE_URL'
+expected_names=$'NEXT_PUBLIC_PRO7_VAPID_PUBLIC_KEY\nNEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY\nNEXT_PUBLIC_SUPABASE_URL'
 [[ "$env_names" == "$expected_names" ]] || \
-  fail '.env.local must contain exactly the two approved public Supabase variable names.'
+  fail '.env.local must contain exactly the three approved public variable names.'
 if LC_ALL=C grep -Eiq '(service_role|sb_secret_[A-Za-z0-9_-]{20,})' "$env_file"; then
   fail '.env.local contains a forbidden elevated Supabase credential.'
 fi
+vapid_public_key="$(awk -F= '$1 == "NEXT_PUBLIC_PRO7_VAPID_PUBLIC_KEY" { print $2 }' "$env_file")"
+[[ "$vapid_public_key" =~ ^[A-Za-z0-9_\-]{80,120}$ ]] || \
+  fail 'NEXT_PUBLIC_PRO7_VAPID_PUBLIC_KEY must be an 80-120 character base64url public key.'
 
 dry_run_file="$(mktemp "${TMPDIR:-/tmp}/pro7-cloudflare-dry-run.XXXXXX")"
 chmod 600 "$dry_run_file"

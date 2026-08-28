@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -114,4 +114,12 @@ test("bundle scanning accepts the public Supabase URL and publishable-key shape"
   } finally {
     await rm(root, { recursive: true, force: true });
   }
+});
+
+test("production deploy accepts only Supabase public values and the public VAPID key", async () => {
+  const deployScript = await readFile(new URL("../scripts/deploy-cloudflare-worker.sh", import.meta.url), "utf8");
+  assert.match(deployScript, /NEXT_PUBLIC_PRO7_VAPID_PUBLIC_KEY/u);
+  assert.match(deployScript, /\^\[A-Za-z0-9_\\-\]\{80,120\}\$/u);
+  assert.match(deployScript, /exactly the three approved public variable names/u);
+  assert.doesNotMatch(deployScript, /PRO7_VAPID_PRIVATE_KEY/u);
 });
