@@ -98,6 +98,23 @@ test("detail page preserves hosted tactics hierarchy for Admin and removes every
   }
 });
 
+test("completed tactics are read-only history for Admin as well as Member", async () => {
+  const completed: TacticsDetail = {
+    ...DETAIL,
+    match: { ...MATCH, status: "completed", teamScore: 3, opponentScore: 2 },
+    tactics: DETAIL.tactics.map((tactic) => ({ ...tactic, status: "applied", appliedAt: "2026-10-03T00:00:00.000Z" })),
+  };
+  const output = await detailPage.renderTacticsMatchPage({
+    params: Promise.resolve({ slug: "pro7-fc", matchId: MATCH_ID }),
+    requireTeamPermission: async () => ADMIN,
+    getTacticsDetail: async () => ({ ok: true, detail: completed }),
+    denied: () => "SAFE_DENIAL",
+  });
+  const markup = html(output);
+  assert.match(markup, /Chỉ đọc[\s\S]*Đã áp dụng/u);
+  assert.doesNotMatch(markup, /Lưu bản nháp|Áp dụng cho đội/u);
+});
+
 test("tactics loading and error boundaries preserve the PRO7 pending surface and retry action", () => {
   const pending = html(loading.default({}));
   assert.match(pending, /class="view-stack tactics-view"[\s\S]*data-state="loading"[\s\S]*aria-busy="true"[\s\S]*squad-loading-dot[\s\S]*Đang tải chiến thuật/u);

@@ -9,11 +9,14 @@ import { TACTIC_FORMATIONS, TACTIC_LEVELS, TACTIC_MODES, TACTIC_ROLES, type Matc
 const TACTICS_SELECT = "id,mode,formation,instructions,version,pressing,defensive_line,status,updated_at,applied_at,slots:lineup_slots(user_id,slot_kind,slot_key,role_label,shirt_number,x,y)";
 const PLAYER_PAGE_SIZE = 100;
 const MAX_ACTIVE_PLAYERS = 1_000;
+const MAX_HISTORICAL_PLAYERS = 1_000;
 const MEMBERSHIP_SELECT = "user_id,player:team_player_profiles!team_player_profiles_membership_fkey(shirt_number,official_position,player_status)";
+const HISTORICAL_MEMBERSHIP_SELECT = "user_id,status,player:team_player_profiles!team_player_profiles_membership_fkey(shirt_number,official_position,player_status)";
 type Dependencies = { supabase?: Pick<SupabaseClient<Database>, "from">; listMatches?: (teamId: string, userId: string) => Promise<MatchListResult> };
 type SlotRow = { user_id: string; slot_kind: "starter" | "bench"; slot_key: string; role_label: TacticRole; shirt_number: number | null; x: number; y: number };
 type TacticRow = { id: string; mode: TacticMode; formation: TacticFormation; instructions: string | null; version: number; pressing: TacticLevel; defensive_line: TacticLevel; status: "draft" | "applied"; updated_at: string; applied_at: string | null; slots: SlotRow[] };
 type ActiveMembershipRow = { user_id: string; player: { shirt_number: number | null; official_position: TacticRole | null; player_status: "available" | "injured" | "unavailable" } };
+type HistoricalMembershipRow = ActiveMembershipRow & { status: "active" | "inactive" };
 type ProfileRow = { id: string; display_name: string | null };
 
 function record(value: unknown): value is Record<string, unknown> { return typeof value === "object" && value !== null && !Array.isArray(value); }
@@ -32,6 +35,10 @@ function activeMembershipRow(value: unknown): value is ActiveMembershipRow {
   return (value.player.shirt_number === null || (Number.isInteger(value.player.shirt_number) && (value.player.shirt_number as number) >= 1 && (value.player.shirt_number as number) <= 99))
     && (value.player.official_position === null || oneOf(value.player.official_position, TACTIC_ROLES))
     && oneOf(value.player.player_status, ["available", "injured", "unavailable"]);
+}
+function historicalMembershipRow(value: unknown): value is HistoricalMembershipRow {
+  return activeMembershipRow(value) && record(value)
+    && (value.status === "active" || value.status === "inactive");
 }
 function profileRow(value: unknown): value is ProfileRow {
   return record(value) && isUuid(value.id)
@@ -72,6 +79,62 @@ async function listActiveTacticsPlayers(supabase: Pick<SupabaseClient<Database>,
   }));
 }
 
+async function listHistoricalTacticsPlayers(
+  supabase: Pick<SupabaseClient<Database>, "from">,
+  teamId: string,
+  referencedUserIds: readonly string[],
+): Promise<readonly TacticsPlayer[] | null> {
+  const userIds = [...referencedUserIds].sort();
+  if (userIds.length > MAX_HISTORICAL_PLAYERS || new Set(userIds).size !== userIds.length
+    || !userIds.every(isUuid)) return null;
+  if (userIds.length === 0) return Object.freeze([]);
+
+  const memberships: HistoricalMembershipRow[] = [];
+  for (let index = 0; index < userIds.length; index += PLAYER_PAGE_SIZE) {
+    const ids = userIds.slice(index, index + PLAYER_PAGE_SIZE);
+    const result = await supabase
+      .from("memberships")
+      .select(HISTORICAL_MEMBERSHIP_SELECT)
+      .eq("team_id", teamId)
+      .in("user_id", ids)
+      .order("user_id", { ascending: true })
+      .limit(ids.length + 1);
+    if (result.error || !Array.isArray(result.data) || result.data.length !== ids.length
+      || !result.data.every(historicalMembershipRow)) return null;
+    const rows = result.data as unknown as HistoricalMembershipRow[];
+    if (rows.some((row, rowIndex) => row.user_id !== ids[rowIndex])) return null;
+    memberships.push(...rows);
+  }
+
+  const profiles: ProfileRow[] = [];
+  for (let index = 0; index < userIds.length; index += PLAYER_PAGE_SIZE) {
+    const ids = userIds.slice(index, index + PLAYER_PAGE_SIZE);
+    const result = await supabase
+      .from("profiles")
+      .select("id,display_name")
+      .in("id", ids)
+      .order("id", { ascending: true })
+      .limit(ids.length + 1);
+    if (result.error || !Array.isArray(result.data) || result.data.length !== ids.length
+      || !result.data.every(profileRow)) return null;
+    const rows = result.data as unknown as ProfileRow[];
+    if (rows.some((row, rowIndex) => row.id !== ids[rowIndex])) return null;
+    profiles.push(...rows);
+  }
+
+  return Object.freeze(memberships.map((membership, index) => {
+    const profile = profiles[index];
+    if (!profile || profile.id !== membership.user_id) throw new Error("missing historical member profile");
+    const fallback = `${membership.status === "inactive" ? "Cựu thành viên" : "Cầu thủ"} • ${membership.user_id.slice(0, 8)}`;
+    return Object.freeze({
+      userId: membership.user_id,
+      displayName: profile.display_name ?? fallback,
+      shirtNumber: membership.player.shirt_number,
+      officialPosition: membership.player.official_position,
+    });
+  }));
+}
+
 export async function listScheduledTacticsMatches(teamId: string, userId: string, dependencies: Dependencies = {}): Promise<TacticsMatchesResult> {
   const result = await (dependencies.listMatches ?? listMatches)(teamId, userId);
   if (!result.ok) return result;
@@ -82,20 +145,28 @@ export async function getTacticsDetail(teamId: string, matchId: string, userId: 
   if (!isUuid(matchId)) return { ok: false, error: "not_found" };
   try {
     const supabase = await client(dependencies.supabase);
-    const [matches, activePlayers] = await Promise.all([(dependencies.listMatches ?? listMatches)(teamId, userId), listActiveTacticsPlayers(supabase, teamId)]);
-    if (!matches.ok || !activePlayers) return { ok: false, error: "server" };
+    const matches = await (dependencies.listMatches ?? listMatches)(teamId, userId);
+    if (!matches.ok) return { ok: false, error: "server" };
     const match = matches.matches.find((candidate) => candidate.id === matchId && (candidate.status === "scheduled" || candidate.status === "completed"));
     if (!match) return { ok: false, error: "not_found" };
+    const canEdit = canManage && match.status === "scheduled";
     let query = supabase.from("match_tactics").select(TACTICS_SELECT).eq("team_id", teamId).eq("match_id", matchId);
-    if (!canManage) query = query.eq("status", "applied");
+    if (!canEdit) query = query.eq("status", "applied");
     const result = await query.order("updated_at", { ascending: false }).order("id", { ascending: true }).limit(100);
     if (result.error || !Array.isArray(result.data) || result.data.length > 100 || !result.data.every(tacticRow)) return { ok: false, error: "server" };
     const rows = result.data as unknown as TacticRow[];
-    if (!canManage && rows.some((row) => row.status !== "applied")) return { ok: false, error: "server" };
+    if (!canEdit && rows.some((row) => row.status !== "applied")) return { ok: false, error: "server" };
     if (new Set(rows.map((row) => row.id)).size !== rows.length || new Set(rows.map((row) => `${row.mode}:${row.version}`)).size !== rows.length) return { ok: false, error: "server" };
-    const players: readonly TacticsPlayer[] = activePlayers;
-    const active = new Set(players.map((player) => player.userId));
-    if (match.status === "scheduled" && rows.some((row) => row.slots.some((slot) => !active.has(slot.user_id)))) return { ok: false, error: "server" };
+    const referencedUserIds = [...new Set(rows.flatMap((row) => row.slots.map((slot) => slot.user_id)))];
+    if (referencedUserIds.length > MAX_HISTORICAL_PLAYERS) return { ok: false, error: "server" };
+    const players = match.status === "scheduled"
+      ? await listActiveTacticsPlayers(supabase, teamId)
+      : await listHistoricalTacticsPlayers(supabase, teamId, referencedUserIds);
+    if (!players) return { ok: false, error: "server" };
+    if (match.status === "scheduled") {
+      const active = new Set(players.map((player) => player.userId));
+      if (rows.some((row) => row.slots.some((slot) => !active.has(slot.user_id)))) return { ok: false, error: "server" };
+    }
     const tactics: MatchTactic[] = rows.map((row) => Object.freeze({ id: row.id, mode: row.mode, formation: row.formation, instructions: row.instructions, version: row.version, pressing: row.pressing, defensiveLine: row.defensive_line, status: row.status, updatedAt: row.updated_at, appliedAt: row.applied_at, slots: Object.freeze(row.slots.map((slot): TacticSlot => Object.freeze({ userId: slot.user_id, slotKind: slot.slot_kind, slotKey: slot.slot_key, roleLabel: slot.role_label, shirtNumber: slot.shirt_number, x: slot.x, y: slot.y }))) }));
     return { ok: true, detail: Object.freeze({ match, players: Object.freeze(players), tactics: Object.freeze(tactics) }) };
   } catch { return { ok: false, error: "server" }; }

@@ -18,7 +18,9 @@ const SHAPES: Record<TacticFormation, readonly { role: TacticRole; x: number; y:
   "2-2-2": [{ role: "GK", x: 50, y: 90 }, { role: "DEF", x: 32, y: 69 }, { role: "DEF", x: 68, y: 69 }, { role: "MID", x: 32, y: 44 }, { role: "MID", x: 68, y: 44 }, { role: "ATT", x: 32, y: 19 }, { role: "ATT", x: 68, y: 19 }],
 };
 
-function playerName(player: TacticsPlayer | undefined) { return player?.displayName ?? "Chưa cập nhật tên"; }
+function playerName(player: TacticsPlayer | undefined) {
+  return player?.displayName ?? (player ? `Cầu thủ • ${player.userId.slice(0, 8)}` : "Cầu thủ không xác định");
+}
 function initials(value: string) { return value.trim().split(/\s+/u).slice(-2).map((part) => part[0]?.toLocaleUpperCase("vi-VN")).join("") || "CT"; }
 function clamp(value: number) { return Math.round(Math.min(100, Math.max(0, value)) * 100) / 100; }
 function apiMessage(value: unknown, fallback: string) { return typeof value === "object" && value !== null && "message" in value && typeof value.message === "string" ? value.message : fallback; }
