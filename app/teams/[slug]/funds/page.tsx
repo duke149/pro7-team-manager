@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 
 import { getFunds } from "../../../../lib/funds/queries";
+import { loadTeamPaymentSettings, type TeamPaymentSettingsResult } from "../../../../lib/funds/payment-settings";
 import type { FundsResult } from "../../../../lib/funds/model";
 import { requireTeamPermission } from "../../../../lib/teams/context";
 import type { TeamAccessContext } from "../../../../lib/teams/context";
@@ -20,6 +21,7 @@ export async function renderFundsPage(
     searchParams?: Promise<Record<string, string | string[] | undefined>>;
     requireTeamPermission: (slug: string, permission: PermissionCode) => Promise<TeamAccessContext | null>;
     getFunds?: (teamId: string, periodStart: string) => Promise<FundsResult>;
+    getPaymentSettings?: (teamId: string) => Promise<TeamPaymentSettingsResult>;
     denied: () => unknown;
     periodStart?: string;
   } = {
@@ -32,9 +34,12 @@ export async function renderFundsPage(
   const context = await arguments_.requireTeamPermission(slug, "finance.read");
   if (!context) return arguments_.denied();
   const periodStart = arguments_.periodStart ?? currentPeriod();
-  const result = arguments_.getFunds ? await arguments_.getFunds(context.team.id, periodStart) : { ok: true as const, data: { periodStart, balanceVnd: 0, monthIncomeVnd: 0, monthIncomeCount: 0, monthExpenseVnd: 0, monthExpenseCount: 0, pendingDuesVnd: 0, pendingDuesCount: 0, paidDuesCount: 0, totalDuesCount: 0, dues: [], dueCandidates: [], recentEntries: [] } };
+  const [result, paymentResult] = await Promise.all([
+    arguments_.getFunds ? arguments_.getFunds(context.team.id, periodStart) : Promise.resolve({ ok: true as const, data: { periodStart, balanceVnd: 0, monthIncomeVnd: 0, monthIncomeCount: 0, monthExpenseVnd: 0, monthExpenseCount: 0, pendingDuesVnd: 0, pendingDuesCount: 0, paidDuesCount: 0, totalDuesCount: 0, dues: [], dueCandidates: [], recentEntries: [] } }),
+    arguments_.getPaymentSettings ? arguments_.getPaymentSettings(context.team.id) : Promise.resolve({ ok: true as const, data: null }),
+  ]);
   const search = arguments_.searchParams ? await arguments_.searchParams : {};
-  return <FundsView team={context.team} permissions={context.permissions} result={result} initialDialog={search.add === "expense" ? "entry" : undefined} />;
+  return <FundsView team={context.team} permissions={context.permissions} result={paymentResult.ok ? result : { ok: false, error: "server" }} paymentSettings={paymentResult.ok ? paymentResult.data : null} initialDialog={search.add === "expense" ? "entry" : undefined} />;
 }
 
 export default async function FundsPage({
@@ -44,5 +49,5 @@ export default async function FundsPage({
   params: Promise<{ slug: string }>;
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  return renderFundsPage({ params, searchParams, requireTeamPermission, getFunds, denied: notFound });
+  return renderFundsPage({ params, searchParams, requireTeamPermission, getFunds, getPaymentSettings: loadTeamPaymentSettings, denied: notFound });
 }

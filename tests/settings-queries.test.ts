@@ -22,7 +22,7 @@ class Query implements PromiseLike<Result> {
 
 function client(overrides: Partial<Record<"settings" | "roles" | "permissions" | "memberships" | "audit", Result>> = {}) {
   const rows: Record<string, Result> = {
-    settings: { data: { team_id: TEAM, settings: { notifications: { matchInvitations: true, matchReminders: false, reminderHoursBefore: 12 } } }, error: null },
+    settings: { data: { team_id: TEAM, updated_at: "2026-10-01T08:00:00.000Z", settings: { notifications: { matchInvitations: true, matchReminders: false, reminderHoursBefore: 12 }, payments: { bankCode: "MB", accountNumber: "0901234567", accountHolder: "LE DUC", transferPrefix: "PRO7 QUY" } } }, error: null },
     roles: { data: [{ id: ROLE, name: "Member", slug: "member", is_system: true }], error: null },
     permissions: { data: [{ role_id: ROLE, permission_code: "team.read" }], error: null },
     memberships: { data: [{ user_id: USER, status: "active" }], error: null },
@@ -47,6 +47,8 @@ test("Admin Settings parses bounded notification, role, member, and redacted aud
   assert.equal(result.ok, true);
   if (!result.ok) return;
   assert.deepEqual(result.data.notificationSettings, { matchInvitations: true, matchReminders: false, reminderHoursBefore: 12 });
+  assert.deepEqual(result.data.paymentSettings, { bankCode: "MB", accountNumber: "0901234567", accountHolder: "LE DUC", transferPrefix: "PRO7 QUY" });
+  assert.equal(result.data.updatedAt, "2026-10-01T08:00:00.000Z");
   assert.equal(result.data.activeMembers, 1);
   assert.equal(result.data.inactiveMembers, 0);
   assert.deepEqual(result.data.roles[0]?.permissions, ["team.read"]);
@@ -60,6 +62,15 @@ test("Admin Settings fails closed on malformed, duplicate, overflow, or upstream
     client({ memberships: { data: [{ user_id: USER, status: "active" }, { user_id: USER, status: "active" }], error: null } }),
     client({ roles: { data: Array.from({ length: 101 }, () => ({ id: ROLE, name: "Role", slug: "role", is_system: false })), error: null } }),
     client({ settings: { data: null, error: { code: "server" } } }),
+    client({ settings: { data: { team_id: TEAM, updated_at: "bad", settings: {} }, error: null } }),
+    client({ settings: { data: { team_id: TEAM, updated_at: "2026-10-01T08:00:00.000Z", settings: { payments: { bankCode: "MB", accountNumber: "unsafe", accountHolder: "LE DUC", transferPrefix: null } } }, error: null } }),
   ];
   for (const supplied of cases) assert.deepEqual(await loadAdminSettings(TEAM, supplied as never), { ok: false, error: "server" });
+});
+
+test("Admin Settings accepts an absent payment section as unconfigured", async () => {
+  const supplied = client({ settings: { data: { team_id: TEAM, updated_at: "2026-10-01T08:00:00.000Z", settings: { notifications: {} } }, error: null } });
+  const result = await loadAdminSettings(TEAM, supplied as never);
+  assert.equal(result.ok, true);
+  if (result.ok) assert.equal(result.data.paymentSettings, null);
 });

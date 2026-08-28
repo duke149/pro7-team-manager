@@ -36,18 +36,48 @@ function dependencies(result: { data: unknown; error: null | { code?: string } }
   };
 }
 
-test("team and notification settings use exact permissions and RLS-scoped writes", async () => {
+function rpcDependencies(result: { data: unknown; error: null | { code?: string } }) {
+  const permissions: string[] = [];
+  const calls: unknown[] = [];
+  return {
+    permissions,
+    calls,
+    value: {
+      requireTeamPermission: async (_slug: string, permission: string) => {
+        permissions.push(permission);
+        return { userId: "00000000-0000-4000-8000-000000000009", team: { id: TEAM, name: "PRO7 FC", slug: "pro7-fc" }, membership: { roleName: "Owner" }, permissions: [permission] };
+      },
+      supabase: { rpc(name: string, args: unknown) { calls.push({ name, args }); return Promise.resolve(result); } },
+    },
+  };
+}
+
+test("team and notification settings use exact permissions and the atomic settings RPC", async () => {
   const team = dependencies({ data: { id: TEAM, name: "PRO7 FC", slug: "pro7-fc" }, error: null });
   const teamResponse = await mutateAdminSettings(request({ action: "team", name: "PRO7 FC", slug: "pro7-fc" }), "pro7-fc", team.value as never);
   assert.equal(teamResponse.status, 200);
   assert.deepEqual(team.permissions, ["team.update"]);
   assert.deepEqual(team.writes.slice(0, 2), [{ action: "update", value: { name: "PRO7 FC", slug: "pro7-fc" } }, { action: "eq", field: "id", value: TEAM }]);
 
-  const notifications = dependencies({ data: { team_id: TEAM }, error: null });
-  const response = await mutateAdminSettings(request({ action: "notifications", matchInvitations: true, matchReminders: false, reminderHoursBefore: 24 }), "pro7-fc", notifications.value as never);
+  const notifications = rpcDependencies({ data: "2026-10-01T08:00:01.000Z", error: null });
+  const response = await mutateAdminSettings(request({ action: "notifications", matchInvitations: true, matchReminders: false, reminderHoursBefore: 24, expectedUpdatedAt: "2026-10-01T08:00:00.000Z" }), "pro7-fc", notifications.value as never);
   assert.equal(response.status, 200);
   assert.deepEqual(notifications.permissions, ["settings.update"]);
-  assert.deepEqual(notifications.writes[0], { action: "update", value: { settings: { notifications: { matchInvitations: true, matchReminders: false, reminderHoursBefore: 24 } } } });
+  assert.deepEqual(notifications.calls, [{ name: "update_team_settings_section", args: { p_team_id: TEAM, p_section: "notifications", p_value: { matchInvitations: true, matchReminders: false, reminderHoursBefore: 24 }, p_expected_updated_at: "2026-10-01T08:00:00.000Z" } }]);
+  assert.deepEqual(await response.json(), { ok: true, updatedAt: "2026-10-01T08:00:01.000Z" });
+});
+
+test("payment settings use the same RPC and stale writes return conflict", async () => {
+  const payment = rpcDependencies({ data: "2026-10-01T08:00:01.000Z", error: null });
+  const response = await mutateAdminSettings(request({ action: "payments", bankCode: "MB", accountNumber: "0901234567", accountHolder: "LE DUC", transferPrefix: "PRO7 QUY", expectedUpdatedAt: "2026-10-01T08:00:00.000Z" }), "pro7-fc", payment.value as never);
+  assert.equal(response.status, 200);
+  assert.deepEqual(payment.permissions, ["settings.update"]);
+  assert.deepEqual(payment.calls[0], { name: "update_team_settings_section", args: { p_team_id: TEAM, p_section: "payments", p_value: { bankCode: "MB", accountNumber: "0901234567", accountHolder: "LE DUC", transferPrefix: "PRO7 QUY" }, p_expected_updated_at: "2026-10-01T08:00:00.000Z" } });
+
+  const stale = rpcDependencies({ data: null, error: { code: "40001" } });
+  const staleResponse = await mutateAdminSettings(request({ action: "payments", bankCode: "MB", accountNumber: "0901234567", accountHolder: "LE DUC", transferPrefix: null, expectedUpdatedAt: "2026-10-01T08:00:00.000Z" }), "pro7-fc", stale.value as never);
+  assert.equal(staleResponse.status, 409);
+  assert.equal((await staleResponse.json()).code, "stale");
 });
 
 test("danger zone requires both canonical confirmations before any delete", async () => {

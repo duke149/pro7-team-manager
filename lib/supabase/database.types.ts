@@ -1133,6 +1133,15 @@ export type Database = {
         }
         Returns: string
       }
+      update_team_settings_section: {
+        Args: {
+          p_expected_updated_at: string
+          p_section: string
+          p_team_id: string
+          p_value: Json
+        }
+        Returns: string
+      }
     }
     Enums: {
       [_ in never]: never
