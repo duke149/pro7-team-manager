@@ -365,15 +365,26 @@
   color: #fff;
 }
 .form-badge.win {
-  background: #00e676;
-  color: #034b23;
+  background: var(--red);
+  color: #ffffff;
 }
 .form-badge.draw {
   background: #94a3b8;
 }
 .form-badge.loss {
-  background: #ef4444;
+  background: #fee2e2;
+  color: #a60f28;
 }
+.performance-label,
+.performance-state,
+.performance-totals {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+.performance-label { margin-right: 2px; }
+.performance-state.error { color: #a60f28; }
+.performance-totals { margin: 8px 0 0; line-height: 1.45; }
 .position-pill {
   padding: 3px 8px;
   border-radius: 6px;
@@ -615,7 +626,7 @@
   transform: translateX(3px);
 }
 
-/* Green Win Form Badges */
+/* Match form badges */
 .form-badges {
   display: flex;
   gap: 6px;
@@ -629,8 +640,8 @@
   width: 28px;
   height: 28px;
   border-radius: 50%;
-  background: #00e676 !important;
-  color: #034b23 !important;
+  background: var(--red) !important;
+  color: #ffffff !important;
   font-size: 12px;
   font-weight: 800;
   transform: none !important;
@@ -643,8 +654,8 @@
 }
 .form-badges b.loss,
 .form-badge.loss {
-  background: #ef4444 !important;
-  color: #ffffff !important;
+  background: #fee2e2 !important;
+  color: #a60f28 !important;
 }
 
 /* Completed Match History Section & Cards */

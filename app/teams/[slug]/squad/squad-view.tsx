@@ -10,12 +10,18 @@ import {
   Users,
   X,
 } from "lucide-react";
-import { useEffect, useState, type FormEvent } from "react";
+import { useState, type FormEvent } from "react";
 
 import { AccessibleModal } from "../../../components/accessible-modal";
-import { createBrowserSupabaseClient } from "../../../../lib/supabase/client";
 import type { SquadFilters } from "../../../../lib/squad/filters";
-import { isUuid, type SquadAssignableRole, type SquadListResult, type SquadPlayerSummary } from "../../../../lib/squad/model";
+import {
+  isUuid,
+  type SquadAssignableRole,
+  type SquadListResult,
+  type SquadPerformanceResult,
+  type SquadPlayerPerformance,
+  type SquadPlayerSummary,
+} from "../../../../lib/squad/model";
 import { validateProvisionMemberPayload, type ProvisionMemberSuccess } from "../../../../lib/squad/provisioning";
 import type { TeamAccessContext } from "../../../../lib/teams/context";
 import { hasPermission, type PermissionCode } from "../../../../lib/teams/permissions";
@@ -60,11 +66,13 @@ export function SquadSummary({ players, loading = false }: { players: readonly S
 function PlayerCard({
   slug,
   player,
-  playerForm,
+  performance,
+  performanceError,
 }: {
   slug: string;
   player: SquadPlayerSummary;
-  playerForm?: { appearances: number; form: ("W" | "D" | "L")[] };
+  performance?: SquadPlayerPerformance;
+  performanceError: boolean;
 }) {
   const name = player.displayName ?? "Cầu thủ chưa cập nhật tên";
   const avatarUrl = safeAvatarUrl(player.avatarUrl);
@@ -73,8 +81,7 @@ function PlayerCard({
   const posCode = (player.officialPosition ?? "").toLocaleUpperCase("vi-VN");
   const posClass = posCode === "GK" ? "gk" : posCode === "DEF" ? "df" : posCode === "MID" ? "mf" : posCode === "ATT" ? "fw" : "";
   const numStr = player.shirtNumber !== null ? (player.shirtNumber < 10 ? `0${player.shirtNumber}` : String(player.shirtNumber)) : "—";
-  const appearances = playerForm?.appearances ?? 0;
-  const formList = playerForm?.form ?? [];
+  const formList = performance?.recentForm ?? [];
 
   return (
     <article className={`player-card athlete-card ${player.playerStatus === "injured" ? "injured" : ""} ${player.membershipStatus === "inactive" ? "inactive" : ""}`}>
@@ -95,19 +102,29 @@ function PlayerCard({
           <strong>{player.shirtNumber === null ? "#—" : `#${player.shirtNumber}`}</strong>
         </div>
         <div className="form-strip" aria-label="Phong độ thi đấu">
-          <span style={{ fontSize: 12, color: "var(--muted)", fontWeight: 700, marginRight: 2 }}>
-            {appearances > 0 ? `Phong độ (${appearances} trận):` : "Ra sân:"}
-          </span>
-          {formList.length > 0 ? (
-            formList.map((res, i) => (
-              <span key={i} className={`form-badge ${res === "W" ? "win" : res === "D" ? "draw" : "loss"}`}>
-                {res}
-              </span>
-            ))
+          {performanceError ? (
+            <span className="performance-state error">Không thể tải phong độ</span>
+          ) : !performance?.recorded ? (
+            <span className="performance-state">Chưa ghi nhận thống kê</span>
           ) : (
-            <span style={{ fontSize: 12, color: "var(--muted)", fontWeight: 500 }}>Chưa ra sân (0 trận)</span>
+            <>
+              <span className="performance-label">
+                {performance.appearances > 0 ? `Phong độ (${performance.appearances} trận):` : "Đã ghi nhận • Chưa ra sân"}
+              </span>
+              {formList.map((result, index) => (
+                <span key={`${result}-${index}`} className={`form-badge ${result === "W" ? "win" : result === "D" ? "draw" : "loss"}`}>
+                  {result}
+                </span>
+              ))}
+            </>
           )}
         </div>
+        {performance?.recorded && (
+          <p className="performance-totals">
+            {performance.minutes} phút • {performance.goals} bàn • {performance.assists} kiến tạo • {performance.mvpCount} MVP
+            {performance.averageRating === null ? "" : ` • ${performance.averageRating} điểm TB`}
+          </p>
+        )}
         <div className="player-stats"><span>GIA NHẬP<strong>{player.joinDate}</strong></span><span>TÌNH TRẠNG<strong>{effectiveStatus}</strong></span><span className="player-card-open" aria-hidden="true">→</span></div>
       </a>
     </article>
@@ -224,7 +241,8 @@ function ProvisionMemberModal({
   }
 
   if (state.kind === "success") {
-    const created = state.result.account === "created";
+    const createdResult = state.result.account === "created" ? state.result : null;
+    const created = createdResult !== null;
     return (
       <AccessibleModal layerClassName="provision-modal-layer" dialogClassName="provision-result-modal" labelledBy="provision-result-title" onClose={() => onClose(true)}>
           <div className="modal-head"><div><span>PRO7 TEAM MANAGER</span><h2 id="provision-result-title">{created ? "Tài khoản đã sẵn sàng" : "Đã thêm cầu thủ"}</h2><p>{created ? "Lưu thông tin đăng nhập trước khi đóng." : "Tài khoản hiện có đã được thêm vào đội."}</p></div><button type="button" onClick={() => onClose(true)} aria-label="Đóng"><X /></button></div>
@@ -232,7 +250,7 @@ function ProvisionMemberModal({
             <div className="one-time-credential">
               <CheckCircle2 aria-hidden="true" />
               <p>Mật khẩu tạm thời này chỉ hiển thị một lần. Hãy sao chép và gửi trực tiếp cho cầu thủ.</p>
-              <code className="one-time-password">{state.result.temporaryPassword}</code>
+              <code className="one-time-password">{createdResult.temporaryPassword}</code>
               <button className="soft-button copy-password-button" type="button" onClick={() => void copyPassword()}><Copy size={16} />{state.copied ? "Đã sao chép" : "Sao chép mật khẩu"}</button>
               <small>Đóng cửa sổ sau khi bạn đã lưu mật khẩu; hệ thống không thể hiển thị lại.</small>
             </div>
@@ -271,6 +289,7 @@ export function SquadView({
   permissions,
   filters,
   result,
+  performance,
   assignableRoles = [],
   showProvisioning = false,
 }: {
@@ -278,87 +297,19 @@ export function SquadView({
   permissions: readonly PermissionCode[];
   filters: SquadFilters;
   result: SquadListResult;
+  performance: SquadPerformanceResult;
   assignableRoles?: readonly SquadAssignableRole[];
   showProvisioning?: boolean;
 }) {
   const players = result.ok ? result.players : [];
   const canManage = hasPermission({ permissions }, "players.manage") && hasPermission({ permissions }, "members.manage");
   const [provisioningOpen, setProvisioningOpen] = useState(showProvisioning && canManage);
-  const [playerForms, setPlayerForms] = useState<Record<string, { appearances: number; form: ("W" | "D" | "L")[] }>>({});
   const state = !result.ok ? "error" : players.length === 0 ? "empty" : "ready";
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    let isMounted = true;
-    async function loadForms() {
-      try {
-        const supabase = createBrowserSupabaseClient();
-        const { data: matches } = await supabase
-          .from("matches")
-          .select("id, team_score, opponent_score, starts_at")
-          .eq("team_id", team.id)
-          .eq("status", "completed")
-          .order("starts_at", { ascending: false })
-          .limit(20);
-        if (!matches || matches.length === 0) return;
-
-        const matchIds = matches.map((m) => m.id);
-        const [attRes, statsRes, eventsRes] = await Promise.all([
-          supabase.from("match_attendance").select("match_id, user_id, status").in("match_id", matchIds).eq("status", "available"),
-          supabase.from("match_player_stats").select("match_id, user_id, minutes_played").in("match_id", matchIds),
-          supabase.from("match_events").select("match_id, player_user_id, secondary_user_id").in("match_id", matchIds),
-        ]);
-
-        const formsMap: Record<string, { appearances: number; form: ("W" | "D" | "L")[] }> = {};
-
-        for (const match of matches) {
-          const teamScore = match.team_score ?? 0;
-          const opponentScore = match.opponent_score ?? 0;
-          const resultBadge: "W" | "D" | "L" = teamScore > opponentScore ? "W" : teamScore === opponentScore ? "D" : "L";
-
-          const participantIds = new Set<string>();
-          if (attRes.data) {
-            for (const row of attRes.data) {
-              if (row.match_id === match.id) participantIds.add(row.user_id);
-            }
-          }
-          if (statsRes.data) {
-            for (const row of statsRes.data) {
-              if (row.match_id === match.id && (row.minutes_played === null || row.minutes_played > 0)) {
-                participantIds.add(row.user_id);
-              }
-            }
-          }
-          if (eventsRes.data) {
-            for (const row of eventsRes.data) {
-              if (row.match_id === match.id) {
-                if (row.player_user_id) participantIds.add(row.player_user_id);
-                if (row.secondary_user_id) participantIds.add(row.secondary_user_id);
-              }
-            }
-          }
-
-          for (const userId of participantIds) {
-            if (!formsMap[userId]) {
-              formsMap[userId] = { appearances: 0, form: [] };
-            }
-            formsMap[userId].appearances += 1;
-            if (formsMap[userId].form.length < 5) {
-              formsMap[userId].form.push(resultBadge);
-            }
-          }
-        }
-
-        if (isMounted) {
-          setPlayerForms(formsMap);
-        }
-      } catch {
-        // safe fallback
-      }
-    }
-    void loadForms();
-    return () => { isMounted = false; };
-  }, [team.id]);
+  const performanceByUserId = performance.ok
+    ? new Map(performance.players.map((item) => [item.userId, item] as const))
+    : null;
+  const performanceError = !performance.ok
+    || players.some((player) => !performanceByUserId?.has(player.userId));
 
   function closeProvisioning(reload = false) {
     setProvisioningOpen(false);
@@ -379,7 +330,8 @@ export function SquadView({
             key={player.userId}
             slug={team.slug}
             player={player}
-            playerForm={playerForms[player.userId]}
+            performance={performanceByUserId?.get(player.userId)}
+            performanceError={performanceError}
           />
         ))}
         {canManage && <a className="add-player-card" href={`/teams/${encodeURIComponent(team.slug)}/squad?add=player`}><span><UserPlus /></span><b>Thêm cầu thủ</b><small>Đăng ký thành viên mới</small></a>}

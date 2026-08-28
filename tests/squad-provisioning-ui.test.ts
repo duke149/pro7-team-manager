@@ -5,7 +5,7 @@ import { Window } from "happy-dom";
 import { build } from "vite";
 
 import type { SquadFilters } from "../lib/squad/filters";
-import type { SquadAssignableRole, SquadListResult } from "../lib/squad/model";
+import type { SquadAssignableRole, SquadListResult, SquadPerformanceResult } from "../lib/squad/model";
 import type { TeamAccessContext } from "../lib/teams/context";
 
 type SquadViewProps = {
@@ -13,6 +13,7 @@ type SquadViewProps = {
   permissions: TeamAccessContext["permissions"];
   filters: SquadFilters;
   result: SquadListResult;
+  performance: SquadPerformanceResult;
   assignableRoles?: readonly SquadAssignableRole[];
   showProvisioning?: boolean;
 };
@@ -117,6 +118,7 @@ async function mounted(overrides: Partial<SquadViewProps> = {}) {
     permissions: ["players.read", "players.manage", "members.manage", "roles.read"],
     filters: FILTERS,
     result: { ok: true, players: [] },
+    performance: { ok: true, players: [] },
     assignableRoles: [ROLE],
     showProvisioning: true,
     ...overrides,

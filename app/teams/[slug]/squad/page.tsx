@@ -1,7 +1,8 @@
 import { notFound } from "next/navigation";
 
 import { parseSquadFilters, type SquadFilters } from "../../../../lib/squad/filters";
-import type { SquadAssignableRolesResult, SquadListResult } from "../../../../lib/squad/model";
+import type { SquadAssignableRolesResult, SquadListResult, SquadPerformanceResult } from "../../../../lib/squad/model";
+import { listSquadPerformance } from "../../../../lib/squad/performance";
 import { listAssignableSquadRoles, listSquadPlayers } from "../../../../lib/squad/queries";
 import { requireTeamPermission } from "../../../../lib/teams/context";
 import { hasPermission, type PermissionCode } from "../../../../lib/teams/permissions";
@@ -17,6 +18,10 @@ type SquadRoutePageArguments = {
     permission: PermissionCode,
   ) => Promise<Awaited<ReturnType<typeof requireTeamPermission>>>;
   listSquadPlayers: (teamId: string, filters: SquadFilters) => Promise<SquadListResult>;
+  listSquadPerformance?: (
+    teamId: string,
+    userIds: readonly string[],
+  ) => Promise<SquadPerformanceResult>;
   listAssignableSquadRoles?: (
     teamId: string,
     canReadRoles: boolean,
@@ -40,6 +45,12 @@ export async function renderSquadPage(arguments_: SquadRoutePageArguments) {
   const rawSearchParameters = await arguments_.searchParams;
   const filters = parseSquadFilters(toUrlSearchParameters(rawSearchParameters));
   const result = await arguments_.listSquadPlayers(context.team.id, filters);
+  const performance = result.ok && result.players.length > 0
+    ? await (arguments_.listSquadPerformance ?? listSquadPerformance)(
+      context.team.id,
+      result.players.map((player) => player.userId),
+    )
+    : { ok: true as const, players: [] };
   const canManage = hasPermission(context, "players.manage")
     && hasPermission(context, "members.manage");
   const showProvisioning = canManage && rawSearchParameters.add === "player";
@@ -55,6 +66,7 @@ export async function renderSquadPage(arguments_: SquadRoutePageArguments) {
       permissions={context.permissions}
       filters={filters}
       result={result}
+      performance={performance}
       assignableRoles={rolesResult.ok ? rolesResult.roles : []}
       showProvisioning={showProvisioning}
     />
@@ -73,6 +85,7 @@ export default async function SquadPage({
     searchParams,
     requireTeamPermission,
     listSquadPlayers,
+    listSquadPerformance,
     listAssignableSquadRoles,
     denied: notFound,
   });

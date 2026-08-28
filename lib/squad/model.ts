@@ -33,6 +33,24 @@ export type SquadPlayerSummary = Readonly<{
   joinDate: string;
 }>;
 
+export type SquadFormResult = "W" | "D" | "L";
+
+export type SquadPlayerPerformance = Readonly<{
+  userId: string;
+  recorded: boolean;
+  appearances: number;
+  recentForm: readonly SquadFormResult[];
+  minutes: number;
+  goals: number;
+  assists: number;
+  mvpCount: number;
+  averageRating: number | null;
+}>;
+
+export type SquadPerformanceResult =
+  | Readonly<{ ok: true; players: readonly SquadPlayerPerformance[] }>
+  | Readonly<{ ok: false; error: "server" }>;
+
 export type SquadPlayerDetail = SquadPlayerSummary &
   Readonly<{
     phone: string | null;

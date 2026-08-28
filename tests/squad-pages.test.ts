@@ -11,6 +11,7 @@ import type {
   SquadDetailResult,
   SquadAssignableRolesResult,
   SquadListResult,
+  SquadPerformanceResult,
   SquadPlayerDetail,
   SquadPlayerSummary,
 } from "../lib/squad/model";
@@ -26,6 +27,7 @@ type ListPageModule = {
       permission: PermissionCode,
     ) => Promise<TeamAccessContext | null>;
     listSquadPlayers: (teamId: string, filters: SquadFilters) => Promise<SquadListResult>;
+    listSquadPerformance?: (teamId: string, userIds: readonly string[]) => Promise<SquadPerformanceResult>;
     denied: () => unknown;
   }): Promise<unknown>;
 };
@@ -232,6 +234,10 @@ test("Squad list renders live counts, server-backed query links, and player deta
       ok: true,
       players: [PLAYER, { ...PLAYER, userId: "00000000-0000-4000-8000-000000000012", displayName: "Bình", shirtNumber: 4, officialPosition: "DEF", playerStatus: "injured" }],
     }),
+    listSquadPerformance: async (_teamId, userIds) => ({
+      ok: true,
+      players: userIds.map((userId) => ({ userId, recorded: false, appearances: 0, recentForm: [], minutes: 0, goals: 0, assists: 0, mvpCount: 0, averageRating: null })),
+    }),
     denied: () => "SAFE_DENIAL",
   });
   const markup = html(output);
@@ -247,6 +253,67 @@ test("Squad list renders live counts, server-backed query links, and player deta
   assert.match(markup, /Nguyễn An/u);
   assert.match(markup, /add-player-card/u);
   assert.doesNotMatch(markup, /Marcus Trent|David Silva|Liam Kompany|15 cầu thủ/u);
+});
+
+test("Squad list loads authoritative performance on the server and never substitutes zero for enrichment failure", async () => {
+  let captured: { teamId: string; userIds: readonly string[] } | undefined;
+  const output = await listPage.renderSquadPage({
+    params: Promise.resolve({ slug: "pro7-fc" }),
+    searchParams: Promise.resolve({}),
+    requireTeamPermission: async () => ADMIN_CONTEXT,
+    listSquadPlayers: async () => ({ ok: true, players: [PLAYER] }),
+    listSquadPerformance: async (teamId, userIds) => {
+      captured = { teamId, userIds };
+      return {
+        ok: true,
+        players: [{ userId: PLAYER.userId, recorded: true, appearances: 2, recentForm: ["W", "L"], minutes: 135, goals: 2, assists: 1, mvpCount: 1, averageRating: 8 }],
+      };
+    },
+    denied: () => "SAFE_DENIAL",
+  });
+  assert.deepEqual(captured, { teamId: "team-1", userIds: [PLAYER.userId] });
+  const markup = html(output);
+  assert.match(markup, /Phong độ \(2 trận\)/u);
+  assert.match(markup, />W<|>W<\/span>/u);
+  assert.match(markup, />L<|>L<\/span>/u);
+  assert.match(markup, /135 phút/u);
+  assert.match(markup, /2 bàn/u);
+  assert.match(markup, /1 kiến tạo/u);
+  assert.match(markup, /1 MVP/u);
+  assert.match(markup, /8 điểm TB/u);
+
+  const failed = await listPage.renderSquadPage({
+    params: Promise.resolve({ slug: "pro7-fc" }),
+    searchParams: Promise.resolve({}),
+    requireTeamPermission: async () => ADMIN_CONTEXT,
+    listSquadPlayers: async () => ({ ok: true, players: [PLAYER] }),
+    listSquadPerformance: async () => ({ ok: false, error: "server" }),
+    denied: () => "SAFE_DENIAL",
+  });
+  const failedMarkup = html(failed);
+  assert.match(failedMarkup, /Không thể tải phong độ/u);
+  assert.doesNotMatch(failedMarkup, /Chưa ra sân \(0 trận\)/u);
+});
+
+test("Squad page skips performance work when roster loading fails or has no visible players", async () => {
+  for (const result of [
+    { ok: false, error: "server" } as SquadListResult,
+    { ok: true, players: [] } as SquadListResult,
+  ]) {
+    let performanceCalls = 0;
+    await listPage.renderSquadPage({
+      params: Promise.resolve({ slug: "pro7-fc" }),
+      searchParams: Promise.resolve({}),
+      requireTeamPermission: async () => ADMIN_CONTEXT,
+      listSquadPlayers: async () => result,
+      listSquadPerformance: async () => {
+        performanceCalls += 1;
+        return { ok: true, players: [] };
+      },
+      denied: () => "SAFE_DENIAL",
+    });
+    assert.equal(performanceCalls, 0);
+  }
 });
 
 test("Squad list keeps honest empty and database-error states inside the player grid", async () => {
@@ -274,6 +341,7 @@ test("Squad manager controls require both manage permissions", async () => {
     searchParams: Promise.resolve({}),
     requireTeamPermission: async () => memberContext(["players.read", "players.manage"]),
     listSquadPlayers: async () => ({ ok: true, players: [PLAYER] }),
+    listSquadPerformance: async () => ({ ok: true, players: [{ userId: PLAYER.userId, recorded: false, appearances: 0, recentForm: [], minutes: 0, goals: 0, assists: 0, mvpCount: 0, averageRating: null }] }),
     denied: () => "SAFE_DENIAL",
   });
   assert.doesNotMatch(html(onePermission), /add-player-card/u);
@@ -283,6 +351,7 @@ test("Squad manager controls require both manage permissions", async () => {
     searchParams: Promise.resolve({}),
     requireTeamPermission: async () => ADMIN_CONTEXT,
     listSquadPlayers: async () => ({ ok: true, players: [PLAYER] }),
+    listSquadPerformance: async () => ({ ok: true, players: [{ userId: PLAYER.userId, recorded: false, appearances: 0, recentForm: [], minutes: 0, goals: 0, assists: 0, mvpCount: 0, averageRating: null }] }),
     denied: () => "SAFE_DENIAL",
   });
   assert.match(html(bothPermissions), /add-player-card/u);
