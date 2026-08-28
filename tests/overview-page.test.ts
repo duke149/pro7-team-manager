@@ -175,6 +175,8 @@ test("Overview renders denied match and tactics destinations as non-interactive 
   assert.match(markup, /Chốt đội hình[\s\S]*Chi tiết trận/u);
   assert.doesNotMatch(markup, /href="\/teams\/pro7-fc\/(?:matches|tactics)/u);
   assert.match(markup, /Mở lịch/u);
+  assert.match(markup, /PHONG ĐỘ GẦN ĐÂY/u);
+  assert.match(markup, /stat-card-interactive[\s\S]*overview-disabled-control/u);
 });
 
 test("Overview empty and error states do not invent statistics, news, opponents, or counts", async () => {

@@ -174,9 +174,17 @@ function AttendanceCard({ context, data, serverNow }: { context: TeamAccessConte
   </article>;
 }
 
-function Statistics({ data, teamSlug }: { data: OverviewData; teamSlug: string }) {
+function Statistics({ data, teamSlug, canReadMatches }: { data: OverviewData; teamSlug: string; canReadMatches: boolean }) {
   const statistics = data.statistics;
   const matchesHref = `/teams/${encodeURIComponent(teamSlug)}/matches`;
+  const recentContent = <>
+    <div className="stat-icon"><Activity /></div>
+    <span>PHONG ĐỘ GẦN ĐÂY</span>
+    <div className="stat-body">
+      {statistics.recentForm.length === 0 ? <span className="overview-stat-empty">Chưa có phong độ</span> : <div className="form-badges">{statistics.recentForm.map((value, index) => <b className={value === "D" ? "draw" : value === "L" ? "loss" : "win"} key={`${value}-${index}`}>{value}</b>)}</div>}
+    </div>
+    <small className="stat-card-hint">{statistics.recentPoints} điểm trong {statistics.recentForm.length} trận gần nhất <span className="arrow-glyph">→</span></small>
+  </>;
   return <section className="stats-grid">
     <article className="stat-card">
       <div className="stat-icon"><TrendingUp /></div>
@@ -186,14 +194,9 @@ function Statistics({ data, teamSlug }: { data: OverviewData; teamSlug: string }
       </div>
       <small>{statistics.winRate === null ? "Chưa có kết quả hoàn tất" : `${statistics.wins} thắng • ${statistics.draws} hòa • ${statistics.losses} thua`}</small>
     </article>
-    <a className="stat-card stat-card-interactive" href={matchesHref} title="Xem lịch sử và thông số các trận đã đấu">
-      <div className="stat-icon"><Activity /></div>
-      <span>PHONG ĐỘ GẦN ĐÂY</span>
-      <div className="stat-body">
-        {statistics.recentForm.length === 0 ? <span className="overview-stat-empty">Chưa có phong độ</span> : <div className="form-badges">{statistics.recentForm.map((value, index) => <b className={value === "D" ? "draw" : value === "L" ? "loss" : "win"} key={`${value}-${index}`}>{value}</b>)}</div>}
-      </div>
-      <small className="stat-card-hint">{statistics.recentPoints} điểm trong {statistics.recentForm.length} trận gần nhất <span className="arrow-glyph">→</span></small>
-    </a>
+    {canReadMatches
+      ? <a className="stat-card stat-card-interactive" href={matchesHref} title="Xem lịch sử và thông số các trận đã đấu">{recentContent}</a>
+      : <article className="stat-card stat-card-interactive overview-disabled-control" aria-disabled="true">{recentContent}</article>}
     <article className="stat-card">
       <div className="stat-icon"><Target /></div>
       <span>VUA PHÁ LƯỚI</span>
@@ -254,7 +257,7 @@ export function OverviewView({ context, result, serverNow }: { context: TeamAcce
   const state = data.nextMatch === null && data.statistics.completedMatches === 0 && data.news.length === 0 && data.calendar.length === 0 ? "empty" : "ready";
   return <div className="dashboard-view view-stack" data-state={state}>
     <section className="dashboard-hero two-col hero-ratio"><MatchHero context={context} data={data} /><AttendanceCard context={context} data={data} serverNow={serverNow} /></section>
-    <Statistics data={data} teamSlug={context.team.slug} />
+    <Statistics data={data} teamSlug={context.team.slug} canReadMatches={hasPermission(context, "matches.read")} />
     <section className="two-col content-ratio"><NewsCard news={data.news} /><CalendarCard context={context} data={data} /></section>
   </div>;
 }
