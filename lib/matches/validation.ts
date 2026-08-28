@@ -18,6 +18,7 @@ export type CreateMatchPayload = Readonly<{
 export type MatchMutationPayload =
   | Readonly<{ action: "update"; opponent: string; startsAt: string; venue: string | null; isHome: boolean; rsvpDeadline: string; expectedUpdatedAt: string }>
   | Readonly<{ action: "complete"; teamScore: number; opponentScore: number; expectedUpdatedAt: string }>
+  | Readonly<{ action: "revise"; opponent: string; startsAt: string; venue: string | null; isHome: boolean; rsvpDeadline: string; teamScore: number; opponentScore: number; expectedUpdatedAt: string }>
   | Readonly<{ action: "cancel"; expectedUpdatedAt: string }>;
 
 export type AttendancePayload =
@@ -118,6 +119,17 @@ export function validateMatchMutationPayload(value: unknown): { ok: true; value:
     return Object.keys(errors).length > 0
       ? { ok: false, kind: "validation", fieldErrors: errors }
       : { ok: true, value: Object.freeze({ action: "complete", teamScore: value.teamScore as number, opponentScore: value.opponentScore as number, expectedUpdatedAt: value.expectedUpdatedAt as string }) };
+  }
+  if (value.action === "revise") {
+    const keys = ["action", "opponent", "startsAt", "venue", "isHome", "rsvpDeadline", "teamScore", "opponentScore", "expectedUpdatedAt"];
+    if (!exactKeys(value, keys)) return { ok: false, kind: "malformed" };
+    const parsed = parseMatchFields(value);
+    if (!validScore(value.teamScore)) parsed.errors.teamScore = "Tỉ số đội không hợp lệ.";
+    if (!validScore(value.opponentScore)) parsed.errors.opponentScore = "Tỉ số đối thủ không hợp lệ.";
+    validateUpdatedAt(value.expectedUpdatedAt, parsed.errors);
+    return parsed.value && Object.keys(parsed.errors).length === 0
+      ? { ok: true, value: Object.freeze({ action: "revise", ...parsed.value, teamScore: value.teamScore as number, opponentScore: value.opponentScore as number, expectedUpdatedAt: value.expectedUpdatedAt as string }) }
+      : { ok: false, kind: "validation", fieldErrors: parsed.errors };
   }
   if (value.action === "cancel") {
     if (!exactKeys(value, ["action", "expectedUpdatedAt"])) return { ok: false, kind: "malformed" };

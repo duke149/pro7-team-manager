@@ -138,6 +138,7 @@ function numberFromInput(value: string): number {
 }
 
 export function MatchAnalysisEditor(props: EditorProps) {
+  const [baseline, setBaseline] = useState<EditorState>(() => initialState(props));
   const [draft, setDraft] = useState<EditorState>(() => initialState(props));
   const [token, setToken] = useState(props.expectedUpdatedAt);
   const [status, setStatus] = useState<SaveState>({
@@ -149,8 +150,7 @@ export function MatchAnalysisEditor(props: EditorProps) {
   const nextKey = useRef(0);
 
   function reset() {
-    setDraft(initialState(props));
-    setToken(props.expectedUpdatedAt);
+    setDraft(baseline);
     setStatus({
       pending: false,
       message: "Đã khôi phục dữ liệu đang lưu.",
@@ -326,6 +326,7 @@ export function MatchAnalysisEditor(props: EditorProps) {
         return;
       }
       setToken(body.updatedAt);
+      setBaseline(draft);
       setStatus({
         pending: false,
         message: "Đã lưu phân tích trận đấu.",
@@ -344,6 +345,10 @@ export function MatchAnalysisEditor(props: EditorProps) {
   }
 
   const fieldInvalid = (path: string) => path in status.fieldErrors;
+  const dirty = JSON.stringify(draft) !== JSON.stringify(baseline);
+  const hasMetricValues = METRICS.some(({ key }) =>
+    draft.metrics[key].team !== "" || draft.metrics[key].opponent !== "",
+  );
   const fieldA11y = (path: string) =>
     fieldInvalid(path)
       ? {
@@ -369,7 +374,7 @@ export function MatchAnalysisEditor(props: EditorProps) {
             type="button"
             className="text-button"
             data-analysis-action="reset"
-            disabled={status.pending}
+            disabled={status.pending || !dirty}
             onClick={reset}
           >
             <RotateCcw size={16} />
@@ -379,7 +384,7 @@ export function MatchAnalysisEditor(props: EditorProps) {
             type="button"
             className="primary-button"
             data-analysis-action="save"
-            disabled={status.pending}
+            disabled={status.pending || !dirty}
             onClick={() => void save()}
           >
             <Save size={16} />
@@ -749,6 +754,21 @@ export function MatchAnalysisEditor(props: EditorProps) {
             <span>CHỈ SỐ ĐỘI</span>
             <h3>So sánh hai đội</h3>
           </div>
+          <button
+            type="button"
+            className="text-button"
+            data-analysis-action="clear-metrics"
+            disabled={status.pending || !hasMetricValues}
+            onClick={() =>
+              setDraft((current) => ({
+                ...current,
+                metrics: initialMetrics(null),
+              }))
+            }
+          >
+            <Trash2 size={16} />
+            Xóa chỉ số
+          </button>
         </div>
         <div className="analysis-metric-grid">
           {METRICS.map(({ key, label }) => (

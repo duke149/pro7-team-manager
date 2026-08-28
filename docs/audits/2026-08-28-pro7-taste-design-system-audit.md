@@ -10,7 +10,7 @@ Theme: đen, trắng, đỏ; không dùng neon.
 - Nhánh kiểm tra: `codex/qa-backend-crud-completion`.
 - Baseline trước đợt Taste: commit `c186f6a`.
 - Font production được pin và self-host bằng `@fontsource-variable/open-sans@5.3.0` và `@fontsource/barlow@5.3.0`.
-- Không thay đổi schema, dữ liệu Supabase, quyền RLS/RPC hoặc nghiệp vụ CRUD trong đợt này.
+- Đợt Taste ban đầu không thay đổi schema, dữ liệu Supabase, quyền RLS/RPC hoặc nghiệp vụ CRUD. Follow-up Matches bên dưới bổ sung một migration local-only, chưa áp dụng lên Supabase remote.
 - `supabase/.temp/` được giữ nguyên, không stage hay chỉnh sửa.
 
 ## Before/after source findings
@@ -29,7 +29,7 @@ Theme: đen, trắng, đỏ; không dùng neon.
 
 ## Automated verification
 
-- Unit: 580 kiểm tra; 575 đạt; 0 lỗi; 5 kiểm tra PostgreSQL/Supabase phụ thuộc môi trường được skip có chủ đích.
+- Unit: 592 kiểm tra; 587 đạt; 0 lỗi; 5 kiểm tra PostgreSQL/Supabase phụ thuộc môi trường được skip có chủ đích.
 - Typography contract xác nhận font, semantic scale, line-height `1.5/1.25`, input mobile 16px và không còn microtype production.
 - Design-system/CSS audit: 17/17 đạt.
 - Matches/Tactics focused: 104/104 đạt.
@@ -39,6 +39,21 @@ Theme: đen, trắng, đỏ; không dùng neon.
 - Production build/render được chạy ở gate cuối; các cảnh báo Node `DEP0205`, middleware deprecation và cổng Vite HMR là cảnh báo công cụ hiện hữu, không phải lỗi test.
 
 Review độc lập sau gate đầu đã phát hiện và xác nhận sửa ba regression cascade: badge vị trí GK/DEF không còn teal/vàng, nút hiện mật khẩu và account menu đạt 44×44px, và wordmark PRO7 giữ Barlow thay vì bị selector con trả về Open Sans.
+
+## Match detail CRUD and layout follow-up
+
+Checklist được áp lại cho lịch sử trận, chi tiết trận và trình chỉnh sửa phân tích sau phản hồi trực quan ngày 2026-08-28:
+
+- Chuỗi ngày/giờ tiếng Việt được tạo bằng formatter cố định múi giờ `Asia/Ho_Chi_Minh`, không phụ thuộc `Intl`/locale máy chủ hoặc trình duyệt. Regression SSR→hydrate xác nhận không còn sai khác `NGÀY 6` / `6`.
+- Card lịch sử dùng grid nội dung–hành động có cột co giãn hữu hạn; action xuống hàng ở màn hình hẹp thay vì đẩy nội dung lệch hoặc tràn ngang.
+- Chỉ số đội dùng lưới 2×2 ở desktop và một cột ở mobile; legend không còn bị ngắt thành các mảnh từ như “Kiểm / soát / (%)”.
+- Trận đã kết thúc có form chỉnh đối thủ, lịch, hạn phản hồi, địa điểm, sân nhà/khách và hai tỉ số trong một thao tác atomic có optimistic-lock.
+- Diễn biến, thống kê cầu thủ và chỉ số đội giữ workflow snapshot atomic hiện tại, đồng thời có thêm/xóa rõ ràng; “Khôi phục” và “Lưu phân tích” chỉ bật khi nội dung thực sự thay đổi.
+- Không hard-delete bản ghi trận. Migration chỉ cho phép sửa metadata/tỉ số của trận `completed`; quyền `matches.manage`, audit, stale-token và ACL authenticated-only được giữ nguyên.
+
+TDD follow-up: focused 37/37 đạt; PostgreSQL 17 live 2/2 đạt (atomic revision, stale rejection, Member denial, audit và ACL); production build/render 7/7 đạt; ESLint phạm vi thay đổi và `git diff --check` đạt. Migration local `20260828083459_revise_completed_matches.sql` có SHA-256 `e9585513ef7dc5c18e60c88c3828cfd74cecc066fa5f7e1330300d1a463bc4d3` và chưa được apply remote.
+
+Kiểm tra browser xác thực của màn chi tiết trận vẫn bị policy first-login chuyển đến `/account/change-password`. Không bypass hoặc tự đổi mật khẩu, vì vậy follow-up này chỉ tuyên bố bằng chứng SSR/hydration, mounted interaction, CSS contract, build và PostgreSQL local; chưa tuyên bố trực quan Admin/Member sau migration remote.
 
 ## Member browser matrix
 

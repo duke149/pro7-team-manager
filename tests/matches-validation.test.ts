@@ -82,6 +82,42 @@ test("match mutation validation enforces action-specific keys and score/status c
   assert.ok(!invalidScore.ok && invalidScore.kind === "validation" && "teamScore" in invalidScore.fieldErrors);
 });
 
+test("completed-match revision validates metadata and scores as one exact atomic contract", () => {
+  assert.deepEqual(validateMatchMutationPayload({
+    action: "revise",
+    ...CREATE,
+    opponent: "  Saigon   Comets ",
+    teamScore: 3,
+    opponentScore: 1,
+    expectedUpdatedAt: "2026-10-19T14:30:00.000Z",
+  }), {
+    ok: true,
+    value: {
+      action: "revise",
+      ...CREATE,
+      opponent: "Saigon Comets",
+      teamScore: 3,
+      opponentScore: 1,
+      expectedUpdatedAt: "2026-10-19T14:30:00.000Z",
+    },
+  });
+  assert.deepEqual(validateMatchMutationPayload({
+    action: "revise",
+    ...CREATE,
+    teamScore: 3,
+    opponentScore: 1,
+  }), { ok: false, kind: "malformed" });
+
+  const invalid = validateMatchMutationPayload({
+    action: "revise",
+    ...CREATE,
+    teamScore: -1,
+    opponentScore: 1,
+    expectedUpdatedAt: "2026-10-19T14:30:00.000Z",
+  });
+  assert.ok(!invalid.ok && invalid.kind === "validation" && "teamScore" in invalid.fieldErrors);
+});
+
 test("attendance validation bounds notes and permits only invite or own response payloads", () => {
   const userId = "00000000-0000-4000-8000-000000000010";
   assert.deepEqual(validateAttendancePayload({ action: "invite", userIds: [userId, userId] }), {

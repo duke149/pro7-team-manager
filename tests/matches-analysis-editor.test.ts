@@ -87,6 +87,8 @@ test("editor saves one complete snapshot, adopts the returned token, and refresh
     return Response.json({ ok: true, updatedAt: NEXT_UPDATED_AT });
   }) as typeof fetch;
   const view = await mounted();
+  const note = view.container.querySelector<HTMLInputElement>('[data-analysis-event] input[maxlength="500"]'); assert.ok(note);
+  await act(async () => change(note, "Mở tỉ số "));
   const save = view.container.querySelector<HTMLButtonElement>('[data-analysis-action="save"]'); assert.ok(save);
   await act(async () => { save.click(); await new Promise((resolve) => setTimeout(resolve, 0)); });
   assert.equal(calls.length, 1);
@@ -104,8 +106,28 @@ test("editor saves one complete snapshot, adopts the returned token, and refresh
   assert.equal(globalThis.__analysisReloads, 1);
   assert.match(view.container.textContent ?? "", /Đã lưu phân tích trận đấu/u);
 
+  await act(async () => change(note, "Mở tỉ số đẹp"));
   await act(async () => { save.click(); await new Promise((resolve) => setTimeout(resolve, 0)); });
   assert.equal(JSON.parse(String(calls[1]?.init?.body)).expectedUpdatedAt, NEXT_UPDATED_AT);
+  await act(async () => view.root.unmount());
+});
+
+test("editor only enables reset and save while the snapshot is dirty", async () => {
+  globalThis.fetch = (async () => Response.json({ ok: true, updatedAt: NEXT_UPDATED_AT })) as typeof fetch;
+  const view = await mounted();
+  const save = view.container.querySelector<HTMLButtonElement>('[data-analysis-action="save"]'); assert.ok(save);
+  const reset = view.container.querySelector<HTMLButtonElement>('[data-analysis-action="reset"]'); assert.ok(reset);
+  assert.equal(save.disabled, true);
+  assert.equal(reset.disabled, true);
+
+  const shots = view.container.querySelector<HTMLInputElement>('input[name="shots.team"]'); assert.ok(shots);
+  await act(async () => change(shots, "9"));
+  assert.equal(save.disabled, false);
+  assert.equal(reset.disabled, false);
+
+  await act(async () => { save.click(); await new Promise((resolve) => setTimeout(resolve, 0)); });
+  assert.equal(save.disabled, true);
+  assert.equal(reset.disabled, true);
   await act(async () => view.root.unmount());
 });
 
@@ -129,6 +151,8 @@ test("editor locks every mutable control while the authoritative save is pending
   let resolveSave: ((response: Response) => void) | undefined;
   globalThis.fetch = (() => new Promise<Response>((resolve) => { resolveSave = resolve; })) as typeof fetch;
   const view = await mounted();
+  const shots = view.container.querySelector<HTMLInputElement>('input[name="shots.team"]'); assert.ok(shots);
+  await act(async () => change(shots, "9"));
   const save = view.container.querySelector<HTMLButtonElement>('[data-analysis-action="save"]'); assert.ok(save);
 
   await act(async () => { save.click(); await Promise.resolve(); });
@@ -169,6 +193,23 @@ test("editor adds, reorders, and removes events while keeping MVP exclusive", as
   await act(async () => view.root.unmount());
 });
 
+test("editor clears every team metric as an explicit delete operation", async () => {
+  let payload: Record<string, unknown> | null = null;
+  globalThis.fetch = (async (_input, init) => {
+    payload = JSON.parse(String(init?.body)) as Record<string, unknown>;
+    return Response.json({ ok: true, updatedAt: NEXT_UPDATED_AT });
+  }) as typeof fetch;
+  const view = await mounted();
+  const clear = view.container.querySelector<HTMLButtonElement>('[data-analysis-action="clear-metrics"]'); assert.ok(clear);
+  await act(async () => clear.click());
+  assert.ok([...view.container.querySelectorAll<HTMLInputElement>('.analysis-metric-grid input')].every((input) => input.value === ""));
+  const save = view.container.querySelector<HTMLButtonElement>('[data-analysis-action="save"]'); assert.ok(save);
+  assert.equal(save.disabled, false);
+  await act(async () => { save.click(); await new Promise((resolve) => setTimeout(resolve, 0)); });
+  assert.deepEqual(payload?.teamMetrics, {});
+  await act(async () => view.root.unmount());
+});
+
 test("editor binds validation errors and never sends an incomplete metric pair", async () => {
   let calls = 0;
   globalThis.fetch = (async () => { calls += 1; return Response.json({ ok: true, updatedAt: NEXT_UPDATED_AT }); }) as typeof fetch;
@@ -187,6 +228,9 @@ test("editor binds validation errors and never sends an incomplete metric pair",
 test("analysis editor CSS keeps touch controls at least 44px and scopes responsive columns", async () => {
   const css = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
   assert.match(css, /\.match-analysis-editor button[^}]*min-height:\s*44px/u);
+  assert.match(css, /\.analysis-metric-grid\s*\{[^}]*grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\)/u);
+  assert.match(css, /\.analysis-metric-grid fieldset\s*\{[^}]*min-inline-size:\s*0/u);
+  assert.match(css, /\.analysis-metric-grid legend\s*\{[^}]*white-space:\s*nowrap/u);
   assert.match(css, /@media\s*\(max-width:\s*700px\)[\s\S]*\.analysis-editor-grid\s*,[\s\S]*?\{[^}]*grid-template-columns:\s*1fr/u);
 });
 

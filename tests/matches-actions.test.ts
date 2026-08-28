@@ -104,6 +104,32 @@ test("mutateMatch maps optimistic-lock and lifecycle RPC errors without leaking 
   }
 });
 
+test("mutateMatch sends one atomic completed-match revision through the existing narrow RPC", async () => {
+  const fixture = dependencies();
+  const response = await mutateMatch(request(`/api/teams/pro7-fc/matches/${MATCH_ID}`, {
+    action: "revise",
+    opponent: "Saigon Comets",
+    startsAt: "2026-09-05T19:00:00.000Z",
+    venue: "Riverside Pitch",
+    isHome: true,
+    rsvpDeadline: "2026-09-04T19:00:00.000Z",
+    teamScore: 3,
+    opponentScore: 1,
+    expectedUpdatedAt: UPDATED_AT,
+  }), { slug: "pro7-fc", matchId: MATCH_ID }, fixture.deps);
+  assert.equal(response.status, 200);
+  assert.deepEqual(fixture.calls, [
+    { permission: "matches.manage" },
+    { permission: "matches.read", name: "manage_match", args: {
+      p_action: "revise", p_team_id: TEAM_ID, p_match_id: MATCH_ID,
+      p_opponent: "Saigon Comets", p_starts_at: "2026-09-05T19:00:00.000Z",
+      p_venue: "Riverside Pitch", p_is_home: true,
+      p_rsvp_deadline: "2026-09-04T19:00:00.000Z", p_team_score: 3,
+      p_opponent_score: 1, p_expected_updated_at: UPDATED_AT,
+    } },
+  ]);
+});
+
 test("attendance invite is Admin-only while response targets the authenticated user and preserves stale token", async () => {
   const inviteDenied = dependencies({ context: null });
   const deniedResponse = await mutateMatchAttendance(request("/attendance", {

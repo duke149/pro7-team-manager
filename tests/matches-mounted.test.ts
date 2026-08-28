@@ -27,7 +27,7 @@ const initialHandles = new Set(activeHandles());
 
 test.before(async () => {
   browserWindow = new Window({ url: `https://pro7.example/teams/pro7-fc/matches/${MATCH_ID}` });
-  for (const [key, value] of Object.entries({ window: browserWindow, document: browserWindow.document, navigator: browserWindow.navigator, HTMLElement: browserWindow.HTMLElement, Node: browserWindow.Node, Event: browserWindow.Event, IS_REACT_ACT_ENVIRONMENT: true })) Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
+  for (const [key, value] of Object.entries({ window: browserWindow, document: browserWindow.document, navigator: browserWindow.navigator, HTMLElement: browserWindow.HTMLElement, Node: browserWindow.Node, Event: browserWindow.Event, FormData: browserWindow.FormData, IS_REACT_ACT_ENVIRONMENT: true })) Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
   const nodeEnvironment = process.env.NODE_ENV;
   const result = await build({ configFile: false, plugins: [{
     name: "matches-mounted-navigation",
@@ -53,11 +53,15 @@ test.before(async () => {
 });
 test.after(async () => { await browserWindow.happyDOM.abort(); browserWindow.close(); for (const handle of activeHandles()) if (!initialHandles.has(handle) && handle.constructor.name === "MessagePort") handle.close?.(); });
 
-async function mounted(canManage = false, now = "2026-10-10T00:00:00.000Z") {
+async function mounted(
+  canManage = false,
+  now = "2026-10-10T00:00:00.000Z",
+  detail: MatchDetailModel = DETAIL,
+) {
   browserWindow.document.body.innerHTML = '<div id="root"></div>';
   const container = browserWindow.document.getElementById("root"); assert.ok(container);
   const root = createRoot(container as unknown as Element); globalThis.__matchesRefreshes = 0; globalThis.__matchesReloads = 0;
-  await act(async () => root.render(createElement(MatchDetail, { slug: "pro7-fc", teamName: "PRO7 FC", userId: USER_ID, detail: DETAIL, canManage, canRespond: true, now })));
+  await act(async () => root.render(createElement(MatchDetail, { slug: "pro7-fc", teamName: "PRO7 FC", userId: USER_ID, detail, canManage, canRespond: true, now })));
   return { container: container as unknown as HTMLElement, root };
 }
 
@@ -67,6 +71,12 @@ async function mountedList(permissions: readonly PermissionCode[], now = "2026-1
   const root = createRoot(container as unknown as Element); globalThis.__matchesRefreshes = 0; globalThis.__matchesReloads = 0;
   await act(async () => root.render(createElement(MatchesView, { team: { id: "team-1", name: "PRO7 FC", slug: "pro7-fc" }, userId: USER_ID, permissions, result: { ok: true, matches: [DETAIL.match] }, now })));
   return { container: container as unknown as HTMLElement, root };
+}
+
+function change(element: HTMLInputElement | HTMLSelectElement, value: string) {
+  Object.getOwnPropertyDescriptor(Object.getPrototypeOf(element), "value")?.set?.call(element, value);
+  element.dispatchEvent(new browserWindow.Event("input", { bubbles: true }) as unknown as Event);
+  element.dispatchEvent(new browserWindow.Event("change", { bubbles: true }) as unknown as Event);
 }
 
 test("own RSVP sends same-origin JSON then hard-reloads authoritative server props", async () => {
@@ -183,6 +193,53 @@ test("Admin lifecycle mutation uses PATCH with the current match token", async (
   assert.equal(globalThis.__matchesRefreshes, 0);
   assert.equal(globalThis.__matchesReloads, 1);
   await act(async () => view.root.unmount());
+});
+
+test("Admin revises completed metadata and scores in one PATCH payload", async () => {
+  const calls: { url: string; init?: RequestInit }[] = [];
+  globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+    calls.push({ url: String(input), init });
+    return Response.json({ ok: true });
+  }) as typeof fetch;
+  const completed: MatchDetailModel = {
+    ...DETAIL,
+    match: {
+      ...DETAIL.match,
+      status: "completed",
+      teamScore: 2,
+      opponentScore: 1,
+    },
+  };
+  const view = await mounted(true, "2026-10-20T00:00:00.000Z", completed);
+  try {
+    const form = view.container.querySelector<HTMLFormElement>('[data-match-form="revision"]'); assert.ok(form);
+    const opponent = form.querySelector<HTMLInputElement>('input[name="opponent"]'); assert.ok(opponent);
+    const teamScore = form.querySelector<HTMLInputElement>('input[name="teamScore"]'); assert.ok(teamScore);
+    const opponentScore = form.querySelector<HTMLInputElement>('input[name="opponentScore"]'); assert.ok(opponentScore);
+    change(opponent, "Saigon Comets");
+    change(teamScore, "3");
+    change(opponentScore, "1");
+    const submit = form.querySelector<HTMLButtonElement>('button[type="submit"]'); assert.ok(submit);
+    await act(async () => {
+      submit.click();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    assert.equal(calls.length, 1);
+    assert.deepEqual(JSON.parse(String(calls[0]?.init?.body)), {
+      action: "revise",
+      opponent: "Saigon Comets",
+      startsAt: "2026-10-19T12:30:00.000Z",
+      venue: "Riverside",
+      isHome: true,
+      rsvpDeadline: "2026-10-18T12:30:00.000Z",
+      teamScore: 3,
+      opponentScore: 1,
+      expectedUpdatedAt: "2026-10-01T00:00:00.000Z",
+    });
+    assert.equal(globalThis.__matchesReloads, 1);
+  } finally {
+    await act(async () => view.root.unmount());
+  }
 });
 
 declare global {

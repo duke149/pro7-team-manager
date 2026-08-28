@@ -18,6 +18,11 @@ import type {
   MatchTeamMetrics,
   TeamMetric,
 } from "../../../../../lib/matches/model";
+import {
+  formatVietnamMatchDateTime,
+  fromVietnamDateTimeInput,
+  toVietnamDateTimeInput,
+} from "../../../../../lib/matches/date-time";
 import { getMatchOutcome } from "../../../../../lib/matches/outcome";
 import { reloadAuthoritativeRoute } from "../authoritative-refresh";
 import { useRsvpDeadlineClosed } from "../rsvp-deadline";
@@ -31,18 +36,6 @@ function serverMessage(value: unknown, fallback: string) {
     typeof value.message === "string"
     ? value.message
     : fallback;
-}
-function localDateTime(value: string) {
-  const date = new Date(value);
-  const offset = date.getTimezoneOffset() * 60_000;
-  return new Date(date.valueOf() - offset).toISOString().slice(0, 16);
-}
-function displayDate(value: string) {
-  return new Intl.DateTimeFormat("vi-VN", {
-    dateStyle: "full",
-    timeStyle: "short",
-    timeZone: "Asia/Ho_Chi_Minh",
-  }).format(new Date(value));
 }
 function metricRows(
   metrics: MatchTeamMetrics | null,
@@ -156,13 +149,19 @@ export function MatchDetail({
   async function edit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const data = new FormData(event.currentTarget);
+    const startsAt = fromVietnamDateTimeInput(String(data.get("startsAt")));
+    const rsvpDeadline = fromVietnamDateTimeInput(String(data.get("rsvpDeadline")));
+    if (!startsAt || !rsvpDeadline) {
+      setState({ pending: false, message: "Thời gian trận đấu không hợp lệ.", success: false });
+      return;
+    }
     await mutate(base, {
       action: "update",
       opponent: String(data.get("opponent")),
-      startsAt: new Date(String(data.get("startsAt"))).toISOString(),
+      startsAt,
       venue: String(data.get("venue") ?? "").trim() || null,
       isHome: data.get("isHome") === "true",
-      rsvpDeadline: new Date(String(data.get("rsvpDeadline"))).toISOString(),
+      rsvpDeadline,
       expectedUpdatedAt: match.updatedAt,
     });
   }
@@ -179,8 +178,19 @@ export function MatchDetail({
   async function editCompleted(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const data = new FormData(event.currentTarget);
+    const startsAt = fromVietnamDateTimeInput(String(data.get("startsAt")));
+    const rsvpDeadline = fromVietnamDateTimeInput(String(data.get("rsvpDeadline")));
+    if (!startsAt || !rsvpDeadline) {
+      setState({ pending: false, message: "Thời gian trận đấu không hợp lệ.", success: false });
+      return;
+    }
     await mutate(base, {
-      action: "complete",
+      action: "revise",
+      opponent: String(data.get("opponent")),
+      startsAt,
+      venue: String(data.get("venue") ?? "").trim() || null,
+      isHome: data.get("isHome") === "true",
+      rsvpDeadline,
       teamScore: Number(data.get("teamScore")),
       opponentScore: Number(data.get("opponentScore")),
       expectedUpdatedAt: match.updatedAt,
@@ -225,7 +235,7 @@ export function MatchDetail({
         </div>
         <div className="confirmed-body">
           <div className="card-kicker dark-kicker">
-            {displayDate(match.startsAt).toLocaleUpperCase("vi-VN")}
+            {formatVietnamMatchDateTime(match.startsAt)}
           </div>
           <h2>
             {firstTeam} <em>vs.</em> {secondTeam}
@@ -550,7 +560,7 @@ export function MatchDetail({
                 <input
                   name="startsAt"
                   type="datetime-local"
-                  defaultValue={localDateTime(match.startsAt)}
+                  defaultValue={toVietnamDateTimeInput(match.startsAt)}
                 />
               </label>
               <label>
@@ -558,7 +568,7 @@ export function MatchDetail({
                 <input
                   name="rsvpDeadline"
                   type="datetime-local"
-                  defaultValue={localDateTime(match.rsvpDeadline)}
+                  defaultValue={toVietnamDateTimeInput(match.rsvpDeadline)}
                 />
               </label>
             </div>
@@ -667,20 +677,46 @@ export function MatchDetail({
         </section>
       )}
       {canManage && match.status === "completed" && (
-        <section className="match-admin-grid">
+        <section className="match-admin-grid completed-match-admin">
           <form
             className="card match-form"
+            data-match-form="revision"
             onSubmit={(event) => void editCompleted(event)}
           >
             <div className="section-head">
               <div>
                 <span>QUẢN TRỊ TRẬN ĐÃ KẾT THÚC</span>
-                <h2>Chỉnh sửa tỉ số & kết quả</h2>
+                <h2>Chỉnh sửa trận đã kết thúc</h2>
               </div>
             </div>
             <p className="match-muted" style={{ margin: "4px 0 12px" }}>
-              Cập nhật lại tỉ số trận đấu sau khi kết thúc.
+              Cập nhật thông tin và tỉ số trong một lần lưu có kiểm tra phiên bản.
             </p>
+            <label>
+              Đối thủ
+              <input name="opponent" required maxLength={120} defaultValue={match.opponent} />
+            </label>
+            <div className="form-two">
+              <label>
+                Giờ thi đấu
+                <input name="startsAt" required type="datetime-local" defaultValue={toVietnamDateTimeInput(match.startsAt)} />
+              </label>
+              <label>
+                Hạn xác nhận
+                <input name="rsvpDeadline" required type="datetime-local" defaultValue={toVietnamDateTimeInput(match.rsvpDeadline)} />
+              </label>
+            </div>
+            <label>
+              Địa điểm
+              <input name="venue" maxLength={200} defaultValue={match.venue ?? ""} />
+            </label>
+            <label>
+              Sân đấu
+              <select name="isHome" defaultValue={String(match.isHome)}>
+                <option value="true">Sân nhà</option>
+                <option value="false">Sân khách</option>
+              </select>
+            </label>
             <div className="form-two">
               <label>
                 Tỉ số đội ({teamName})
@@ -719,7 +755,7 @@ export function MatchDetail({
                 type="submit"
               >
                 <Save size={15} />
-                Cập nhật tỉ số
+                Lưu thay đổi
               </button>
               <a
                 className="lime-button"

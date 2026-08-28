@@ -4,6 +4,7 @@ import { CalendarDays, Check, ClipboardList, Clock3, MapPin, Plus, X } from "luc
 import { useEffect, useRef, useState, type FormEvent } from "react";
 
 import type { AttendanceResponseStatus, MatchListResult, MatchSummary } from "../../../../lib/matches/model";
+import { fromVietnamDateTimeInput, getVietnamDateTimeParts } from "../../../../lib/matches/date-time";
 import { getMatchOutcome } from "../../../../lib/matches/outcome";
 import type { TeamAccessContext } from "../../../../lib/teams/context";
 import { hasPermission, type PermissionCode } from "../../../../lib/teams/permissions";
@@ -11,13 +12,8 @@ import { reloadAuthoritativeRoute } from "./authoritative-refresh";
 import { useRsvpDeadlineClosed } from "./rsvp-deadline";
 
 function dateParts(value: string) {
-  const date = new Date(value);
-  return {
-    long: new Intl.DateTimeFormat("vi-VN", { weekday: "long", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", timeZone: "Asia/Ho_Chi_Minh" }).format(date).toLocaleUpperCase("vi-VN"),
-    day: new Intl.DateTimeFormat("vi-VN", { day: "2-digit", timeZone: "Asia/Ho_Chi_Minh" }).format(date),
-    month: `TH${new Intl.DateTimeFormat("vi-VN", { month: "2-digit", timeZone: "Asia/Ho_Chi_Minh" }).format(date)}`,
-    time: new Intl.DateTimeFormat("vi-VN", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Ho_Chi_Minh" }).format(date),
-  };
+  const parts = getVietnamDateTimeParts(value);
+  return parts ? { ...parts, month: `TH${parts.month}` } : { long: "THỜI GIAN KHÔNG HỢP LỆ", day: "—", month: "—", time: "—" };
 }
 function pair(teamName: string, match: MatchSummary) { return match.isHome ? [teamName, match.opponent] : [match.opponent, teamName]; }
 function initials(name: string) { return name.trim().split(/\s+/u).slice(-2).map((part) => part[0]?.toLocaleUpperCase("vi-VN")).join("") || "ĐB"; }
@@ -64,7 +60,10 @@ function CreateMatchForm({ slug, close }: { slug: string; close: () => void }) {
     event.preventDefault(); setPending(true); setMessage("");
     const data = new FormData(event.currentTarget);
     try {
-      const payload = { opponent: String(data.get("opponent") ?? ""), startsAt: new Date(String(data.get("startsAt"))).toISOString(), venue: String(data.get("venue") ?? "").trim() || null, isHome: data.get("isHome") === "true", rsvpDeadline: new Date(String(data.get("rsvpDeadline"))).toISOString() };
+      const startsAt = fromVietnamDateTimeInput(String(data.get("startsAt")));
+      const rsvpDeadline = fromVietnamDateTimeInput(String(data.get("rsvpDeadline")));
+      if (!startsAt || !rsvpDeadline) { setMessage("Thời gian trận đấu không hợp lệ."); setPending(false); return; }
+      const payload = { opponent: String(data.get("opponent") ?? ""), startsAt, venue: String(data.get("venue") ?? "").trim() || null, isHome: data.get("isHome") === "true", rsvpDeadline };
       const response = await fetch(`/api/teams/${encodeURIComponent(slug)}/matches`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(payload) });
       const responseBody: unknown = await response.json().catch(() => null);
       if (!response.ok) { setMessage(apiMessage(responseBody, "Không thể xếp lịch trận đấu.")); setPending(false); return; }
