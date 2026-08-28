@@ -30,3 +30,40 @@ test("the production styles contain no forbidden accent declaration", async () =
   ])).join("\n");
   assert.deepEqual(auditCss(css), []);
 });
+
+test("the responsive audit rejects shell rules outside the approved ranges", async () => {
+  const { auditResponsiveShell } = await loadAudit();
+  assert.equal(typeof auditResponsiveShell, "function");
+  assert.deepEqual(auditResponsiveShell("@media(max-width:900px){.sidebar{display:none}}"), ["max-width:900px"]);
+  assert.deepEqual(auditResponsiveShell("@media(max-width:1023px){.sidebar{display:none}}@media(max-width:767px){.mobile-nav{display:grid}}"), []);
+});
+
+test("the production shell uses only the approved responsive ranges", async () => {
+  const { auditResponsiveShell } = await loadAudit();
+  assert.equal(typeof auditResponsiveShell, "function");
+  const css = (await Promise.all([
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+    readFile(new URL("../app/responsive.css", import.meta.url), "utf8"),
+  ])).join("\n");
+  assert.deepEqual(auditResponsiveShell(css), []);
+});
+
+test("legacy shell cleanup preserves component rules and non-shell selectors", async () => {
+  const { stripLegacyShellRules } = await loadAudit();
+  assert.equal(typeof stripLegacyShellRules, "function");
+  const input = [
+    ".base{color:red}",
+    "@media(max-width:760px){.sidebar{display:none}.view-stack{gap:14px}.app-main,.feature-panel{margin:0}}",
+    "@media(max-width:900px){.page-content{padding:12px}.match-detail-grid{grid-template-columns:1fr}}",
+    "@media(max-width:767px){.mobile-nav{display:grid}}",
+  ].join("");
+  assert.equal(
+    stripLegacyShellRules(input),
+    [
+      ".base{color:red}",
+      "@media(max-width:760px){.view-stack{gap:14px}.feature-panel{margin:0}}",
+      "@media(max-width:900px){.match-detail-grid{grid-template-columns:1fr}}",
+      "@media(max-width:767px){.mobile-nav{display:grid}}",
+    ].join(""),
+  );
+});
