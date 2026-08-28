@@ -3,7 +3,7 @@
 > **Target Audience**: Codex / QA Engineers / Peer Reviewers  
 > **Repository**: `pro7-team-manager`  
 > **Environment**: Next.js / Vinext, Vite 8, React 19, Supabase SSR  
-> **Strict Invariant**: Zero Database Schema changes, zero migrations, 100% Frontend / CSS / UX logic integrity.
+> **Change Boundary**: Frontend, CSS, query, permission, and client interaction changes. No remote database migration was approved or applied by this branch.
 
 ---
 
@@ -13,7 +13,7 @@
 - Audit và tinh chỉnh toàn bộ màu sắc, typography và bố cục theo phong cách hiện đại (cảm hứng từ [Rewind App](https://rewindapp.flatstudio.co/)).
 - Sửa triệt để các lỗi lệch kích thước, tràn viền chữ, ngắt dòng không mong muốn trên các thành phần thẻ (Card), huy hiệu (Badge) và nút bấm (Button).
 - Thay thế hoàn toàn dữ liệu giả/cứng bằng logic thực tế (phong độ cầu thủ theo số trận ra sân thực, lịch sử trận đấu, phân tích thông số và sa bàn trận đã đấu).
-- Giữ nguyên vẹn 100% cơ sở dữ liệu và API Backend.
+- Không áp dụng migration database từ branch này; các thay đổi query, permission và client interaction phải được audit trước khi release.
 
 ---
 
@@ -103,7 +103,7 @@
 | 14 | `lib/tactics/queries.ts` | Modified | Cho phép truy vấn sa bàn trận đã kết thúc |
 | 15 | `tests/typography-contract.test.ts` | Modified | Khế ước kiểm thử Typography >= 12px |
 | 16 | `public/fonts/*` | Added | Phông chữ Roboto Latin & Vietnamese self-hosted |
-| 17 | `scripts/*` | Added | Bộ kịch bản kiểm thử tự động với Playwright |
+| 17 | `scripts/run-unit-tests.mjs` | Added | Runner unit test chỉ quét thư mục `tests/` hoặc các file focused được truyền rõ ràng |
 
 ---
 
@@ -119,13 +119,13 @@ npm test
 node --test tests/typography-contract.test.ts
 
 # 3. Kiểm tra các trang trận đấu
-npm run test:unit tests/matches-pages.test.ts
+npm run test:unit -- tests/matches-pages.test.ts
 
 # 4. Kiểm tra các trang đội hình
-npm run test:unit tests/squad-pages.test.ts
+npm run test:unit -- tests/squad-pages.test.ts
 
 # 5. Kiểm tra sa bàn chiến thuật
-npm run test:unit tests/tactics-mounted.test.ts
+npm run test:unit -- tests/tactics-mounted.test.ts
 ```
 *Kết quả yêu cầu: 100% tests Passed, Build 0 lỗi.*
 
@@ -134,7 +134,8 @@ npm run test:unit tests/tactics-mounted.test.ts
 ### B. Kiểm Thử Thủ Công Trên Trình Duyệt (Manual Walkthrough)
 1. **Đăng nhập**:
    - URL: `http://localhost:3000/login`
-   - Tài khoản: `hunglt` / `Sup3rm4n001@!` (Quyền Admin)
+   - Dùng tài khoản QA được cung cấp ngoài repository.
+   - Không lưu username, password, JWT hoặc service key trong tài liệu và script.
 2. **Kiểm tra Trang Tổng Quan (`/teams/nat-fc/overview`)**:
    - Kiểm tra 4 thẻ thống kê ở giữa màn hình có chiều cao bằng nhau, gióng hàng thẳng tắp.
    - Rê chuột (hover) vào thẻ **PHONG ĐỘ GẦN ĐÂY**: Kiểm tra **toàn bộ thẻ nổi lên (`translateY(-3px)`)**, huy hiệu `W` màu xanh lá không bị giật/phóng to.

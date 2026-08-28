@@ -12,7 +12,7 @@
     "cloudflare:verify": "node scripts/verify-cloudflare-build.mjs",
     "cloudflare:deploy": "bash scripts/deploy-cloudflare-worker.sh",
     "test": "npm run build && node --test tests/rendered-html.test.mjs",
-    "test:unit": "node --import tsx --test",
+    "test:unit": "node scripts/run-unit-tests.mjs",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
     "db:generate": "drizzle-kit generate"
   },

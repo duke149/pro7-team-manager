@@ -4,7 +4,7 @@
 
 **Goal:** Make the QA branch deterministic and safe by preventing unit tests from executing manual scripts, removing committed live credentials and obsolete remote-mutating utilities, correcting the Overview permission regression, and restoring clean diff/test gates.
 
-**Architecture:** A small unit-test runner defaults discovery to `tests/` and forwards explicit focused-test paths without scanning the repository root. A static contract guards the command and tracked QA files against credential-bearing/manual automation regressions. Overview receives the viewer permission and renders the recent-form card as a link only when `matches.read` is present.
+**Architecture:** A small unit-test runner recursively enumerates only `*.test.ts` and `*.test.mjs` below `tests/`, and forwards explicit focused-test paths without scanning the repository root. A static contract guards the command and tracked QA files against credential-bearing/manual automation regressions. Overview receives the viewer permission and renders the recent-form card as a link only when `matches.read` is present.
 
 **Tech Stack:** Node.js 22 test runner, TypeScript/tsx, React 19 server rendering, Vinext, ESLint, Git.
 
@@ -74,7 +74,8 @@ test("unit discovery is rooted at tests and excludes manual scripts", async () =
   const packageJson = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8"));
   assert.equal(packageJson.scripts["test:unit"], "node scripts/run-unit-tests.mjs");
   const runner = await readFile(new URL("../scripts/run-unit-tests.mjs", import.meta.url), "utf8");
-  assert.match(runner, /requested\.length > 0 \? requested : \["tests"\]/u);
+  assert.match(runner, /requested\.length > 0 \? requested : discoverTests\(\)/u);
+  assert.match(runner, /entry\.name\.endsWith\("\.test\.ts"\).*entry\.name\.endsWith\("\.test\.mjs"\)/su);
   assert.doesNotMatch(runner, /signInWithPassword|SUPABASE|https?:\/\//u);
 });
 
@@ -105,9 +106,27 @@ Create `scripts/run-unit-tests.mjs`:
 
 ```js
 import { spawnSync } from "node:child_process";
+import { readdirSync } from "node:fs";
+import { join, relative } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const root = fileURLToPath(new URL("../", import.meta.url));
+
+function discoverTests() {
+  const files = [];
+  function visit(directory) {
+    for (const entry of readdirSync(directory, { withFileTypes: true }).sort((left, right) => left.name.localeCompare(right.name))) {
+      const absolute = join(directory, entry.name);
+      if (entry.isDirectory()) visit(absolute);
+      else if (entry.name.endsWith(".test.ts") || entry.name.endsWith(".test.mjs")) files.push(relative(root, absolute));
+    }
+  }
+  visit(join(root, "tests"));
+  return files;
+}
 
 const requested = process.argv.slice(2);
-const targets = requested.length > 0 ? requested : ["tests"];
+const targets = requested.length > 0 ? requested : discoverTests();
 const result = spawnSync(process.execPath, ["--import", "tsx", "--test", ...targets], {
   stdio: "inherit",
 });
