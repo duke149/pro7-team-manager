@@ -13,6 +13,19 @@ function pad(value: number): string {
   return value.toString().padStart(2, "0");
 }
 
+function dateOnlyParts(value: string): Readonly<{ day: string; month: string }> | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/u.exec(value);
+  if (!match) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  if (year < 1 || month < 1 || month > 12 || day < 1) return null;
+  const candidate = new Date(0);
+  candidate.setUTCFullYear(year, month - 1, day);
+  if (candidate.getUTCFullYear() !== year || candidate.getUTCMonth() !== month - 1 || candidate.getUTCDate() !== day) return null;
+  return Object.freeze({ day: pad(day), month: pad(month) });
+}
+
 export type VietnamDateTimeParts = Readonly<{
   day: string;
   month: string;
@@ -43,6 +56,18 @@ export function getVietnamDateTimeParts(value: string): VietnamDateTimeParts | n
 
 export function formatVietnamMatchDateTime(value: string): string {
   return getVietnamDateTimeParts(value)?.long ?? "THỜI GIAN KHÔNG HỢP LỆ";
+}
+
+export function formatVietnamShortDateTime(value: string): string {
+  const parts = getVietnamDateTimeParts(value);
+  return parts ? `${parts.time} · ${parts.day}/${parts.month}/${parts.year}` : "THỜI GIAN KHÔNG HỢP LỆ";
+}
+
+export function formatVietnamDate(value: string): string {
+  const dateOnly = dateOnlyParts(value);
+  if (dateOnly) return `${dateOnly.day}/${dateOnly.month}`;
+  const parts = getVietnamDateTimeParts(value);
+  return parts ? `${parts.day}/${parts.month}` : "NGÀY KHÔNG HỢP LỆ";
 }
 
 export function toVietnamDateTimeInput(value: string): string {

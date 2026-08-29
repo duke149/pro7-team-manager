@@ -7,6 +7,7 @@ import { useEffect, useRef, useState, type FormEvent, type RefObject } from "rea
 
 import type { FinanceEntry, FundsResult, MemberDue } from "../../../../lib/funds/model";
 import { buildVietQrUrl } from "../../../../lib/funds/vietqr";
+import { formatVietnamDate } from "../../../../lib/matches/date-time";
 import type { TeamPaymentSettings } from "../../../../lib/settings/model";
 import type { TeamAccessContext } from "../../../../lib/teams/context";
 import { hasPermission, type PermissionCode } from "../../../../lib/teams/permissions";
@@ -15,7 +16,7 @@ type ApiError = Readonly<{ message?: string; fieldErrors?: Readonly<Record<strin
 type Dialog = { kind: "entry" } | { kind: "payment" } | { kind: "voidEntry"; entry: FinanceEntry } | { kind: "voidPayment"; due: MemberDue };
 
 function formatVnd(value: number) { return `${new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 0 }).format(value)}₫`; }
-function formatDate(value: string) { return new Intl.DateTimeFormat("vi-VN", { day: "2-digit", month: "2-digit", timeZone: "Asia/Ho_Chi_Minh" }).format(new Date(`${value}T00:00:00.000Z`)); }
+function formatDate(value: string) { return formatVietnamDate(value); }
 function initials(value: string) { return value.trim().split(/\s+/u).slice(-2).map((part) => part[0]?.toLocaleUpperCase("vi-VN")).join("") || "TV"; }
 function monthName(value: string) { return `THÁNG ${Number(value.slice(5, 7))}`; }
 function responseError(value: unknown, fallback: string) { const error = typeof value === "object" && value !== null ? value as ApiError : {}; return { message: typeof error.message === "string" ? error.message : fallback, fieldErrors: error.fieldErrors ?? {} }; }

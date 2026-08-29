@@ -3,6 +3,7 @@
 import { Bell, FileClock, Landmark, ShieldCheck, Trash2, Users } from "lucide-react";
 import { useState, type FormEvent } from "react";
 
+import { formatVietnamShortDateTime } from "../../../../../lib/matches/date-time";
 import type { AdminSettingsData } from "../../../../../lib/settings/model";
 import type { TeamAccessContext } from "../../../../../lib/teams/context";
 import { hasPermission, type PermissionCode } from "../../../../../lib/teams/permissions";
@@ -10,7 +11,7 @@ import { hasPermission, type PermissionCode } from "../../../../../lib/teams/per
 type State = { pending: boolean; message: string; error: boolean };
 function serverMessage(value: unknown, fallback: string) { return typeof value === "object" && value !== null && "message" in value && typeof value.message === "string" ? value.message : fallback; }
 function responseUpdatedAt(value: unknown) { return typeof value === "object" && value !== null && "updatedAt" in value && typeof value.updatedAt === "string" ? value.updatedAt : null; }
-function date(value: string) { return new Intl.DateTimeFormat("vi-VN", { dateStyle: "short", timeStyle: "short", timeZone: "Asia/Ho_Chi_Minh" }).format(new Date(value)); }
+function date(value: string) { return formatVietnamShortDateTime(value); }
 
 export function SettingsView({ team, permissions, data }: { team: TeamAccessContext["team"]; permissions: readonly PermissionCode[]; data: AdminSettingsData | null }) {
   const [teamName, setTeamName] = useState(team.name);

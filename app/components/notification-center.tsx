@@ -4,12 +4,13 @@ import { Bell, Check, X } from "lucide-react";
 import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
 
 import { isIsoTimestamp } from "../../lib/matches/validation";
+import { formatVietnamShortDateTime } from "../../lib/matches/date-time";
 import type { TeamNotification } from "../../lib/notifications/model";
 
 const MARK_READ_TIMEOUT_MS = 4_000;
 const REFRESH_INTERVAL_MS = 20_000;
 
-function date(value: string) { return new Intl.DateTimeFormat("vi-VN", { dateStyle: "short", timeStyle: "short", timeZone: "Asia/Ho_Chi_Minh" }).format(new Date(value)); }
+function date(value: string) { return formatVietnamShortDateTime(value); }
 
 function authoritativeReadAt(value: unknown): string | null {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
