@@ -31,3 +31,11 @@ test("Admin Settings has honest loading and error boundaries", async () => {
   assert.match(loading, /aria-busy="true"/u);
   assert.match(error, /Thử lại/u);
 });
+
+test("phone Settings presents every module tab without clipped labels", async () => {
+  const responsive = await readFile(new URL("../app/responsive.css", import.meta.url), "utf8");
+  const phoneSettings = responsive.slice(responsive.indexOf("@media (max-width: 767px)"));
+
+  assert.match(phoneSettings, /\.settings-tabs\{display:grid;grid-template-columns:repeat\(2,minmax\(0,1fr\)\);gap:var\(--space-2\);overflow:visible/u);
+  assert.match(phoneSettings, /\.settings-tabs a\{min-width:0;justify-content:center;white-space:normal;text-align:center/u);
+});
