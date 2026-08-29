@@ -16,10 +16,51 @@ test("PRO7 design tokens resolve the bounded card system", async () => {
   try {
     const root = fixture.window.getComputedStyle(fixture.document.documentElement);
     const card = fixture.window.getComputedStyle(fixture.document.querySelector(".card")!);
-    assert.equal(root.getPropertyValue("--brand-red-500").trim().toLowerCase(), "#d71935");
+    assert.equal(root.getPropertyValue("--brand-red-500").trim().toLowerCase(), "#d32f2f");
     assert.equal(root.getPropertyValue("--space-1").trim(), "4px");
     assert.equal(root.getPropertyValue("--space-7").trim(), "40px");
     assert.equal(card.borderRadius, "12px");
+  } finally {
+    fixture.close();
+  }
+});
+
+test("Sport palette maps the supplied light and dark colour system without a neon UI accent", async () => {
+  const fixture = await loadPro7CssFixture({
+    width: 390,
+    body: '<main class="pro7-shell light"><button class="primary-button">Lưu</button><nav class="mobile-nav"><a class="active">Tổng quan</a></nav></main><main class="pro7-shell dark"><article class="card">Nội dung</article><button class="primary-button">Lưu</button><nav class="mobile-nav"><a class="active">Tổng quan</a></nav></main><section class="login-shell"><article class="login-card"><form class="login-form"><button>Đăng nhập</button></form></article></section>',
+  });
+  try {
+    const styles = (selector: string) => fixture.window.getComputedStyle(fixture.document.querySelector(selector)!);
+    const root = fixture.window.getComputedStyle(fixture.document.documentElement);
+    const dark = fixture.window.getComputedStyle(fixture.document.querySelector(".pro7-shell.dark")!);
+
+    assert.equal(root.getPropertyValue("--brand-red-500").trim().toLowerCase(), "#d32f2f");
+    assert.equal(root.getPropertyValue("--brand-red-700").trim().toLowerCase(), "#e50914");
+    assert.equal(root.getPropertyValue("--color-canvas").trim().toLowerCase(), "#f8f9fa");
+    assert.equal(root.getPropertyValue("--color-surface").trim().toLowerCase(), "#ffffff");
+    assert.equal(root.getPropertyValue("--color-text").trim().toLowerCase(), "#111111");
+    assert.equal(root.getPropertyValue("--color-text-muted").trim().toLowerCase(), "#666666");
+    assert.equal(root.getPropertyValue("--color-border").trim().toLowerCase(), "#e0e0e0");
+    assert.equal(root.getPropertyValue("--color-success").trim().toLowerCase(), "#00e676");
+    assert.equal(root.getPropertyValue("--color-warning").trim().toLowerCase(), "#ffb300");
+    assert.equal(root.getPropertyValue("--color-info").trim().toLowerCase(), "#2196f3");
+    assert.equal(root.getPropertyValue("--color-neutral").trim().toLowerCase(), "#9e9e9e");
+    assert.equal(dark.getPropertyValue("--color-canvas").trim().toLowerCase(), "#121212");
+    assert.equal(dark.getPropertyValue("--color-surface").trim().toLowerCase(), "#1e1e1e");
+    assert.equal(dark.getPropertyValue("--color-text").trim().toLowerCase(), "#ffffff");
+    assert.equal(dark.getPropertyValue("--color-text-muted").trim().toLowerCase(), "#a0a0a0");
+    assert.equal(dark.getPropertyValue("--color-border").trim().toLowerCase(), "#2c2c2e");
+    assert.equal(styles(".pro7-shell.light .primary-button").backgroundColor, "#d32f2f");
+    assert.equal(styles(".pro7-shell.dark .primary-button").backgroundColor, "#ff3b30");
+    assert.equal(styles(".pro7-shell.dark").backgroundColor, "#121212");
+    assert.equal(styles(".pro7-shell.dark .card").backgroundColor, "#1e1e1e");
+    assert.equal(styles(".pro7-shell.dark .mobile-nav").backgroundColor, "rgba(30, 30, 30, .97)");
+    assert.equal(styles(".login-shell").backgroundColor, "#f8f9fa");
+    assert.equal(styles(".login-card").backgroundColor, "#ffffff");
+    assert.equal(styles(".login-form button").backgroundColor, "#d32f2f");
+    const css = await readFile(cssPath, "utf8");
+    assert.doesNotMatch(css, /#ff2e93\b/iu);
   } finally {
     fixture.close();
   }
@@ -177,19 +218,19 @@ test("match result badges use semantic win, draw, and loss colors", async () => 
   });
   try {
     const styles = (selector: string) => fixture.window.getComputedStyle(fixture.document.querySelector(selector)!);
-    assert.equal(styles(".form-badges .win").backgroundColor, "#15803d");
-    assert.equal(styles(".form-badge.win").backgroundColor, "#15803d");
-    assert.equal(styles(".dot.green").backgroundColor, "#15803d");
-    assert.equal(styles(".dot.red").backgroundColor, "#a60f28");
+    assert.equal(styles(".form-badges .win").backgroundColor, "#00e676");
+    assert.equal(styles(".form-badge.win").backgroundColor, "#00e676");
+    assert.equal(styles(".dot.green").backgroundColor, "#00e676");
+    assert.equal(styles(".dot.red").backgroundColor, "#ff3b30");
     assert.equal(styles(".form-badges .win").color, "#ffffff");
-    assert.equal(styles(".pro7-shell.light .match-history-score-pill.win").backgroundColor, "#dcfce7");
-    assert.equal(styles(".pro7-shell.light .match-history-score-pill.win").color, "#166534");
-    assert.equal(styles(".pro7-shell.light .match-result-pill.win").color, "#166534");
-    assert.equal(styles(".pro7-shell.dark .match-history-score-pill.win").color, "#86efac");
-    assert.equal(styles(".pro7-shell.dark .match-result-pill.win").color, "#86efac");
-    assert.equal(styles(".pro7-shell.light .score-board.win strong").color, "#86efac");
-    assert.equal(styles(".pro7-shell.light .analysis-outcome.win").color, "#86efac");
-    assert.equal(styles(".pro7-shell.dark .score-board.win strong").color, "#86efac");
+    assert.equal(styles(".pro7-shell.light .match-history-score-pill.win").backgroundColor, "rgba(0, 230, 118, .14)");
+    assert.equal(styles(".pro7-shell.light .match-history-score-pill.win").color, "#087f3f");
+    assert.equal(styles(".pro7-shell.light .match-result-pill.win").color, "#087f3f");
+    assert.equal(styles(".pro7-shell.dark .match-history-score-pill.win").color, "#00e676");
+    assert.equal(styles(".pro7-shell.dark .match-result-pill.win").color, "#00e676");
+    assert.equal(styles(".pro7-shell.light .score-board.win strong").color, "#00e676");
+    assert.equal(styles(".pro7-shell.light .analysis-outcome.win").color, "#00e676");
+    assert.equal(styles(".pro7-shell.dark .score-board.win strong").color, "#00e676");
     assert.notEqual(styles(".form-badges .draw").backgroundColor, styles(".form-badges .win").backgroundColor);
     assert.notEqual(styles(".form-badges .loss").backgroundColor, styles(".form-badges .win").backgroundColor);
   } finally {
@@ -204,15 +245,15 @@ test("match availability communicates confirmed participation with the success p
   });
   try {
     const styles = (selector: string) => fixture.window.getComputedStyle(fixture.document.querySelector(selector)!);
-    assert.equal(styles(".pro7-shell.light .rsvp-options button.active.yes").backgroundColor, "#dcfce7");
-    assert.equal(styles(".pro7-shell.light .rsvp-options button.active.yes").color, "#166534");
-    assert.equal(styles(".pro7-shell.light .starting-pill").backgroundColor, "#dcfce7");
-    assert.equal(styles(".pro7-shell.light .starting-pill").color, "#166534");
-    assert.equal(styles(".roster-progress i b").backgroundColor, "#15803d");
-    assert.equal(styles(".match-attendance-row .available").backgroundColor, "#dcfce7");
-    assert.equal(styles(".match-attendance-row .available").color, "#166534");
-    assert.equal(styles(".pro7-shell.dark .rsvp-options button.active.yes").color, "#86efac");
-    assert.equal(styles(".pro7-shell.dark .starting-pill").color, "#86efac");
+    assert.equal(styles(".pro7-shell.light .rsvp-options button.active.yes").backgroundColor, "rgba(0, 230, 118, .14)");
+    assert.equal(styles(".pro7-shell.light .rsvp-options button.active.yes").color, "#087f3f");
+    assert.equal(styles(".pro7-shell.light .starting-pill").backgroundColor, "rgba(0, 230, 118, .14)");
+    assert.equal(styles(".pro7-shell.light .starting-pill").color, "#087f3f");
+    assert.equal(styles(".roster-progress i b").backgroundColor, "#00e676");
+    assert.equal(styles(".match-attendance-row .available").backgroundColor, "rgba(0, 230, 118, .14)");
+    assert.equal(styles(".match-attendance-row .available").color, "#087f3f");
+    assert.equal(styles(".pro7-shell.dark .rsvp-options button.active.yes").color, "#00e676");
+    assert.equal(styles(".pro7-shell.dark .starting-pill").color, "#00e676");
   } finally {
     fixture.close();
   }
@@ -225,13 +266,13 @@ test("successful tactics and funds states stay distinct from brand and destructi
   });
   try {
     const styles = (selector: string) => fixture.window.getComputedStyle(fixture.document.querySelector(selector)!);
-    assert.equal(styles(".pro7-shell.light .paid").backgroundColor, "#dcfce7");
-    assert.equal(styles(".pro7-shell.light .paid").color, "#166534");
-    assert.equal(styles(".transaction .income").color, "#15803d");
-    assert.equal(styles(".pro7-shell.light .tactics-message.success").backgroundColor, "#dcfce7");
-    assert.equal(styles(".pro7-shell.light .tactics-message.success").color, "#166534");
-    assert.equal(styles(".pro7-shell.dark .paid").color, "#86efac");
-    assert.equal(styles(".pro7-shell.dark .tactics-message.success").color, "#86efac");
+    assert.equal(styles(".pro7-shell.light .paid").backgroundColor, "rgba(0, 230, 118, .14)");
+    assert.equal(styles(".pro7-shell.light .paid").color, "#087f3f");
+    assert.equal(styles(".transaction .income").color, "#00e676");
+    assert.equal(styles(".pro7-shell.light .tactics-message.success").backgroundColor, "rgba(0, 230, 118, .14)");
+    assert.equal(styles(".pro7-shell.light .tactics-message.success").color, "#087f3f");
+    assert.equal(styles(".pro7-shell.dark .paid").color, "#00e676");
+    assert.equal(styles(".pro7-shell.dark .tactics-message.success").color, "#00e676");
   } finally {
     fixture.close();
   }
@@ -245,11 +286,11 @@ test("success feedback uses the same semantic treatment across management module
   try {
     const styles = (selector: string) => fixture.window.getComputedStyle(fixture.document.querySelector(selector)!);
     for (const selector of [".settings-message.success", ".overview-control-message.success", ".news-manager-message.success", ".match-message.success"]) {
-      assert.equal(styles(`.pro7-shell.light ${selector}`).backgroundColor, "#dcfce7");
-      assert.equal(styles(`.pro7-shell.light ${selector}`).color, "#166534");
+      assert.equal(styles(`.pro7-shell.light ${selector}`).backgroundColor, "rgba(0, 230, 118, .14)");
+      assert.equal(styles(`.pro7-shell.light ${selector}`).color, "#087f3f");
     }
-    assert.equal(styles(".pro7-shell.dark .settings-message.success").color, "#86efac");
-    assert.equal(styles(".pro7-shell.dark .overview-control-message.success").color, "#86efac");
+    assert.equal(styles(".pro7-shell.dark .settings-message.success").color, "#00e676");
+    assert.equal(styles(".pro7-shell.dark .overview-control-message.success").color, "#00e676");
   } finally {
     fixture.close();
   }
@@ -319,12 +360,12 @@ test("Funds render semantic balance changes and compact actions in both themes",
   });
   try {
     const styles = (selector: string) => fixture.window.getComputedStyle(fixture.document.querySelector(selector)!);
-    assert.equal(styles('.light .fund-balance-change.is-positive').color, '#86efac');
-    assert.equal(styles('.light .fund-balance-change.is-negative').color, '#fca5a5');
-    assert.equal(styles('.dark .fund-balance-change.is-positive').color, '#86efac');
-    assert.equal(styles('.dark .fund-balance-change.is-negative').color, '#fca5a5');
-    assert.equal(styles('.light .transaction > strong.income').color, '#15803d');
-    assert.equal(styles('.dark .transaction > strong.income').color, '#86efac');
+    assert.equal(styles('.light .fund-balance-change.is-positive').color, '#00e676');
+    assert.equal(styles('.light .fund-balance-change.is-negative').color, '#ff9b95');
+    assert.equal(styles('.dark .fund-balance-change.is-positive').color, '#00e676');
+    assert.equal(styles('.dark .fund-balance-change.is-negative').color, '#ff9b95');
+    assert.equal(styles('.light .transaction > strong.income').color, '#00e676');
+    assert.equal(styles('.dark .transaction > strong.income').color, '#00e676');
     assert.equal(styles('.fund-actions button').minHeight, '76px');
     assert.equal(styles('.fund-actions button').gridTemplateColumns, '40px minmax(0, 1fr)');
     assert.equal(styles('.fund-action-copy').backgroundColor, 'transparent');

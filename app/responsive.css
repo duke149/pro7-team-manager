@@ -13,9 +13,9 @@
 .account-menu-popover>a:first-of-type{border-top:0}
 .account-menu-popover>:is(a,button):hover{background:#f4f4f5}
 .account-menu-popover>button{color:var(--accent-strong)}
-.pro7-shell.dark .account-menu-trigger,.account-profile-shell.dark .account-menu-trigger,.pro7-shell.dark .account-menu-popover,.account-profile-shell.dark .account-menu-popover{background:#1b1b1e;color:#f4f4f5;border-color:#414146}
-.pro7-shell.dark .account-menu-summary,.account-profile-shell.dark .account-menu-summary,.pro7-shell.dark .account-menu-popover>:is(a,button),.account-profile-shell.dark .account-menu-popover>:is(a,button){border-color:#38383d}
-.pro7-shell.dark .account-menu-popover>:is(a,button):hover,.account-profile-shell.dark .account-menu-popover>:is(a,button):hover{background:#29292d}
+.pro7-shell.dark .account-menu-trigger,.account-profile-shell.dark .account-menu-trigger,.pro7-shell.dark .account-menu-popover,.account-profile-shell.dark .account-menu-popover{background:#1e1e1e;color:#ffffff;border-color:#2c2c2e}
+.pro7-shell.dark .account-menu-summary,.account-profile-shell.dark .account-menu-summary,.pro7-shell.dark .account-menu-popover>:is(a,button),.account-profile-shell.dark .account-menu-popover>:is(a,button){border-color:#2c2c2e}
+.pro7-shell.dark .account-menu-popover>:is(a,button):hover,.account-profile-shell.dark .account-menu-popover>:is(a,button):hover{background:#242424}
 
 @media(max-width:1023px){
   .sidebar{width:270px;transform:translateX(-105%);transition:transform .2s ease}
@@ -90,7 +90,12 @@
   .mobile-nav--5{grid-template-columns:repeat(5,minmax(0,1fr))}
   .mobile-nav a{min-width:0;min-height:56px;padding-inline:2px;font-size:12px;line-height:1.1}
   .mobile-nav a>span:not(.sr-only){max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .pro7-shell.dark .mobile-nav{background:rgba(20,20,22,.97)}
+  .mobile-nav a{color:var(--color-text-muted)}
+  .mobile-nav a.active{color:var(--color-accent)}
+  .pro7-shell.dark .mobile-nav{background:rgba(30,30,30,.97);border-color:var(--color-border)}
+  .pro7-shell.dark .mobile-nav a{color:var(--color-text-muted)}
+  .pro7-shell.dark .mobile-nav a.active{color:#ffffff}
+  .pro7-shell.dark .mobile-nav a.active svg{color:var(--color-accent)}
   .header-actions .notification{display:grid}
   .notification-popover{top:70px;right:10px;width:calc(100vw - 20px);max-height:calc(100vh - 92px)}
   .squad-toolbar{grid-template-columns:minmax(0,1fr) auto}

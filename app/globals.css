@@ -1414,6 +1414,69 @@ body{line-height:var(--leading-body)}
 .push-permission-later { grid-column: 2 / 4; justify-self: end; min-height: 44px; }
 .pro7-shell.dark .push-permission-gate { border-color: #323236; background: #1b1b1e; color: #f4f4f5; }
 
+/* Sport colour guide consolidation: preserve the existing component structure,
+   but make all reusable surfaces inherit the approved light/dark token set. */
+.sidebar { background: #121212; }
+.team-picker { background: #1e1e1e; border-color: #2c2c2e; }
+.team-picker > span, .nav-label { color: #a0a0a0; }
+.team-picker small, .team-picker > svg, .coach span { color: #a0a0a0; }
+.main-nav a { color: #a0a0a0; }
+.main-nav a:hover { background: #1e1e1e; color: #ffffff; }
+.main-nav a.active { background: var(--color-accent); color: #ffffff; box-shadow: 0 7px 18px rgba(211, 47, 47, .18); }
+.season-card { border-color: #2c2c2e; color: #a0a0a0; }
+.season-card b { color: #ffffff; }
+.coach { border-color: #2c2c2e; }
+.app-header { background: rgba(248, 249, 250, .92); }
+.icon-button, .menu-button, .account-menu-trigger { background: var(--color-surface); color: var(--color-text); }
+.primary-button, .lime-button { background: var(--color-accent); color: #ffffff; }
+.primary-button:hover, .lime-button:hover { background: var(--color-accent-strong); }
+.soft-button { background: var(--color-surface-raised); color: var(--color-text); }
+.card, .stat-card, .player-card, .add-player-card, .pitch-card { background: var(--color-surface); }
+.stat-icon, .news-icon.lime, .fixture-icon.training { background: var(--brand-red-50); color: var(--color-accent-strong); }
+.dark-card { background: #121212; }
+.dot.gray { background: var(--color-neutral); }
+.dot.red { background: var(--color-error); }
+.match-history-score-pill.draw { background: rgba(158, 158, 158, .14); color: #555555; }
+.match-history-score-pill.loss { background: var(--status-loss-soft); color: var(--status-loss-text); }
+.match-result-pill.draw { background: rgba(158, 158, 158, .14); color: #555555; border-color: rgba(158, 158, 158, .36); }
+.match-result-pill.loss { background: var(--status-loss-soft); color: var(--status-loss-text); border-color: rgba(255, 59, 48, .34); }
+.history-action-btn.primary { background: var(--color-accent); }
+.history-action-btn.primary:hover { background: var(--color-accent-strong); }
+.notification-popover, .account-menu-popover { background: var(--color-surface); color: var(--color-text); }
+.notification-list a.unread { background: var(--brand-red-50); }
+.push-permission-icon { background: var(--brand-red-50); color: var(--color-accent); }
+.login-shell { --login-red: var(--brand-red-500); --login-red-dark: var(--brand-red-700); --auth-canvas: var(--color-canvas); --auth-surface: var(--color-surface); --auth-field: var(--color-surface); --auth-text: var(--color-text); --auth-muted: var(--color-text-muted); --auth-border: var(--color-border); background: var(--auth-canvas); color: var(--auth-text); }
+.login-card { background: var(--auth-surface); border-color: var(--auth-border); border-top-color: var(--color-accent); }
+.login-copy p, .login-secondary-link { color: var(--color-accent-strong); }
+.login-copy span, .login-brand small, .login-footnote { color: var(--auth-muted); }
+.login-form input { background: var(--auth-field); border-color: var(--auth-border); color: var(--auth-text); }
+.login-form button { background: var(--color-accent); color: #ffffff; }
+.login-form button:hover:not(:disabled) { background: var(--color-accent-strong); }
+.logout-button { border-color: var(--color-accent); color: var(--color-accent-strong); background: var(--color-surface); }
+.logout-button:hover:not(:disabled) { background: var(--color-accent); color: #ffffff; }
+@media (prefers-color-scheme: dark) {
+  .login-shell { --login-red: #ff3b30; --login-red-dark: #ff3b30; --auth-canvas: #121212; --auth-surface: #1e1e1e; --auth-field: #1e1e1e; --auth-text: #ffffff; --auth-muted: #a0a0a0; --auth-border: #2c2c2e; color-scheme: dark; }
+  .login-form button { background: #ff3b30; color: #ffffff; }
+}
+.pro7-shell.dark .app-header { background: rgba(18, 18, 18, .92); }
+.pro7-shell.dark { --ink: var(--color-text); --muted: var(--color-text-muted); --line: var(--color-border); --paper: var(--color-canvas); --white: var(--color-surface); background: var(--color-canvas); color: var(--color-text); }
+.pro7-shell.dark .app-main { background: var(--color-canvas); }
+.pro7-shell.dark .sidebar { background: #121212; }
+.pro7-shell.dark .team-picker, .pro7-shell.dark .main-nav a:hover { background: #1e1e1e; border-color: #2c2c2e; }
+.pro7-shell.dark :is(.primary-button, .lime-button) { background: var(--color-accent); color: #ffffff; }
+.pro7-shell.dark :is(.primary-button, .lime-button):hover { background: var(--color-accent-strong); }
+.pro7-shell.dark :is(.dark-card, .analysis-score) { background: #121212; }
+.pro7-shell.dark :is(.card, .stat-card, .player-card, .add-player-card, .pitch-card, .squad-toolbar, .squad-summary, .fund-stats, .settings-module, .notification-popover, .account-menu-popover, .push-permission-gate) { background: var(--color-surface); border-color: var(--color-border); color: var(--color-text); }
+.pro7-shell.dark :is(.icon-button, .menu-button, .account-menu-trigger, .soft-button) { background: var(--color-surface); border-color: var(--color-border); color: var(--color-text); }
+.pro7-shell.dark .match-history-card { background: var(--color-surface); border-color: var(--color-border); }
+.pro7-shell.dark .history-action-btn.secondary { background: var(--color-surface-raised); color: var(--color-text); border-color: var(--color-border); }
+.pro7-shell.dark .history-action-btn.primary { background: var(--color-accent); color: #ffffff; }
+.pro7-shell.dark .match-history-score-pill.draw, .pro7-shell.dark .match-result-pill.draw { color: #d6d6d6; }
+.pro7-shell.dark .push-permission-gate { border-color: var(--color-border); background: var(--color-surface); color: var(--color-text); }
+.account-profile-shell.dark { --profile-ink: var(--color-text); --profile-muted: var(--color-text-muted); --profile-line: var(--color-border); background: var(--color-canvas); }
+.account-profile-shell.dark :is(.account-profile-header, .account-profile-card, .account-profile-state, .account-avatar-crop-dialog) { background: var(--color-surface); color: var(--color-text); border-color: var(--color-border); }
+.account-profile-shell.dark :is(.profile-button, .logout-button, .theme-button, .account-profile-fields input, .account-position-fieldset span) { background: var(--color-surface); color: var(--color-text); border-color: var(--color-border); }
+
 @media (max-width: 767px) {
   .push-permission-gate {
     right: 12px;
