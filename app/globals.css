@@ -548,19 +548,45 @@
   color: #f87171;
 }
 
-/* Mowed Grass Pitch */
+/* Tactical pitch: the playing surface is intentionally green; PRO7 red stays on team markers and actions. */
 .pitch.mowed-pitch {
-  background-color: #111113 !important;
-  background-image:
-    linear-gradient(rgba(215, 25, 53, .14) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(215, 25, 53, .14) 1px, transparent 1px) !important;
-  background-size: 36px 36px !important;
-  border: 3px solid var(--accent) !important;
-  box-shadow: inset 0 0 40px rgba(0,0,0,0.35), 0 16px 36px rgba(0,0,0,0.18) !important;
+  background-color: #1f7a45 !important;
+  background-image: repeating-linear-gradient(
+    0deg,
+    rgba(255,255,255,.055) 0,
+    rgba(255,255,255,.055) 12.5%,
+    rgba(5,55,29,.10) 12.5%,
+    rgba(5,55,29,.10) 25%
+  ) !important;
+  background-size: 100% 100% !important;
+  border: 2px solid rgba(255,255,255,.85) !important;
+  border-radius: 12px;
+  box-shadow: inset 0 0 0 1px rgba(0,0,0,.12), inset 0 0 36px rgba(7,45,24,.20), 0 12px 28px rgba(23,23,25,.12) !important;
 }
-.pitch-player.glow-active b {
-  box-shadow: 0 0 0 3px #fff, 0 0 16px var(--accent) !important;
+.pitch.mowed-pitch:before { background: rgba(255,255,255,.85); }
+.pitch.mowed-pitch .pitch-center,
+.pitch.mowed-pitch .penalty { border-color: rgba(255,255,255,.85); }
+.pitch.mowed-pitch .penalty { left:30%;width:40%;height:16%; }
+.pitch.mowed-pitch .penalty:after { content:"";position:absolute;left:25%;width:50%;height:16%;border:1px solid rgba(255,255,255,.78); }
+.pitch.mowed-pitch .penalty.top:after { top:-1px;border-top:0; }
+.pitch.mowed-pitch .penalty.bottom:after { right:auto;bottom:-1px;border-bottom:0; }
+.pitch.mowed-pitch .pitch-player b { background:#d71935;color:#fff;border:2px solid rgba(255,255,255,.88);box-shadow:0 5px 12px rgba(8,48,25,.30);transition:transform .16s ease,box-shadow .16s ease,outline-color .16s ease; }
+.pitch.mowed-pitch .pitch-player.keeper b { background:#f8fbf8;color:#17452c;border-color:#d7eadc; }
+.pitch.mowed-pitch .pitch-player span { background:rgba(7,39,22,.88);color:#fff;border:1px solid rgba(255,255,255,.26);box-shadow:0 2px 5px rgba(4,31,17,.18); }
+.pitch-player.is-substitution-selected b { outline:3px solid #fff;outline-offset:3px;box-shadow:0 0 0 6px rgba(5,54,28,.46),0 5px 12px rgba(8,48,25,.30); }
+.bench-player.is-substitution-selected { background:#e8f5ed;border-left:3px solid #1f7a45; }
+.bench-player.is-substitution-selected>span { background:#1f7a45;color:#fff; }
+.pitch-caption [data-substitution-guidance] { color:#3f4a43;font-weight:700; }
+.pro7-shell.dark .bench-player.is-substitution-selected { background:#193c29;color:#f4f4f5;border-left-color:#86efac; }
+.pro7-shell.dark .bench-player.is-substitution-selected>span { background:#86efac;color:#13321f; }
+.pro7-shell.dark .pitch-caption [data-substitution-guidance] { color:#c9dfce; }
+@media (hover:hover) and (pointer:fine) {
+  .pitch.mowed-pitch .pitch-player:not(:disabled):hover b { transform:translateY(-2px) scale(1.06);box-shadow:0 8px 16px rgba(8,48,25,.36); }
+  .bench-player:not(:disabled):hover { background:#f1f8f3; }
+  .formation-btn:not(:disabled):hover { border-color:#1f7a45;color:#155b32; }
 }
+.pitch-player:focus-visible b { outline:3px solid #fff;outline-offset:3px; }
+.bench-player:focus-visible { outline:3px solid rgba(31,122,69,.34);outline-offset:-3px; }
 .formation-selector {
   display: flex;
   gap: 6px;

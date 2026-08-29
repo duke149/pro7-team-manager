@@ -135,6 +135,26 @@ test("keyboard selection swaps a starter with the bench and persists exactly sev
   await act(async () => view.root.unmount());
 });
 
+test("a selected starter or substitute gets one clear substitution state and can be cancelled before a swap", async () => {
+  const view = await mounted();
+  const starter = view.container.querySelector<HTMLButtonElement>(".pitch-player:not(.keeper)");
+  const substitute = view.container.querySelector<HTMLButtonElement>(".bench-player");
+  assert.ok(starter); assert.ok(substitute);
+
+  await act(async () => { starter.click(); });
+  assert.equal(starter.dataset.substitutionSelected, "true");
+  assert.match(view.container.querySelector("[data-substitution-guidance]")?.textContent ?? "", /Đã chọn Cầu thủ 2[\s\S]*chọn cầu thủ dự bị/u);
+
+  await act(async () => { starter.click(); });
+  assert.equal(starter.dataset.substitutionSelected, "false");
+  assert.match(view.container.querySelector("[data-substitution-guidance]")?.textContent ?? "", /Chọn một cầu thủ trên sân hoặc dự bị để thay người/u);
+
+  await act(async () => { substitute.click(); });
+  assert.equal(substitute.dataset.substitutionSelected, "true");
+  assert.match(view.container.querySelector("[data-substitution-guidance]")?.textContent ?? "", /Đã chọn Cầu thủ 8[\s\S]*chọn cầu thủ trên sân/u);
+  await act(async () => view.root.unmount());
+});
+
 test("pointer drop swaps bench to starter and starter back to bench", async () => {
   const view = await mounted();
   let dropTarget: Element | null = null;

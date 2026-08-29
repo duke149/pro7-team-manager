@@ -277,6 +277,23 @@ test("Matches and Tactics use the neutral PRO7 surface and touch rhythm", async 
   }
 });
 
+test("the tactics board renders a readable green pitch with an explicit selected substitute state", async () => {
+  const fixture = await loadPro7CssFixture({
+    width: 1440,
+    body: '<main class="pro7-shell"><section class="pitch mowed-pitch"><i class="pitch-center"></i><i class="penalty top"></i><button class="pitch-player is-substitution-selected"><b>7</b><span>Tiền đạo</span></button></section><button class="bench-player is-substitution-selected"><span>12</span><b>Dự bị</b></button></main>',
+  });
+  try {
+    const styles = (selector: string) => fixture.window.getComputedStyle(fixture.document.querySelector(selector)!);
+    assert.equal(styles(".pitch").backgroundColor, "#1f7a45");
+    assert.equal(styles(".pitch").borderTopColor, "rgba(255, 255, 255, .85)");
+    assert.equal(styles(".pitch-center").borderTopColor, "rgba(255, 255, 255, .85)");
+    assert.equal(styles(".pitch-player.is-substitution-selected b").outlineColor, "#fff");
+    assert.equal(styles(".bench-player.is-substitution-selected").backgroundColor, "#e8f5ed");
+  } finally {
+    fixture.close();
+  }
+});
+
 test("Funds, Settings, and feedback surfaces use shared density tokens", async () => {
   const fixture = await loadPro7CssFixture({
     width: 1440,
