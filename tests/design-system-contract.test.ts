@@ -312,6 +312,30 @@ test("Funds, Settings, and feedback surfaces use shared density tokens", async (
   }
 });
 
+test("Funds render semantic balance changes and compact actions in both themes", async () => {
+  const fixture = await loadPro7CssFixture({
+    width: 390,
+    body: '<main class="pro7-shell light"><article class="balance-card black-sport-card"><div class="fund-balance-delta"><b class="fund-balance-change is-positive">400.000₫</b><b class="fund-balance-change is-negative">−500.000₫</b></div></article><section class="fund-actions"><button><span class="fund-action-icon"></span><span class="fund-action-copy"><b>Thêm khoản chi</b><small>Ghi nhận chi phí mới</small></span></button><button class="lime-action"><span class="fund-action-icon"></span><span class="fund-action-copy"><b>Ghi nhận đóng quỹ</b><small>Cập nhật phí thành viên</small></span></button></section><div class="transaction"><strong class="income">+500.000₫</strong></div></main><main class="pro7-shell dark"><article class="balance-card black-sport-card"><div class="fund-balance-delta"><b class="fund-balance-change is-positive">400.000₫</b><b class="fund-balance-change is-negative">−500.000₫</b></div></article><div class="transaction"><strong class="income">+500.000₫</strong></div></main>',
+  });
+  try {
+    const styles = (selector: string) => fixture.window.getComputedStyle(fixture.document.querySelector(selector)!);
+    assert.equal(styles('.light .fund-balance-change.is-positive').color, '#86efac');
+    assert.equal(styles('.light .fund-balance-change.is-negative').color, '#fca5a5');
+    assert.equal(styles('.dark .fund-balance-change.is-positive').color, '#86efac');
+    assert.equal(styles('.dark .fund-balance-change.is-negative').color, '#fca5a5');
+    assert.equal(styles('.light .transaction > strong.income').color, '#15803d');
+    assert.equal(styles('.dark .transaction > strong.income').color, '#86efac');
+    assert.equal(styles('.fund-actions button').minHeight, '76px');
+    assert.equal(styles('.fund-actions button').gridTemplateColumns, '40px minmax(0, 1fr)');
+    assert.equal(styles('.fund-action-copy').backgroundColor, 'transparent');
+    assert.equal(styles('.lime-action .fund-action-copy').backgroundColor, 'transparent');
+    assert.equal(styles('.fund-action-copy small').fontSize, '14px');
+    assert.equal(styles('.fund-action-copy small').lineHeight, '1.5');
+  } finally {
+    fixture.close();
+  }
+});
+
 test("member provisioning uses the shared keyboard-safe modal primitive", async () => {
   const [source, modal] = await Promise.all([readFile(squadPath, "utf8"), readFile(modalPath, "utf8")]);
   assert.match(source, /import \{ AccessibleModal \} from/u);

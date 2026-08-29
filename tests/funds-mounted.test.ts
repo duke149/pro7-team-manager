@@ -28,6 +28,23 @@ const PAYMENT: TeamPaymentSettings = { bankCode: "VCB", accountNumber: "12345678
 async function mounted(initialDialog?: "entry", paymentSettings: TeamPaymentSettings | null = PAYMENT, result: FundsResult = RESULT) { browserWindow.document.body.innerHTML = '<div id="root"></div>'; const container = browserWindow.document.getElementById("root"); assert.ok(container); const root = createRoot(container); globalThis.__fundsRefreshes = 0; await act(async () => root.render(createElement(FundsView, { team: { id: "team-1", name: "PRO7 FC", slug: "pro7-fc" }, permissions: ["finance.read", "finance.manage"], result, paymentSettings, initialDialog }))); return { container, root }; }
 async function input(control: HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement, value: string) { await act(async () => { Object.getOwnPropertyDescriptor(Object.getPrototypeOf(control), "value")?.set?.call(control, value); control.dispatchEvent(new browserWindow.Event("input", { bubbles: true })); control.dispatchEvent(new browserWindow.Event("change", { bubbles: true })); }); }
 
+test("Funds expose the monthly cash direction instead of using the brand color for every outcome", async () => {
+  const positiveResult: FundsResult = { ok: true, data: { ...RESULT.data, monthIncomeVnd: 900_000, monthExpenseVnd: 500_000 } };
+  const positive = await mounted(undefined, PAYMENT, positiveResult);
+  const positiveDelta = positive.container.querySelector<HTMLElement>(".fund-balance-change");
+  assert.ok(positiveDelta);
+  assert.ok(positiveDelta.classList.contains("is-positive"));
+  assert.match(positiveDelta.textContent ?? "", /400\.000₫/u);
+  await act(async () => positive.root.unmount());
+
+  const negative = await mounted();
+  const negativeDelta = negative.container.querySelector<HTMLElement>(".fund-balance-change");
+  assert.ok(negativeDelta);
+  assert.ok(negativeDelta.classList.contains("is-negative"));
+  assert.match(negativeDelta.textContent ?? "", /250\.000₫/u);
+  await act(async () => negative.root.unmount());
+});
+
 test("expense dialog sends same-origin JSON without a client balance and refreshes after success", async () => {
   const calls: { url: string; init?: RequestInit }[] = []; globalThis.fetch = (async (request, init) => { calls.push({ url: String(request), init }); return Response.json({ ok: true, entryId: ENTRY_ID }, { status: 201 }); }) as typeof fetch;
   const view = await mounted(); const trigger = [...view.container.querySelectorAll("button")].find((button) => button.textContent?.includes("Thêm khoản chi")); assert.ok(trigger); await act(async () => trigger.click()); const form = view.container.querySelector<HTMLFormElement>('form[data-form="finance-entry"]'); assert.ok(form); await input(form.elements.namedItem("amountVnd") as HTMLInputElement, "1200000"); await input(form.elements.namedItem("category") as HTMLInputElement, "Thuê sân"); await input(form.elements.namedItem("occurredOn") as HTMLInputElement, "2026-10-26"); await input(form.elements.namedItem("description") as HTMLTextAreaElement, "Thuê sân Riverside"); await act(async () => { form.dispatchEvent(new browserWindow.Event("submit", { bubbles: true, cancelable: true })); await new Promise((resolvePromise) => setTimeout(resolvePromise, 0)); });

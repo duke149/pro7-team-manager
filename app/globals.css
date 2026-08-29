@@ -625,7 +625,7 @@
   position: relative;
   overflow: hidden;
   background: linear-gradient(135deg, #0d0f14 0%, #151821 50%, #1d212d 100%) !important;
-  color: #fff !important;
+  color: #fff;
   border: 1px solid rgba(255,255,255,0.12) !important;
   border-radius: 18px !important;
   box-shadow: 0 20px 48px rgba(0,0,0,0.3) !important;
@@ -687,7 +687,7 @@
   position: relative;
 }
 .pro7-shell.dark .vietqr-content {
-  background: #161822;
+  background: #1b1b1e;
   color: #fff;
   border: 1px solid rgba(255,255,255,0.1);
 }

@@ -418,6 +418,177 @@ h6 {
   line-height: var(--leading-body);
 }
 
+/* Funds: communicate financial direction before brand, and keep dense rows readable. */
+.fund-balance-delta {
+  gap: var(--space-1);
+}
+
+.balance-card .fund-balance-change {
+  font-family: var(--font-numeric);
+  font-size: var(--type-body-sm);
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--weight-bold);
+  line-height: var(--leading-control);
+}
+
+.balance-card .fund-balance-change.is-positive,
+.pro7-shell.dark .balance-card .fund-balance-change.is-positive {
+  color: var(--status-win-dark-text);
+}
+
+.balance-card .fund-balance-change.is-negative,
+.pro7-shell.dark .balance-card .fund-balance-change.is-negative {
+  color: var(--status-loss-dark-text);
+}
+
+.balance-card .fund-balance-change.is-neutral {
+  color: #d4d4d8;
+}
+
+.fund-actions button {
+  min-height: 168px;
+  transition: background-color 160ms ease, border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+}
+
+.fund-action-copy {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.fund-actions button > .fund-action-copy {
+  width: auto;
+  height: auto;
+  margin: 0;
+  place-items: initial;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+}
+
+.fund-actions button.lime-action > .fund-action-copy {
+  background: transparent;
+}
+
+.fund-actions .fund-action-copy b,
+.fund-actions .fund-action-copy small,
+.fund-stats small,
+.due-row > div:nth-child(2) > span,
+.transaction > div > small {
+  font-size: var(--type-body-sm);
+  line-height: var(--leading-body);
+}
+
+.fund-actions .fund-action-copy b {
+  font-size: var(--type-control);
+  font-weight: var(--weight-semibold);
+  line-height: var(--leading-control);
+}
+
+.fund-stats span {
+  gap: var(--space-1);
+  line-height: var(--leading-control);
+}
+
+.fund-stats strong {
+  margin: 0;
+  line-height: var(--leading-tight);
+}
+
+.due-row > div:nth-child(2),
+.transaction > div {
+  gap: var(--space-1);
+}
+
+.transaction > strong.income {
+  color: var(--status-win-solid);
+}
+
+.pro7-shell.dark .transaction > strong.income {
+  color: var(--status-win-dark-text);
+}
+
+.pro7-shell.dark .vietqr-content {
+  background: #1b1b1e;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .fund-actions button:hover:not(:disabled) {
+    border-color: var(--brand-red-500);
+    box-shadow: var(--shadow-card-hover);
+    transform: translateY(-1px);
+  }
+
+  .fund-actions button.lime-action:hover:not(:disabled) {
+    background: var(--brand-red-700);
+    border-color: var(--brand-red-700);
+  }
+}
+
+.fund-actions button:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+@media (max-width: 767px) {
+  .funds-hero-grid,
+  .fund-content-grid {
+    gap: var(--space-4);
+  }
+
+  .balance-card.black-sport-card {
+    min-height: 0;
+    padding: var(--space-5) !important;
+  }
+
+  .balance-card > strong {
+    margin: var(--space-3) 0 var(--space-4);
+  }
+
+  .fund-actions {
+    gap: var(--space-2);
+  }
+
+  .fund-actions button {
+    display: grid;
+    grid-template-columns: 40px minmax(0, 1fr);
+    grid-template-rows: auto auto;
+    align-items: center;
+    min-height: 76px;
+    padding: var(--space-3) var(--space-4);
+    column-gap: var(--space-3);
+    row-gap: 0;
+  }
+
+  .fund-actions button > .fund-action-icon {
+    grid-row: 1 / span 2;
+    width: 40px;
+    height: 40px;
+    margin: 0;
+  }
+
+  .fund-action-copy {
+    grid-column: 2;
+    gap: 0;
+  }
+
+  .fund-stats article {
+    gap: var(--space-3);
+    min-height: 76px;
+    padding: var(--space-3) var(--space-4);
+  }
+
+  .due-row,
+  .transaction {
+    gap: var(--space-2);
+    padding-block: var(--space-3);
+  }
+
+  .due-row > div:nth-child(2),
+  .transaction > div {
+    min-width: 0;
+  }
+}
+
 .audit-list,
 .audit-list :is(b, small, code, span),
 .role-grid :is(p, small, code),
