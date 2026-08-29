@@ -1315,6 +1315,8 @@ body{line-height:var(--leading-body)}
 .paid,.tactics-message.success{background:var(--status-win-soft);color:var(--status-win-text)}
 .transaction>strong.income{color:var(--status-win-solid)}
 .pro7-shell.dark .paid,.pro7-shell.dark .tactics-message.success{background:var(--status-win-dark-soft);color:var(--status-win-dark-text)}
+:is(.settings-message.success,.overview-control-message.success,.news-manager-message.success,.match-message.success){background:var(--status-win-soft);color:var(--status-win-text)}
+.pro7-shell.dark :is(.settings-message.success,.overview-control-message.success,.news-manager-message.success,.match-message.success){background:var(--status-win-dark-soft);color:var(--status-win-dark-text);border-color:var(--status-win-dark-border)}
 .tactics-toolbar{align-items:center;gap:var(--space-3);padding:var(--space-4)}
 .tactics-toolbar select,.mode-toggle button{min-height:var(--control-min-size)}
 .mode-toggle{gap:var(--space-1);padding:var(--space-1)}

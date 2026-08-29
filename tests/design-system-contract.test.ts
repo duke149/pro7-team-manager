@@ -224,6 +224,24 @@ test("successful tactics and funds states stay distinct from brand and destructi
   }
 });
 
+test("success feedback uses the same semantic treatment across management modules", async () => {
+  const fixture = await loadPro7CssFixture({
+    width: 390,
+    body: '<main class="pro7-shell light"><p class="settings-message success">Đã lưu cài đặt</p><p class="overview-control-message success">Đã gửi lời nhắc</p><p class="news-manager-message success">Đã cập nhật tin</p><p class="match-message success">Đã cập nhật trận đấu</p></main><main class="pro7-shell dark"><p class="settings-message success">Đã lưu cài đặt</p><p class="overview-control-message success">Đã gửi lời nhắc</p></main>',
+  });
+  try {
+    const styles = (selector: string) => fixture.window.getComputedStyle(fixture.document.querySelector(selector)!);
+    for (const selector of [".settings-message.success", ".overview-control-message.success", ".news-manager-message.success", ".match-message.success"]) {
+      assert.equal(styles(`.pro7-shell.light ${selector}`).backgroundColor, "#dcfce7");
+      assert.equal(styles(`.pro7-shell.light ${selector}`).color, "#166534");
+    }
+    assert.equal(styles(".pro7-shell.dark .settings-message.success").color, "#86efac");
+    assert.equal(styles(".pro7-shell.dark .overview-control-message.success").color, "#86efac");
+  } finally {
+    fixture.close();
+  }
+});
+
 test("Matches and Tactics use the neutral PRO7 surface and touch rhythm", async () => {
   const [css, responsive] = await Promise.all([readFile(cssPath, "utf8"), readFile(responsivePath, "utf8")]);
   const desktop = await loadPro7CssFixture({
