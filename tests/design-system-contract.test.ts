@@ -86,6 +86,13 @@ test("phone login keeps its identity, form, and footnote in one safe scroll flow
   }
 });
 
+test("phone modals keep long forms inside the safe visual viewport", async () => {
+  const responsive = await readFile(responsivePath, "utf8");
+  assert.match(responsive, /\.modal-layer\{min-height:100svh;[^}]*safe-area-inset-top[^}]*safe-area-inset-bottom/u);
+  assert.match(responsive, /\.modal:not\(\.provision-member-modal,\.provision-result-modal\)\{max-height:calc\(100svh - 112px - env\(safe-area-inset-bottom\)\);overflow-y:auto;/u);
+  assert.match(responsive, /\.modal-head>button\{width:44px;height:44px;flex:0 0 44px\}/u);
+});
+
 test("PRO7 uses one coherent 1.25/1.5 vertical type rhythm", async () => {
   const fixture = await loadPro7CssFixture({
     width: 390,

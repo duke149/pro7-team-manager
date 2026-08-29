@@ -103,6 +103,9 @@
   .filter-row{display:flex;gap:var(--space-2);overflow-x:auto;overscroll-behavior-inline:contain;scroll-snap-type:inline proximity;scrollbar-width:thin;padding:0 var(--space-1) var(--space-2)}
   .filter-row>*{flex:0 0 auto;scroll-snap-align:start}
   .squad-filter-panel>form{bottom:calc(84px + env(safe-area-inset-bottom))}
+  .modal-layer{min-height:100svh;padding:max(14px,env(safe-area-inset-top)) max(14px,env(safe-area-inset-right)) calc(92px + env(safe-area-inset-bottom)) max(14px,env(safe-area-inset-left))}
+  .modal:not(.provision-member-modal,.provision-result-modal){max-height:calc(100svh - 112px - env(safe-area-inset-bottom));overflow-y:auto;overscroll-behavior:contain}
+  .modal-head>button{width:44px;height:44px;flex:0 0 44px}
   .modal>label,.form-two label,.squad-filter-panel label,.account-profile-fields label,.account-position-fieldset legend,.login-form label{font-size:14px}
   .modal-head p,.account-profile-heading p,.account-avatar-card p,.account-profile-fields small,.account-position-fieldset>small,.account-profile-message,.account-profile-back{font-size:12px}
   .account-profile-fields input{height:48px}
