@@ -48,7 +48,7 @@ test.after(async () => {
   }
 });
 
-function configure({ permission = "default", userAgent = "Desktop Browser", standalone = false, dismissed = false } = {}) {
+function configure({ permission = "default", userAgent = "Desktop Browser", standalone = false, dismissed = false, webPushApis = true } = {}) {
   let requested = 0;
   const requests: Array<{ url: string; init: RequestInit }> = [];
   const subscription = {
@@ -64,14 +64,22 @@ function configure({ permission = "default", userAgent = "Desktop Browser", stan
     permission,
     async requestPermission() { requested += 1; return "granted"; },
   };
-  Object.defineProperty(browserWindow, "Notification", { configurable: true, value: notification });
-  Object.defineProperty(browserWindow, "PushManager", { configurable: true, value: function PushManager() {} });
-  Object.defineProperty(globalThis, "Notification", { configurable: true, value: notification });
-  Object.defineProperty(globalThis, "PushManager", { configurable: true, value: browserWindow.PushManager });
-  Object.defineProperty(browserWindow.navigator, "serviceWorker", {
-    configurable: true,
-    value: { async register() { return { pushManager }; } },
-  });
+  if (webPushApis) {
+    Object.defineProperty(browserWindow, "Notification", { configurable: true, value: notification });
+    Object.defineProperty(browserWindow, "PushManager", { configurable: true, value: function PushManager() {} });
+    Object.defineProperty(globalThis, "Notification", { configurable: true, value: notification });
+    Object.defineProperty(globalThis, "PushManager", { configurable: true, value: browserWindow.PushManager });
+    Object.defineProperty(browserWindow.navigator, "serviceWorker", {
+      configurable: true,
+      value: { async register() { return { pushManager }; } },
+    });
+  } else {
+    Reflect.deleteProperty(browserWindow, "Notification");
+    Reflect.deleteProperty(browserWindow, "PushManager");
+    Reflect.deleteProperty(globalThis, "Notification");
+    Reflect.deleteProperty(globalThis, "PushManager");
+    Reflect.deleteProperty(browserWindow.navigator, "serviceWorker");
+  }
   Object.defineProperty(browserWindow.navigator, "userAgent", { configurable: true, value: userAgent });
   Object.defineProperty(browserWindow.navigator, "standalone", { configurable: true, value: standalone });
   Object.defineProperty(browserWindow, "matchMedia", { configurable: true, value: () => ({ matches: standalone }) });
@@ -128,6 +136,31 @@ test("dismissal persists and iOS outside standalone receives install guidance", 
   assert.doesNotMatch(guided.container.textContent ?? "", /Bật thông báo/u);
   assert.equal(ios.requested, 0);
   await act(async () => guided.root.unmount());
+});
+
+test("iOS browser without push globals receives Home Screen guidance instead of an unsupported verdict", async () => {
+  const ios = configure({
+    userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X)",
+    webPushApis: false,
+  });
+  const guided = await mount();
+  assert.match(guided.container.textContent ?? "", /Thêm PRO7 vào Màn hình chính/u);
+  assert.doesNotMatch(guided.container.textContent ?? "", /chưa hỗ trợ Web Push/u);
+  assert.equal(ios.requested, 0);
+  await act(async () => guided.root.unmount());
+});
+
+test("installed iOS without Web Push APIs receives version and reinstall guidance", async () => {
+  configure({
+    userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 15_7 like Mac OS X)",
+    standalone: true,
+    webPushApis: false,
+  });
+  const unsupported = await mount();
+  assert.match(unsupported.container.textContent ?? "", /Web Push chưa sẵn sàng trên iPhone\/iPad/u);
+  assert.match(unsupported.container.textContent ?? "", /iOS\/iPadOS 16\.4/u);
+  assert.match(unsupported.container.textContent ?? "", /xóa biểu tượng PRO7.*thêm lại/u);
+  await act(async () => unsupported.root.unmount());
 });
 
 test("denied permission shows browser-settings guidance without another prompt", async () => {

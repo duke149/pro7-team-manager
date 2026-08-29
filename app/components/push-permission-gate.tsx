@@ -11,18 +11,21 @@ type GateState =
   | "prompt"
   | "install"
   | "denied"
+  | "unsupported-ios"
   | "unsupported"
   | "busy"
   | "error"
   | "hidden";
 
-function iosOutsideStandalone(): boolean {
+function iosDevice(): boolean {
   const agent = navigator.userAgent;
-  const ios = /iPad|iPhone|iPod/u.test(agent) ||
+  return /iPad|iPhone|iPod/u.test(agent) ||
     (/Macintosh/u.test(agent) && navigator.maxTouchPoints > 1);
-  const standalone = (navigator as Navigator & { standalone?: boolean }).standalone === true ||
+}
+
+function standaloneDisplay(): boolean {
+  return (navigator as Navigator & { standalone?: boolean }).standalone === true ||
     window.matchMedia?.("(display-mode: standalone)").matches === true;
-  return ios && !standalone;
 }
 
 function supported(): boolean {
@@ -74,12 +77,17 @@ export function PushPermissionGate({ vapidPublicKey }: { vapidPublicKey?: string
         if (active) setState("hidden");
         return;
       }
-      if (!vapidPublicKey || !VAPID_PATTERN.test(vapidPublicKey) || !supported()) {
+      const ios = iosDevice();
+      if (ios && !standaloneDisplay()) {
+        if (active) setState("install");
+        return;
+      }
+      if (!vapidPublicKey || !VAPID_PATTERN.test(vapidPublicKey)) {
         if (active) setState("unsupported");
         return;
       }
-      if (iosOutsideStandalone()) {
-        if (active) setState("install");
+      if (!supported()) {
+        if (active) setState(ios ? "unsupported-ios" : "unsupported");
         return;
       }
       if (Notification.permission === "denied") {
@@ -137,19 +145,22 @@ export function PushPermissionGate({ vapidPublicKey }: { vapidPublicKey?: string
   if (state === "checking" || state === "hidden") return null;
   const install = state === "install";
   const denied = state === "denied";
-  const unsupported = state === "unsupported";
+  const unsupportedIos = state === "unsupported-ios";
+  const unsupported = state === "unsupported" || unsupportedIos;
   return (
     <aside className="push-permission-gate" aria-labelledby="push-permission-title">
       <button className="push-permission-close" type="button" aria-label="Để sau" onClick={dismiss}><X size={18} /></button>
       <span className="push-permission-icon" aria-hidden="true">{install ? <Download size={22} /> : <BellRing size={22} />}</span>
       <div>
-        <h2 id="push-permission-title">{install ? "Thêm PRO7 vào Màn hình chính" : "Nhận thông báo trận đấu"}</h2>
+        <h2 id="push-permission-title">{install ? "Thêm PRO7 vào Màn hình chính" : unsupportedIos ? "Web Push chưa sẵn sàng trên iPhone/iPad" : "Nhận thông báo trận đấu"}</h2>
         <p>
           {install
             ? "Trên iPhone/iPad, hãy chọn Chia sẻ → Thêm vào Màn hình chính, rồi mở PRO7 từ biểu tượng để bật thông báo."
             : denied
               ? "Quyền thông báo đang bị chặn. Hãy mở cài đặt trình duyệt để cho phép PRO7 gửi lời mời và lời nhắc."
-              : unsupported
+              : unsupportedIos
+                ? "Web Push cần iOS/iPadOS 16.4 trở lên và PRO7 phải mở ở chế độ ứng dụng. Sau khi cập nhật iOS, hãy xóa biểu tượng PRO7 cũ, thêm lại từ Chia sẻ → Thêm vào Màn hình chính rồi mở từ biểu tượng."
+                : unsupported
                 ? "Trình duyệt hoặc cấu hình hiện tại chưa hỗ trợ Web Push. Thông báo trong ứng dụng vẫn hoạt động."
                 : state === "error"
                   ? "Chưa thể đăng ký thiết bị. Thông báo trong ứng dụng vẫn được giữ; bạn có thể thử lại."
