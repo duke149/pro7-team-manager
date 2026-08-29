@@ -93,6 +93,12 @@ test("phone modals keep long forms inside the safe visual viewport", async () =>
   assert.match(responsive, /\.modal-head>button\{width:44px;height:44px;flex:0 0 44px\}/u);
 });
 
+test("the Web Push permission gate keeps its dismissal control touch-safe", async () => {
+  const css = await readFile(cssPath, "utf8");
+  assert.match(css, /\.push-permission-gate h2\s*\{\s*margin:\s*0 44px 4px 0;/u);
+  assert.match(css, /\.push-permission-close\s*\{[^}]*width:\s*44px;[^}]*height:\s*44px;/u);
+});
+
 test("PRO7 uses one coherent 1.25/1.5 vertical type rhythm", async () => {
   const fixture = await loadPro7CssFixture({
     width: 390,

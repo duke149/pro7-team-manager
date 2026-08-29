@@ -1379,9 +1379,9 @@ body{line-height:var(--leading-body)}
   color: #d81735;
 }
 
-.push-permission-gate h2 { margin: 0 32px 4px 0; font: 700 18px/1.25 var(--font-display); }
+.push-permission-gate h2 { margin: 0 44px 4px 0; font: 700 18px/1.25 var(--font-display); }
 .push-permission-gate p { margin: 0; color: var(--color-text-muted); font-size: 14px; line-height: 1.5; }
-.push-permission-close { position: absolute; top: 12px; right: 12px; display: grid; width: 36px; height: 36px; place-items: center; border: 0; border-radius: 10px; background: transparent; color: inherit; cursor: pointer; }
+.push-permission-close { position: absolute; top: 8px; right: 8px; display: grid; width: 44px; height: 44px; place-items: center; border: 0; border-radius: 10px; background: transparent; color: inherit; cursor: pointer; }
 .push-permission-close:hover { background: var(--surface, #f4f5f7); }
 .push-permission-enable { min-height: 44px; white-space: nowrap; }
 .push-permission-later { grid-column: 2 / 4; justify-self: end; min-height: 44px; }
