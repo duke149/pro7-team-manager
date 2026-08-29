@@ -142,7 +142,12 @@
   :is(.confirmed-body,.rsvp-card,.fixtures-card,.match-attendance-card,.match-invite-card,.tactics-match-list,.instruction-card,.bench-card){padding:var(--space-4)}
   .share-zalo-btn{width:100%;justify-content:center}
   .match-history-card{display:grid;grid-template-columns:1fr;gap:var(--space-3);padding:var(--space-4)}
-  .match-history-teams,.match-history-meta{flex-wrap:wrap}
+  .match-history-teams{flex-wrap:wrap}
+  .match-history-meta{display:grid;grid-template-columns:max-content minmax(0,1fr);align-items:center;column-gap:var(--space-3);row-gap:2px}
+  .match-history-meta .meta-sep{display:none}
+  .match-history-date{grid-column:1;grid-row:1 / span 2;align-self:start}
+  .match-history-venue{grid-column:2;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .match-history-meta .venue-tag{grid-column:2;justify-self:start}
   .match-history-actions{display:grid;grid-template-columns:1fr 1fr;width:100%;gap:var(--space-2)}
   .history-action-btn{width:100%;padding-inline:var(--space-3)}
   .tactics-toolbar{display:grid;grid-template-columns:1fr;align-items:stretch;gap:var(--space-3);padding:var(--space-4)}
