@@ -1,7 +1,8 @@
 "use client";
 
-import { FormEvent, useRef, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 
+import AvatarCropDialog from "./avatar-crop-dialog";
 import {
   AVATAR_BUCKET,
   AVATAR_MAX_BYTES,
@@ -10,6 +11,11 @@ import {
   validateAvatarFile,
   type AvatarClientDependencies,
 } from "../../../lib/account/avatar";
+import {
+  renderAvatarCropBlob,
+  type AvatarCropTransform,
+  type AvatarImageDimensions,
+} from "../../../lib/account/avatar-crop";
 import type { PreferredPosition, ProfileRecord } from "../../../lib/account/profile";
 import { createBrowserSupabaseClient } from "../../../lib/supabase/client";
 
@@ -21,6 +27,8 @@ type ApiPayload = {
   ok?: boolean;
   fieldErrors?: FieldErrors;
 };
+
+type PendingAvatarCrop = Readonly<{ file: File; previewUrl: string }>;
 
 function numberOrNull(value: string): number | null {
   return value.trim() ? Number(value) : null;
@@ -82,7 +90,13 @@ export default function ProfileForm({
   const [message, setMessage] = useState("");
   const [profilePending, setProfilePending] = useState(false);
   const [avatarPending, setAvatarPending] = useState(false);
+  const [avatarCrop, setAvatarCrop] = useState<PendingAvatarCrop | null>(null);
+  const [avatarCropError, setAvatarCropError] = useState("");
   const fileInput = useRef<HTMLInputElement>(null);
+
+  useEffect(() => () => {
+    if (avatarCrop) URL.revokeObjectURL(avatarCrop.previewUrl);
+  }, [avatarCrop]);
 
   function togglePosition(position: PreferredPosition) {
     setPreferredPositions((current) => current.includes(position)
@@ -122,33 +136,66 @@ export default function ProfileForm({
     }
   }
 
-  async function uploadAvatar(file: File) {
-    setMessage("");
+  function avatarValidationMessage(file: File): string | null {
     const validation = validateAvatarFile(file);
-    if (!validation.ok) {
-      setMessage(validation.code === "type"
-        ? "Chỉ chấp nhận ảnh JPEG, PNG hoặc WebP."
-        : validation.code === "size"
-          ? "Ảnh đại diện không được vượt quá 3 MiB."
-          : "Tệp ảnh không được để trống.");
+    if (validation.ok) return null;
+    return validation.code === "type"
+      ? "Chỉ chấp nhận ảnh JPEG, PNG hoặc WebP."
+      : validation.code === "size"
+        ? "Ảnh đại diện không được vượt quá 3 MiB."
+        : "Tệp ảnh không được để trống.";
+  }
+
+  function openAvatarCrop(file: File) {
+    setMessage("");
+    const validationMessage = avatarValidationMessage(file);
+    if (validationMessage) {
+      setMessage(validationMessage);
       return;
     }
 
+    setAvatarCropError("");
+    setAvatarCrop({ file, previewUrl: URL.createObjectURL(file) });
+    if (fileInput.current) fileInput.current.value = "";
+  }
+
+  async function confirmAvatarCrop(
+    image: HTMLImageElement,
+    dimensions: AvatarImageDimensions,
+    transform: AvatarCropTransform,
+  ) {
+    const pendingCrop = avatarCrop;
+    if (!pendingCrop) return;
+    setMessage("");
+    setAvatarCropError("");
     setAvatarPending(true);
     try {
-      const result = await replaceOwnAvatar(file, profile.avatarPath, browserAvatarDependencies());
-      if (!result.ok) {
-        setMessage(GENERIC_ERROR);
+      const croppedBlob = await renderAvatarCropBlob(image, dimensions, transform);
+      const croppedFile = new File([croppedBlob], "avatar.webp", { type: "image/webp" });
+      const validationMessage = avatarValidationMessage(croppedFile);
+      if (validationMessage) {
+        setAvatarCropError(validationMessage);
         return;
       }
+      const result = await replaceOwnAvatar(croppedFile, profile.avatarPath, browserAvatarDependencies());
+      if (!result.ok) {
+        setAvatarCropError(GENERIC_ERROR);
+        return;
+      }
+      setAvatarCrop(null);
       setMessage("Đã cập nhật ảnh đại diện.");
       window.location.reload();
     } catch {
-      setMessage(GENERIC_ERROR);
+      setAvatarCropError("Không thể xử lý ảnh này. Hãy thử một ảnh khác.");
     } finally {
       setAvatarPending(false);
-      if (fileInput.current) fileInput.current.value = "";
     }
+  }
+
+  function cancelAvatarCrop() {
+    if (avatarPending) return;
+    setAvatarCropError("");
+    setAvatarCrop(null);
   }
 
   async function removeAvatar() {
@@ -194,7 +241,7 @@ export default function ProfileForm({
               disabled={avatarPending}
               onChange={(event) => {
                 const file = event.target.files?.[0];
-                if (file) void uploadAvatar(file);
+                if (file) openAvatarCrop(file);
               }}
             />
           </label>
@@ -267,6 +314,18 @@ export default function ProfileForm({
           {profilePending ? "Đang lưu…" : "Lưu thay đổi"}
         </button>
       </form>
+      {avatarCrop && (
+        <AvatarCropDialog
+          previewUrl={avatarCrop.previewUrl}
+          fileName={avatarCrop.file.name}
+          pending={avatarPending}
+          error={avatarCropError}
+          onCancel={cancelAvatarCrop}
+          onConfirm={(image, dimensions, transform) => {
+            void confirmAvatarCrop(image, dimensions, transform);
+          }}
+        />
+      )}
     </div>
   );
 }
