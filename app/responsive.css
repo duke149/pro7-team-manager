@@ -97,6 +97,9 @@
   .search-box{grid-column:1/-1}
   .search-box input,.squad-filter-panel select,.modal :is(input,select,textarea),.login-form input,.settings-module :is(input,select),.account-profile-fields input{font-size:16px}
   .view-stack{gap:var(--space-4)}
+  /* A missing fixture is an empty state, not a full match hero. */
+  .overview-empty-card{min-height:220px;padding:var(--space-4)}
+  .match-hero:not(.overview-empty-card){min-height:330px}
   .filter-row{display:flex;gap:var(--space-2);overflow-x:auto;overscroll-behavior-inline:contain;scroll-snap-type:inline proximity;scrollbar-width:thin;padding:0 var(--space-1) var(--space-2)}
   .filter-row>*{flex:0 0 auto;scroll-snap-align:start}
   .squad-filter-panel>form{bottom:calc(84px + env(safe-area-inset-bottom))}

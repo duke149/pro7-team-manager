@@ -1308,6 +1308,13 @@ body{line-height:var(--leading-body)}
 :is(.rsvp-card,.fixtures-card,.match-attendance-card,.match-invite-card,.tactics-match-list,.instruction-card,.bench-card){padding:var(--space-5)}
 .share-zalo-btn,.history-action-btn,.formation-btn{min-height:var(--control-min-size)}
 .history-action-btn{height:auto;border-radius:var(--radius-control)}
+/* Brand red owns calls to action; confirmed attendance is a success state. */
+.rsvp-options button.active.yes,.starting-pill,.match-attendance-row>span.available{background:var(--status-win-soft);color:var(--status-win-text);border-color:var(--status-win-border)}
+.roster-progress>i b{background:var(--status-win-solid)}
+.pro7-shell.dark .rsvp-options button.active.yes,.pro7-shell.dark .starting-pill,.pro7-shell.dark .match-attendance-row>span.available{background:var(--status-win-dark-soft);color:var(--status-win-dark-text);border-color:var(--status-win-dark-border)}
+.paid,.tactics-message.success{background:var(--status-win-soft);color:var(--status-win-text)}
+.transaction>strong.income{color:var(--status-win-solid)}
+.pro7-shell.dark .paid,.pro7-shell.dark .tactics-message.success{background:var(--status-win-dark-soft);color:var(--status-win-dark-text)}
 .tactics-toolbar{align-items:center;gap:var(--space-3);padding:var(--space-4)}
 .tactics-toolbar select,.mode-toggle button{min-height:var(--control-min-size)}
 .mode-toggle{gap:var(--space-1);padding:var(--space-1)}

@@ -19,6 +19,7 @@ import { useRouter } from "next/navigation";
 import { useState, type CSSProperties, type FormEvent, type ReactNode } from "react";
 
 import { AccessibleModal } from "../../../components/accessible-modal";
+import { formatVietnamMatchDateTime, getVietnamDateTimeParts } from "../../../../lib/matches/date-time";
 import type { MatchSummary } from "../../../../lib/matches/model";
 import { parseManagedTeamNewsResponse, type ManagedTeamNewsPost } from "../../../../lib/news/model";
 import type { OverviewData, OverviewNewsPost, OverviewResult } from "../../../../lib/overview/model";
@@ -38,34 +39,17 @@ function initials(name: string | null): string {
 }
 
 function dateTime(value: string): string {
-  return new Intl.DateTimeFormat("vi-VN", {
-    weekday: "long",
-    day: "2-digit",
-    month: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    timeZone: "Asia/Ho_Chi_Minh",
-  }).format(new Date(value));
+  return formatVietnamMatchDateTime(value);
 }
 
 function fixtureDate(value: string): { day: string; month: string; time: string } {
-  const date = new Date(value);
-  return {
-    day: new Intl.DateTimeFormat("vi-VN", { day: "2-digit", timeZone: "Asia/Ho_Chi_Minh" }).format(date),
-    month: `TH${new Intl.DateTimeFormat("vi-VN", { month: "2-digit", timeZone: "Asia/Ho_Chi_Minh" }).format(date)}`,
-    time: new Intl.DateTimeFormat("vi-VN", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Ho_Chi_Minh" }).format(date),
-  };
+  const parts = getVietnamDateTimeParts(value);
+  return parts ? { day: parts.day, month: `TH${parts.month}`, time: parts.time } : { day: "—", month: "—", time: "—" };
 }
 
 function publishedTime(value: string): string {
-  return new Intl.DateTimeFormat("vi-VN", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    timeZone: "Asia/Ho_Chi_Minh",
-  }).format(new Date(value));
+  const parts = getVietnamDateTimeParts(value);
+  return parts ? `${parts.day}/${parts.month}/${parts.year} • ${parts.time}` : "THỜI GIAN KHÔNG HỢP LỆ";
 }
 
 function SectionHead({ label, title, control }: { label: string; title: string; control?: ReactNode }) {

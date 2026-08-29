@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 import {
@@ -28,4 +29,11 @@ test("match datetime-local values always round-trip through Asia/Ho_Chi_Minh", (
     "2026-09-05T19:00:00.000Z",
   );
   assert.equal(fromVietnamDateTimeInput("2026-02-31T02:00"), null);
+});
+
+test("Overview reuses deterministic Vietnam date parts instead of browser locale formatting", async () => {
+  const source = await readFile(new URL("../app/teams/[slug]/overview/overview-view.tsx", import.meta.url), "utf8");
+  assert.match(source, /getVietnamDateTimeParts/u);
+  assert.match(source, /formatVietnamMatchDateTime/u);
+  assert.doesNotMatch(source, /Intl\.DateTimeFormat/u);
 });

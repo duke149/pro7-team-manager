@@ -136,6 +136,21 @@ test("Overview and Squad use tokenized card rhythm", async () => {
   }
 });
 
+test("phone overview collapses an empty next-match hero without changing the scheduled-match layout", async () => {
+  const fixture = await loadPro7CssFixture({
+    width: 390,
+    body: '<main class="pro7-shell"><article class="match-hero dark-card overview-empty-card"><div class="overview-empty-copy">Chưa có trận</div></article><article class="match-hero dark-card">Trận sắp tới</article></main>',
+  });
+  try {
+    const styles = (selector: string) => fixture.window.getComputedStyle(fixture.document.querySelector(selector)!);
+    assert.equal(styles(".overview-empty-card").minHeight, "220px");
+    assert.equal(styles(".overview-empty-card").padding, "16px");
+    assert.equal(styles(".match-hero:not(.overview-empty-card)").minHeight, "330px");
+  } finally {
+    fixture.close();
+  }
+});
+
 test("Squad position badges stay inside the neutral and PRO7 red palette", async () => {
   const css = await readFile(cssPath, "utf8");
   assert.doesNotMatch(css, /#(?:0d9488|e6fffa|b45309|fef3c7|2dd4bf|fbbf24)\b/iu);
@@ -164,6 +179,46 @@ test("match result badges use semantic win, draw, and loss colors", async () => 
     assert.equal(styles(".pro7-shell.dark .score-board.win strong").color, "#86efac");
     assert.notEqual(styles(".form-badges .draw").backgroundColor, styles(".form-badges .win").backgroundColor);
     assert.notEqual(styles(".form-badges .loss").backgroundColor, styles(".form-badges .win").backgroundColor);
+  } finally {
+    fixture.close();
+  }
+});
+
+test("match availability communicates confirmed participation with the success palette", async () => {
+  const fixture = await loadPro7CssFixture({
+    width: 390,
+    body: '<main class="pro7-shell light"><div class="rsvp-options"><button class="active yes">Có</button></div><span class="starting-pill">Đủ 7 người</span><div class="roster-progress"><i><b></b></i></div><div class="match-attendance-row"><span class="available">Có mặt</span></div></main><main class="pro7-shell dark"><div class="rsvp-options"><button class="active yes">Có</button></div><span class="starting-pill">Đủ 7 người</span></main>',
+  });
+  try {
+    const styles = (selector: string) => fixture.window.getComputedStyle(fixture.document.querySelector(selector)!);
+    assert.equal(styles(".pro7-shell.light .rsvp-options button.active.yes").backgroundColor, "#dcfce7");
+    assert.equal(styles(".pro7-shell.light .rsvp-options button.active.yes").color, "#166534");
+    assert.equal(styles(".pro7-shell.light .starting-pill").backgroundColor, "#dcfce7");
+    assert.equal(styles(".pro7-shell.light .starting-pill").color, "#166534");
+    assert.equal(styles(".roster-progress i b").backgroundColor, "#15803d");
+    assert.equal(styles(".match-attendance-row .available").backgroundColor, "#dcfce7");
+    assert.equal(styles(".match-attendance-row .available").color, "#166534");
+    assert.equal(styles(".pro7-shell.dark .rsvp-options button.active.yes").color, "#86efac");
+    assert.equal(styles(".pro7-shell.dark .starting-pill").color, "#86efac");
+  } finally {
+    fixture.close();
+  }
+});
+
+test("successful tactics and funds states stay distinct from brand and destructive red", async () => {
+  const fixture = await loadPro7CssFixture({
+    width: 390,
+    body: '<main class="pro7-shell light"><i class="paid">Đã đóng</i><div class="transaction"><strong class="income">+500.000đ</strong></div><p class="tactics-message success">Đã lưu bản nháp</p></main><main class="pro7-shell dark"><i class="paid">Đã đóng</i><p class="tactics-message success">Đã lưu bản nháp</p></main>',
+  });
+  try {
+    const styles = (selector: string) => fixture.window.getComputedStyle(fixture.document.querySelector(selector)!);
+    assert.equal(styles(".pro7-shell.light .paid").backgroundColor, "#dcfce7");
+    assert.equal(styles(".pro7-shell.light .paid").color, "#166534");
+    assert.equal(styles(".transaction .income").color, "#15803d");
+    assert.equal(styles(".pro7-shell.light .tactics-message.success").backgroundColor, "#dcfce7");
+    assert.equal(styles(".pro7-shell.light .tactics-message.success").color, "#166534");
+    assert.equal(styles(".pro7-shell.dark .paid").color, "#86efac");
+    assert.equal(styles(".pro7-shell.dark .tactics-message.success").color, "#86efac");
   } finally {
     fixture.close();
   }
