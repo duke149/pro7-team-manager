@@ -169,6 +169,7 @@ test("Admin mobile navigation renders all five authorized routes in the hosted o
     "/teams/%C4%91%E1%BB%99i%20b%C3%B3ng/tactics",
     "/teams/%C4%91%E1%BB%99i%20b%C3%B3ng/funds",
   ]);
+  assert.match(mobile, /class="mobile-nav mobile-nav--5"/u);
   assert.match(mobile, /href="\/teams\/%C4%91%E1%BB%99i%20b%C3%B3ng\/funds" class="active"/u);
 });
 
@@ -199,4 +200,5 @@ test("hosted route navigation hides only unauthorized Funds without changing the
     "/teams/%C4%91%E1%BB%99i%20b%C3%B3ng/matches",
     "/teams/%C4%91%E1%BB%99i%20b%C3%B3ng/tactics",
   ]);
+  assert.match(mobile, /class="mobile-nav mobile-nav--4"/u);
 });

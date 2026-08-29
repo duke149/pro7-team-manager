@@ -71,8 +71,9 @@ export function Pro7RouteNavigation({
 
   if (mobile) {
     const mobileItems = items.filter((item) => item.path !== "admin/settings");
+    const mobileColumnCount = Math.min(Math.max(mobileItems.length, 1), 5);
     return (
-      <nav className="mobile-nav" aria-label="Điều hướng đội trên thiết bị di động">
+      <nav className={`mobile-nav mobile-nav--${mobileColumnCount}`} aria-label="Điều hướng đội trên thiết bị di động">
         {mobileItems.map(({ label, short, path, icon: Icon }) => {
           const href = `${prefix}/${path}`;
           return (

@@ -1227,6 +1227,7 @@
 .notification-row{display:grid;border-top:1px solid var(--line)}.notification-row:first-child{border-top:0}.notification-row>a{border-top:0!important}.notification-row.unread{background:#fff5f6}.notification-row.unread .notification-state{background:var(--accent);color:#fff}.notification-row>button{min-height:44px;margin:0 17px 12px 62px;border:1px solid var(--line);border-radius:8px;background:#fff;color:var(--accent-strong);font:inherit;font-size:12px;font-weight:800;cursor:pointer}.notification-feedback{margin:0;padding:11px 17px;border-top:1px solid var(--line);color:var(--muted);font-size:12px}.pro7-shell.dark .notification-row{border-color:#38383d}.pro7-shell.dark .notification-row.unread{background:#2f171c}.pro7-shell.dark .notification-row>button{background:#242428;color:#f4f4f5;border-color:#44444a}
 
 /* Shared geometry supplied by the PRO7 token layer. */
+*,*::before,*::after{box-sizing:border-box}
 .card,.stat-card,.player-card,.add-player-card,.pitch-card{border-radius:var(--radius-card)}
 
 /* Shared Auth/Profile interaction and surface contract. */
@@ -1295,6 +1296,8 @@ body{line-height:var(--leading-body)}
 .player-card-link{padding:var(--space-4)}
 .position-chip{background:var(--brand-red-50);color:var(--brand-red-700)}
 .role-chip{background:var(--neutral-100);color:var(--neutral-600)}
+.dot.green{background:var(--status-win-solid)}
+.dot.red{background:var(--status-loss-text)}
 .squad-filter-panel>form{z-index:var(--z-popover);padding:var(--space-4);border-radius:var(--radius-card);box-shadow:var(--shadow-overlay)}
 .dashboard-view :is(.card,.stat-card){border-color:var(--color-border);background:var(--color-surface);box-shadow:var(--shadow-card)}
 .pro7-shell.dark .dashboard-view :is(.card,.stat-card){border-color:#323236;background:#1b1b1e}

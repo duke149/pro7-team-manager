@@ -25,6 +25,11 @@ test("PRO7 design tokens resolve the bounded card system", async () => {
   }
 });
 
+test("global box sizing includes decorative pseudo-elements", async () => {
+  const css = await readFile(cssPath, "utf8");
+  assert.match(css, /\*,\*::before,\*::after\{box-sizing:border-box\}/u);
+});
+
 test("tablet shell keeps meaningful type readable at the authoritative breakpoint", async () => {
   const css = await readFile(cssPath, "utf8");
   const fixture = await loadPro7CssFixture({
@@ -55,6 +60,27 @@ test("shared controls expose target, focus, pressed, and disabled states", async
     assert.equal(fixture.window.getComputedStyle(input).fontSize, "16px");
     assert.equal(fixture.window.getComputedStyle(fixture.document.querySelector(".login-card")!).borderRadius, "16px");
     assert.equal(fixture.window.getComputedStyle(fixture.document.querySelector(".account-profile-card")!).borderRadius, "12px");
+  } finally {
+    fixture.close();
+  }
+});
+
+test("phone login keeps its identity, form, and footnote in one safe scroll flow", async () => {
+  const responsive = await readFile(responsivePath, "utf8");
+  const fixture = await loadPro7CssFixture({
+    width: 390,
+    body: '<main class="login-shell"><section class="login-card"><div class="login-brand"></div><div class="login-copy"></div><form class="login-form"></form></section><p class="login-footnote">PRO7 Team Manager</p></main>',
+  });
+  try {
+    const styles = (selector: string) => fixture.window.getComputedStyle(fixture.document.querySelector(selector)!);
+    assert.equal(styles(".login-shell").paddingLeft, "14px");
+    assert.equal(styles(".login-shell").paddingRight, "14px");
+    assert.match(responsive, /\.login-shell\{[^}]*overflow-y:auto/u);
+    assert.equal(styles(".login-card").paddingTop, "24px");
+    assert.equal(styles(".login-card").paddingRight, "20px");
+    assert.equal(styles(".login-copy").marginTop, "24px");
+    assert.equal(styles(".login-copy").marginBottom, "16px");
+    assert.equal(styles(".login-footnote").position, "static");
   } finally {
     fixture.close();
   }
@@ -119,12 +145,14 @@ test("Squad position badges stay inside the neutral and PRO7 red palette", async
 test("match result badges use semantic win, draw, and loss colors", async () => {
   const fixture = await loadPro7CssFixture({
     width: 390,
-    body: '<main class="pro7-shell light"><div class="form-badges"><b class="win">W</b><b class="draw">D</b><b class="loss">L</b></div><div class="form-strip"><span class="form-badge win">W</span></div><div class="analysis-score"><small class="analysis-outcome win">THẮNG</small><div class="score-board win"><strong>3 – 1</strong></div></div><span class="match-history-score-pill win">3–1</span><span class="match-result-pill win">THẮNG</span></main><main class="pro7-shell dark"><div class="analysis-score"><small class="analysis-outcome win">THẮNG</small><div class="score-board win"><strong>3 – 1</strong></div></div><span class="match-history-score-pill win">3–1</span><span class="match-result-pill win">THẮNG</span></main>',
+    body: '<main class="pro7-shell light"><div class="form-badges"><b class="win">W</b><b class="draw">D</b><b class="loss">L</b></div><div class="form-strip"><span class="form-badge win">W</span></div><div class="availability-breakdown"><i class="dot green"></i><i class="dot red"></i></div><div class="analysis-score"><small class="analysis-outcome win">THẮNG</small><div class="score-board win"><strong>3 – 1</strong></div></div><span class="match-history-score-pill win">3–1</span><span class="match-result-pill win">THẮNG</span></main><main class="pro7-shell dark"><div class="analysis-score"><small class="analysis-outcome win">THẮNG</small><div class="score-board win"><strong>3 – 1</strong></div></div><span class="match-history-score-pill win">3–1</span><span class="match-result-pill win">THẮNG</span></main>',
   });
   try {
     const styles = (selector: string) => fixture.window.getComputedStyle(fixture.document.querySelector(selector)!);
     assert.equal(styles(".form-badges .win").backgroundColor, "#15803d");
     assert.equal(styles(".form-badge.win").backgroundColor, "#15803d");
+    assert.equal(styles(".dot.green").backgroundColor, "#15803d");
+    assert.equal(styles(".dot.red").backgroundColor, "#a60f28");
     assert.equal(styles(".form-badges .win").color, "#ffffff");
     assert.equal(styles(".pro7-shell.light .match-history-score-pill.win").backgroundColor, "#dcfce7");
     assert.equal(styles(".pro7-shell.light .match-history-score-pill.win").color, "#166534");

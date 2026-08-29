@@ -118,7 +118,7 @@ async function stylesheetFixture() {
       <header class="app-header"><div class="header-actions"><div class="notification-center"><button class="icon-button notification">N</button></div><div class="account-menu"><button class="account-menu-trigger">A</button></div></div></header>
       <form class="login-form"><div class="password-field"><button class="password-visibility">P</button></div></form>
       <form class="squad-toolbar"><label class="search-box"><button class="search-submit">S</button><input /></label><div class="filter-row"><a href="#">GK</a></div></form>
-      <nav class="mobile-nav"><a href="#">Tổng quan</a><a href="#">Đội hình</a><a href="#">Trận</a><a href="#">Sơ đồ</a><a href="#">Quỹ</a></nav>
+      <nav class="mobile-nav mobile-nav--5"><a href="#">Tổng quan</a><a href="#">Đội hình</a><a href="#">Trận</a><a href="#">Sơ đồ</a><a href="#">Quỹ</a></nav>
       <main><form class="account-profile-fields"><label>Tên<input /></label></form></main>
     </div>`;
   return { window, rules, document: window.document };
@@ -136,7 +136,7 @@ test("phone keeps notification and fixed navigation operable with readable contr
     });
     assert.equal(value(".notification", "display"), "grid");
     assert.equal(value(".mobile-nav", "position"), "fixed");
-    assert.equal(value(".mobile-nav", "grid-template-columns"), "repeat(auto-fit,minmax(0,1fr))");
+    assert.equal(value(".mobile-nav", "grid-template-columns"), "repeat(5,minmax(0,1fr))");
     assert.equal(document.querySelectorAll(".mobile-nav a").length, 5);
     assert.ok((320 - 14) / 5 >= 44, "five Admin destinations must retain a 44px target at 320px");
     assert.equal(cascadedProperty({ rules, element: document.querySelector(".mobile-nav a")!, property: "min-height", width: 320 }), "56px");
