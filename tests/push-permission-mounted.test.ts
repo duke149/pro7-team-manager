@@ -84,7 +84,7 @@ function configure({ permission = "default", userAgent = "Desktop Browser", stan
   Object.defineProperty(browserWindow.navigator, "standalone", { configurable: true, value: standalone });
   Object.defineProperty(browserWindow, "matchMedia", { configurable: true, value: () => ({ matches: standalone }) });
   const values = new Map<string, string>();
-  if (dismissed) values.set("pro7-push-permission-dismissed:v1", "1");
+  if (dismissed) values.set("pro7-push-permission-dismissed:v2", String(Date.now() + 86400000));
   const localStorage = { getItem: (key: string) => values.get(key) ?? null, setItem: (key: string, value: string) => values.set(key, value) };
   Object.defineProperty(browserWindow, "localStorage", {
     configurable: true,

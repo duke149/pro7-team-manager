@@ -93,6 +93,7 @@ export async function renderSquadPlayerPage(arguments_: DetailPageArguments) {
       slug={context.team.slug}
       player={playerForClient}
       canManage={canMutate}
+      canEditProfile={canManage && result.player.membershipStatus === "active"}
       assignableRoles={assignableRoles}
     />
   );

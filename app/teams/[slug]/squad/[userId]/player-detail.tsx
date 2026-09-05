@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useMemo, useState, type FormEvent } from "react";
 
 import type { SquadAssignableRole, SquadPlayerDetail } from "../../../../../lib/squad/model";
+import ProfileForm from "../../../../account/profile/profile-form";
 
 type FieldErrors = Record<string, string>;
 type MutationState =
@@ -71,11 +72,13 @@ export function PlayerDetail({
   player,
   canManage,
   assignableRoles,
+  canEditProfile = false,
 }: {
   slug: string;
   player: SquadPlayerDetail;
   canManage: boolean;
   assignableRoles: readonly SquadAssignableRole[];
+  canEditProfile?: boolean;
 }) {
   const router = useRouter();
   const [roleId, setRoleId] = useState(player.role.id);
@@ -191,6 +194,10 @@ export function PlayerDetail({
           </form>
         )}
       </section>
+      {canEditProfile && <details className="card managed-player-profile">
+        <summary>Chỉnh sửa hồ sơ cá nhân & ảnh đại diện</summary>
+        <ProfileForm profile={{ id: player.userId, displayName: player.displayName, phone: player.phone, dateOfBirth: player.dateOfBirth, heightCm: player.heightCm, weightKg: player.weightKg, preferredPositions: [...player.preferredPositions], avatarPath: player.avatarPath }} email="" avatarUrl={avatarUrl} initials={initials(name)} managedTeamSlug={slug} />
+      </details>}
     </div>
   );
 }

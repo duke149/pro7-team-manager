@@ -26,14 +26,14 @@ test("notifications are bounded, own-user/team scoped, strictly parsed, and coun
   const result = await listTeamNotifications(TEAM, USER, "pro7-fc", { from: () => query } as never);
   assert.equal(result.ok, true);
   assert.equal(result.ok ? result.unreadCount : -1, 1);
-  assert.equal(result.ok ? result.notifications[0]?.targetPath : null, ROW.target_path);
+  assert.equal(result.ok ? result.notifications[0]?.targetPath : null, `/teams/pro7-fc/matches/${MATCH}/rsvp`);
   assert.deepEqual(query.calls, [
     { method: "select", args: ["id,team_id,user_id,type,source_entity,source_id,title,body,read_at,created_at"] },
     { method: "eq", args: ["team_id", TEAM] },
     { method: "eq", args: ["user_id", USER] },
     { method: "order", args: ["created_at", { ascending: false }] },
     { method: "order", args: ["id", { ascending: false }] },
-    { method: "limit", args: [21] },
+    { method: "limit", args: [20] },
   ]);
 });
 
@@ -62,7 +62,7 @@ test("notifications derive the current team route instead of trusting a stale st
   assert.equal(result.ok, true);
   assert.equal(
     result.ok ? result.notifications[0]?.targetPath : null,
-    `/teams/nat-fc/matches/${MATCH}`,
+    `/teams/nat-fc/matches/${MATCH}/rsvp`,
   );
 });
 

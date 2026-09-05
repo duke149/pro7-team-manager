@@ -3,7 +3,7 @@
 import { BellRing, Download, X } from "lucide-react";
 import { useEffect, useState } from "react";
 
-const DISMISS_KEY = "pro7-push-permission-dismissed:v1";
+const DISMISS_KEY = "pro7-push-permission-dismissed:v2";
 const VAPID_PATTERN = /^[A-Za-z0-9_-]{40,200}$/u;
 
 type GateState =
@@ -73,7 +73,7 @@ export function PushPermissionGate({ vapidPublicKey }: { vapidPublicKey?: string
   useEffect(() => {
     let active = true;
     async function inspect() {
-      if (window.localStorage.getItem(DISMISS_KEY) === "1") {
+      if (Number(window.localStorage.getItem(DISMISS_KEY)) > Date.now()) {
         if (active) setState("hidden");
         return;
       }
@@ -109,11 +109,16 @@ export function PushPermissionGate({ vapidPublicKey }: { vapidPublicKey?: string
       if (active) setState("prompt");
     }
     void inspect();
-    return () => { active = false; };
+    const reopen = () => {
+      window.localStorage.removeItem(DISMISS_KEY);
+      void inspect();
+    };
+    window.addEventListener("pro7:configure-push", reopen);
+    return () => { active = false; window.removeEventListener("pro7:configure-push", reopen); };
   }, [vapidPublicKey]);
 
   function dismiss() {
-    window.localStorage.setItem(DISMISS_KEY, "1");
+    window.localStorage.setItem(DISMISS_KEY, String(Date.now() + 24 * 60 * 60 * 1000));
     setState("hidden");
   }
 

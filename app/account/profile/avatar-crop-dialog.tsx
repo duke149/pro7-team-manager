@@ -37,6 +37,7 @@ export default function AvatarCropDialog({ previewUrl, fileName, pending = false
   const [dimensions, setDimensions] = useState<AvatarImageDimensions | null>(null);
   const [transform, setTransform] = useState<AvatarCropTransform>(INITIAL_TRANSFORM);
   const [error, setError] = useState("");
+  const [rotatedUrl, setRotatedUrl] = useState<string | null>(null);
   const frameRef = useRef<HTMLDivElement>(null);
   const imageRef = useRef<HTMLImageElement>(null);
   const drag = useRef<DragState | null>(null);
@@ -91,6 +92,28 @@ export default function AvatarCropDialog({ previewUrl, fileName, pending = false
   const previewStyle = dimensions ? avatarCropPreviewStyle(dimensions, transform) : undefined;
   const ready = Boolean(dimensions);
   const errorMessage = error || externalError;
+  const panLimits = dimensions ? clampAvatarCropTransform(dimensions, { ...transform, panX: 100, panY: 100 }) : INITIAL_TRANSFORM;
+
+  function rotateImage() {
+    const image = imageRef.current;
+    if (!image || !dimensions || pending) return;
+    try {
+      const canvas = document.createElement("canvas");
+      canvas.width = image.naturalHeight;
+      canvas.height = image.naturalWidth;
+      const context = canvas.getContext("2d");
+      if (!context) throw new Error("Canvas unavailable");
+      context.translate(canvas.width, 0);
+      context.rotate(Math.PI / 2);
+      context.drawImage(image, 0, 0);
+      const url = canvas.toDataURL("image/png");
+      if (url === "data:,") throw new Error("Canvas too large");
+      setDimensions(null);
+      setRotatedUrl(url);
+    } catch {
+      setError("Không thể xoay ảnh này. Hãy chọn ảnh có kích thước nhỏ hơn.");
+    }
+  }
 
   return (
     <div className="account-avatar-crop-layer" role="presentation">
@@ -102,7 +125,7 @@ export default function AvatarCropDialog({ previewUrl, fileName, pending = false
           </div>
           <button className="account-avatar-crop-close" type="button" onClick={onCancel} disabled={pending} aria-label="Đóng căn chỉnh ảnh">×</button>
         </div>
-        <p id="avatar-crop-help">Kéo ảnh để đổi vị trí, rồi phóng to hoặc thu nhỏ để khung tròn hiển thị đúng khuôn mặt.</p>
+        <p id="avatar-crop-help">Kéo ảnh hoặc dùng thanh căn ngang/dọc. Vòng tròn là vùng avatar hiển thị sau khi lưu. Phóng to để có thêm khoảng kéo ảnh.</p>
         <div
           ref={frameRef}
           className="account-avatar-crop-frame"
@@ -118,7 +141,7 @@ export default function AvatarCropDialog({ previewUrl, fileName, pending = false
           <img
             ref={imageRef}
             className="account-avatar-crop-image"
-            src={previewUrl}
+            src={rotatedUrl ?? previewUrl}
             alt="Ảnh đang được căn chỉnh"
             draggable={false}
             onLoad={handleLoad}
@@ -141,10 +164,18 @@ export default function AvatarCropDialog({ previewUrl, fileName, pending = false
           />
           <output>{Math.round(transform.zoom * 100)}%</output>
         </label>
+        {([['panX', 'Căn ngang', 'avatarPanX'], ['panY', 'Căn dọc', 'avatarPanY']] as const).map(([axis, label, name]) => (
+          <label className="account-avatar-crop-zoom" key={axis}>
+            <span>{label}</span>
+            <input name={name} type="range" min={-panLimits[axis]} max={panLimits[axis]} step="0.01" value={transform[axis]} disabled={!dimensions || pending || panLimits[axis] === 0} onChange={event => setSafeTransform({ ...transform, [axis]: Number(event.target.value) })} />
+            <output>{Math.round(transform[axis] * 100)}%</output>
+          </label>
+        ))}
+        <button className="soft-button" type="button" onClick={rotateImage} disabled={!ready || pending}>Xoay 90°</button>
         <p className="account-avatar-crop-file">{fileName}</p>
         {errorMessage && <p className="account-avatar-crop-error" role="alert">{errorMessage}</p>}
         <div className="account-avatar-crop-actions">
-          <button className="soft-button" type="button" onClick={() => setSafeTransform(INITIAL_TRANSFORM)} disabled={!dimensions || pending}>Đặt lại</button>
+          <button className="soft-button" type="button" onClick={() => { setSafeTransform(INITIAL_TRANSFORM); if (rotatedUrl) { setDimensions(null); setRotatedUrl(null); } }} disabled={!dimensions || pending}>Đặt lại</button>
           <button className="soft-button" type="button" onClick={onCancel} disabled={pending}>Hủy</button>
           <button
             className="primary-button"

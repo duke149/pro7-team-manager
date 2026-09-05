@@ -37,6 +37,21 @@ async function mount() {
   return { container, root };
 }
 
+test("copy URL remains usable while native sharing is pending", async () => {
+  Object.defineProperty(browserWindow.navigator, "share", { configurable: true, value: () => new Promise(() => {}) });
+  const writes: string[] = [];
+  Object.defineProperty(browserWindow.navigator, "clipboard", { configurable: true, value: { writeText: async (value: string) => { writes.push(value); } } });
+  const view = await mount();
+  await act(async () => { view.container.querySelector<HTMLButtonElement>('button[aria-label="Chia sẻ lời mời trận đấu"]')!.click(); });
+  const copy = view.container.querySelector<HTMLButtonElement>('button[aria-label="Sao chép link lời mời"]');
+  assert.ok(copy, "Independent copy action must be available");
+  assert.equal(copy.disabled, false);
+  await act(async () => { copy.click(); });
+  assert.equal(writes[0], `https://pro7.example/teams/nat-fc/matches/${MATCH_ID}/rsvp`);
+  assert.equal(view.container.querySelector<HTMLInputElement>('input[readonly]')?.value, writes[0]);
+  await act(async () => view.root.unmount());
+});
+
 test("share control uses the native share sheet with the one generic RSVP URL", async () => {
   const calls: ShareData[] = [];
   Object.defineProperty(browserWindow.navigator, "share", { configurable: true, value: async (payload: ShareData) => { calls.push(payload); } });

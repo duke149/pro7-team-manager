@@ -70,6 +70,49 @@ after(async () => {
   await rm(clusterPath, { recursive: true, force: true });
 });
 
+test("admin profile writes are limited to active teammates and audited", () => {
+  const runAs = (actor, sql) => psql(["-c", `begin; set local role authenticated; set local "request.jwt.claim.sub"='${actor}'; ${sql} commit;`]);
+  runAs(OWNER, `update public.profiles set display_name='QA edited', height_cm=178 where id='${MEMBER}';`);
+  assert.equal(psql(["-c", `select display_name from public.profiles where id='${MEMBER}'`]).stdout.trim(), 'QA edited');
+  assert.equal(psql(["-c", `select count(*) from private.audit_events where table_name='profiles' and actor_user_id='${OWNER}' and team_id='${TEAM}'`]).stdout.trim(), '1');
+  runAs(MEMBER, `update public.profiles set display_name='forged' where id='${OWNER}';`);
+  assert.notEqual(psql(["-c", `select display_name from public.profiles where id='${OWNER}'`]).stdout.trim(), 'forged');
+  psql(["-c", `update public.memberships set status='inactive' where team_id='${TEAM}' and user_id='${MEMBER}'`]);
+  runAs(OWNER, `update public.profiles set display_name='inactive write' where id='${MEMBER}';`);
+  assert.equal(psql(["-c", `select display_name from public.profiles where id='${MEMBER}'`]).stdout.trim(), 'QA edited');
+  psql(["-c", `update public.memberships set status='active' where team_id='${TEAM}' and user_id='${MEMBER}'`]);
+  const outsider = '92000000-0000-4000-8000-000000000099';
+  psql(["-c", `insert into auth.users(id,email) values('${outsider}','outside@example.com'); grant usage on schema storage to authenticated; grant select,insert,update,delete on storage.objects to authenticated;`]);
+  runAs(OWNER, `update public.profiles set display_name='outside write' where id='${outsider}'; insert into storage.objects(bucket_id,name) values('player-avatars','${MEMBER}/avatar.webp'); update storage.objects set name='${MEMBER}/avatar.png' where name='${MEMBER}/avatar.webp';`);
+  assert.notEqual(psql(["-c", `select display_name from public.profiles where id='${outsider}'`]).stdout.trim(), 'outside write');
+  const denied = psql(["-c", `begin;set local role authenticated;set local "request.jwt.claim.sub"='${OWNER}';insert into storage.objects(bucket_id,name) values('player-avatars','${outsider}/avatar.webp');commit;`], {allowFailure:true});
+  assert.notEqual(denied.status, 0);
+  runAs(OWNER, `delete from storage.objects where name='${MEMBER}/avatar.png';`);
+  assert.equal(psql(["-c", `select count(*) from storage.objects where name='${MEMBER}/avatar.png'`]).stdout.trim(), '0');
+});
+
+test("manual due confirmation creates income once and correction restores pending without losing audit", () => {
+  const asOwner = (sql, options = {}) => psql(["-c", `begin; set local role authenticated; set local "request.jwt.claim.sub" = '${OWNER}'; ${sql} commit;`], options);
+  const due = asOwner(`select public.manage_member_due('create', '${TEAM}', null, '${MEMBER}', date_trunc('month', current_date)::date, 100000, current_date + 10, null, null);`).stdout.trim();
+  const token = psql(["-c", `select updated_at from public.member_dues where id='${due}'`]).stdout.trim();
+  const pay = `select public.manage_member_due('pay', '${TEAM}', '${due}', null, null, null, null, null, '${token}'::timestamptz);`;
+  asOwner(pay);
+  const row = JSON.parse(psql(["-c", `select row_to_json(t) from (select d.status, e.amount_vnd, e.direction, e.description from public.member_dues d join public.finance_entries e on e.id=d.finance_entry_id where d.id='${due}') t`]).stdout.trim());
+  assert.equal(row.status, "paid"); assert.equal(row.amount_vnd, 100000); assert.equal(row.direction, "income");
+  assert.match(row.description, /^Đóng quỹ tháng \d{2}\/\d{4}$/u);
+  const retry = asOwner(pay, { allowFailure: true });
+  assert.notEqual(retry.status, 0);
+  assert.match(retry.stderr, /changed|Only pending dues/iu);
+  assert.equal(psql(["-c", `select count(*) from public.finance_entries where team_id='${TEAM}' and category='member_due'`]).stdout.trim(), "1");
+  const memberAttempt = psql(["-c", `begin; set local role authenticated; set local "request.jwt.claim.sub"='${MEMBER}'; ${pay} commit;`], { allowFailure: true });
+  assert.notEqual(memberAttempt.status, 0); assert.match(memberAttempt.stderr, /Finance management permission required/iu);
+  const paidToken = psql(["-c", `select updated_at from public.member_dues where id='${due}'`]).stdout.trim();
+  asOwner(`select public.manage_member_due('void_payment', '${TEAM}', '${due}', null, null, null, null, 'QA correction', '${paidToken}'::timestamptz);`);
+  assert.equal(psql(["-c", `select status from public.member_dues where id='${due}'`]).stdout.trim(), "pending");
+  assert.equal(psql(["-c", `select coalesce(sum(amount_vnd),0) from public.finance_entries where team_id='${TEAM}' and voided_at is null`]).stdout.trim(), "0");
+  assert.equal(psql(["-c", `select count(*) from private.audit_events where team_id='${TEAM}' and table_name='member_dues' and new_data->>'operation'='void_payment'`]).stdout.trim(), "1");
+});
+
 test("settings RPC merges a section and preserves notifications and future keys", () => {
   const token = psql(["-c", `select updated_at from public.team_settings where team_id = '${TEAM}'`]).stdout.trim();
   const output = psql(["-c", String.raw`

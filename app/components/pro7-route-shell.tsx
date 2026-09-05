@@ -60,6 +60,7 @@ export function Pro7RouteShell({
         permissions={permissions}
         currentPath={pathname}
         menuOpen={menuOpen}
+        onNavigate={(href) => router.push(href)}
         onCloseMenu={() => setMenuOpen(false)}
       />
       <div className="app-main">
@@ -90,6 +91,7 @@ export function Pro7RouteShell({
         permissions={permissions}
         currentPath={pathname}
         mobile
+        onNavigate={(href) => router.push(href)}
       />
       <PushPermissionGate vapidPublicKey={vapidPublicKey} />
     </div>

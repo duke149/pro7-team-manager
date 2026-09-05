@@ -91,6 +91,7 @@ export function NotificationCenter({ initialNotifications, markReadTimeoutMs = M
   }
 
   async function openNotification(event: ReactMouseEvent<HTMLAnchorElement>, notification: TeamNotification) {
+    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
     if (notification.readAt) return;
     event.preventDefault();
     await markRead(notification);
@@ -102,6 +103,11 @@ export function NotificationCenter({ initialNotifications, markReadTimeoutMs = M
     {open && <section className="notification-popover" aria-label="Danh sách thông báo">
       <header><div><span>TRUNG TÂM THÔNG BÁO</span><h2>Thông báo</h2></div><button ref={closeRef} type="button" aria-label="Đóng thông báo" onClick={() => { setOpen(false); triggerRef.current?.focus(); }}><X size={18} /></button></header>
       {notifications.length === 0 ? <p className="notification-empty">Bạn chưa có thông báo.</p> : <div className="notification-list">{notifications.map((notification) => <div className={`notification-row ${notification.readAt ? "read" : "unread"}`} key={notification.id}><a href={notification.targetPath} onClick={(event) => void openNotification(event, notification)}><span className="notification-state">{notification.readAt ? <Check size={15} /> : <Bell size={15} />}</span><span><b>{notification.title}</b><small>{notification.body}</small><time>{date(notification.createdAt)}</time></span></a>{!notification.readAt && <button type="button" disabled={pendingIds.has(notification.id)} onClick={() => void markRead(notification)}>{pendingIds.has(notification.id) ? "Đang cập nhật…" : "Đánh dấu đã đọc"}</button>}</div>)}</div>}
+      <footer className="notification-tools">
+        {unread > 0 && <button className="soft-button" type="button" disabled={pendingIds.size > 0} onClick={() => void Promise.all(notifications.filter((item) => !item.readAt).map(markRead))}>Đánh dấu tất cả đã đọc</button>}
+        <button className="soft-button" type="button" onClick={() => { setOpen(false); window.dispatchEvent(new Event("pro7:configure-push")); }}>Cài đặt thông báo thiết bị</button>
+        <small>Hiển thị tối đa 20 thông báo gần nhất.</small>
+      </footer>
       {message && <p className="notification-feedback" role="status">{message}</p>}
     </section>}
   </div>;

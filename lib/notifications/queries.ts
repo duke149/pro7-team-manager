@@ -26,11 +26,11 @@ export async function listTeamNotifications(teamId: string, userId: string, slug
     const result = await supabase.from("notifications")
       .select("id,team_id,user_id,type,source_entity,source_id,title,body,read_at,created_at")
       .eq("team_id", teamId).eq("user_id", userId)
-      .order("created_at", { ascending: false }).order("id", { ascending: false }).limit(LIMIT + 1);
+      .order("created_at", { ascending: false }).order("id", { ascending: false }).limit(LIMIT);
     if (result.error || !Array.isArray(result.data) || result.data.length > LIMIT || !result.data.every((value: unknown) => row(value, teamId, userId))) return { ok: false, error: "server" };
     const rows = result.data as unknown as Row[];
     if (new Set(rows.map(({ id }) => id)).size !== rows.length) return { ok: false, error: "server" };
-    const notifications: TeamNotification[] = rows.map((value) => Object.freeze({ id: value.id, type: value.type, sourceId: value.source_id, title: value.title, body: value.body, targetPath: `/teams/${encodeURIComponent(slug)}/matches/${value.source_id}`, readAt: value.read_at, createdAt: value.created_at }));
+    const notifications: TeamNotification[] = rows.map((value) => Object.freeze({ id: value.id, type: value.type, sourceId: value.source_id, title: value.title, body: value.body, targetPath: `/teams/${encodeURIComponent(slug)}/matches/${value.source_id}/rsvp`, readAt: value.read_at, createdAt: value.created_at }));
     return { ok: true, notifications: Object.freeze(notifications), unreadCount: notifications.filter(({ readAt }) => readAt === null).length };
   } catch { return { ok: false, error: "server" }; }
 }

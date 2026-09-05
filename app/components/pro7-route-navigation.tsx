@@ -23,6 +23,7 @@ type RouteNavigationProps = {
   menuOpen?: boolean;
   onCloseMenu?: () => void;
   mobile?: boolean;
+  onNavigate?: (href: string) => void;
 };
 
 const navigationItems = [
@@ -65,6 +66,7 @@ export function Pro7RouteNavigation({
   menuOpen = false,
   onCloseMenu,
   mobile = false,
+  onNavigate,
 }: RouteNavigationProps) {
   const prefix = `/teams/${encodeURIComponent(team.slug)}`;
   const items = navigationItems.filter((item) => hasPermission({ permissions }, item.permission));
@@ -77,10 +79,9 @@ export function Pro7RouteNavigation({
         {mobileItems.map(({ label, short, path, icon: Icon }) => {
           const href = `${prefix}/${path}`;
           return (
-            <a key={path} href={href} className={isCurrentPath(currentPath, href) ? "active" : undefined}>
+            <a key={path} href={href} aria-label={label} aria-current={isCurrentPath(currentPath, href) ? "page" : undefined} className={isCurrentPath(currentPath, href) ? "active" : undefined} onClick={(event) => { if (onNavigate && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey && event.button === 0) { event.preventDefault(); onNavigate(href); } }}>
               <Icon size={20} />
               <span>{short}</span>
-              <span className="sr-only">{label}</span>
             </a>
           );
         })}
@@ -110,7 +111,7 @@ export function Pro7RouteNavigation({
           <span className="nav-label">QUẢN LÝ</span>
           {items.map(({ label, path, icon: Icon }) => {
             const href = `${prefix}/${path}`;
-            return <a key={path} href={href} className={isCurrentPath(currentPath, href) ? "active" : undefined} onClick={onCloseMenu}><Icon size={19} /><span>{label}</span></a>;
+            return <a key={path} href={href} aria-current={isCurrentPath(currentPath, href) ? "page" : undefined} className={isCurrentPath(currentPath, href) ? "active" : undefined} onClick={(event) => { onCloseMenu?.(); if (onNavigate && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey && event.button === 0) { event.preventDefault(); onNavigate(href); } }}><Icon size={19} /><span>{label}</span></a>;
           })}
         </nav>
         <div className="season-card"><Trophy size={17} /><div><b>Premier 7s</b><span>Hạng 2 • Vòng 8/18</span></div><strong>#2</strong></div>

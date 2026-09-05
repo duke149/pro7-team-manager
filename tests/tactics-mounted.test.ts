@@ -104,11 +104,11 @@ test("formation changes apply the literal seven-slot role and coordinate templat
   const setter = Object.getOwnPropertyDescriptor(browserWindow.HTMLSelectElement.prototype, "value")?.set; assert.ok(setter);
   await act(async () => { setter.call(select, "3-2-1"); select.dispatchEvent(new browserWindow.Event("change", { bubbles: true })); });
   const starters = [...view.container.querySelectorAll<HTMLButtonElement>(".pitch-player")];
-  assert.deepEqual(starters.map((button) => [button.textContent?.match(/• (GK|DEF|MID|ATT)/u)?.[1], button.style.left, button.style.top]), [
+  assert.deepEqual(starters.map((button) => [button.querySelector("small")?.textContent, button.style.left, button.style.top]), [
     ["GK", "50%", "90%"], ["DEF", "22%", "69%"], ["DEF", "50%", "73%"], ["DEF", "78%", "69%"],
     ["MID", "35%", "43%"], ["MID", "65%", "43%"], ["ATT", "50%", "18%"],
   ]);
-  assert.match(starters[0].textContent ?? "", /Cầu thủ 1/u);
+  assert.match(starters[0].getAttribute("aria-label") ?? "", /Cầu thủ 1/u);
   assert.equal(select.querySelector('option[value="3-2-1"]')?.getAttribute("aria-selected"), "true");
   await act(async () => view.root.unmount());
 });
@@ -123,7 +123,7 @@ test("keyboard selection swaps a starter with the bench and persists exactly sev
   const starterName = starter.textContent; const benchName = substitute.textContent;
   await act(async () => { starter.dispatchEvent(new browserWindow.KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true })); });
   await act(async () => { substitute.dispatchEvent(new browserWindow.KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true })); });
-  assert.equal([...view.container.querySelectorAll(".pitch-player")].some((button) => button.textContent?.includes("Cầu thủ 8")), true);
+  assert.equal([...view.container.querySelectorAll(".pitch-player")].some((button) => button.getAttribute("aria-label")?.includes("Cầu thủ 8,")), true);
   assert.equal([...view.container.querySelectorAll(".bench-player")].some((button) => button.textContent?.includes("Cầu thủ 2")), true);
   assert.notEqual(benchName, starterName);
   const save = [...view.container.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.includes("Lưu bản nháp")); assert.ok(save);
@@ -167,15 +167,15 @@ test("pointer drop swaps bench to starter and starter back to bench", async () =
     bench.dispatchEvent(new browserWindow.PointerEvent("pointerdown", { bubbles: true, pointerId: 11, clientX: 5, clientY: 5 }));
     bench.dispatchEvent(new browserWindow.PointerEvent("pointerup", { bubbles: true, pointerId: 11, clientX: 20, clientY: 20 }));
   });
-  assert.equal([...view.container.querySelectorAll(".pitch-player")].some((button) => button.textContent?.includes("Cầu thủ 8")), true);
-  starter = [...view.container.querySelectorAll<HTMLButtonElement>('.pitch-player')].find((button) => button.textContent?.includes("Cầu thủ 8")) ?? null;
+  assert.equal([...view.container.querySelectorAll(".pitch-player")].some((button) => button.getAttribute("aria-label")?.includes("Cầu thủ 8,")), true);
+  starter = [...view.container.querySelectorAll<HTMLButtonElement>('.pitch-player')].find((button) => button.getAttribute("aria-label")?.includes("Cầu thủ 8,")) ?? null;
   bench = [...view.container.querySelectorAll<HTMLButtonElement>('.bench-player')].find((button) => button.textContent?.includes("Cầu thủ 2")) ?? null;
   assert.ok(starter); assert.ok(bench); dropTarget = bench;
   await act(async () => {
     starter.dispatchEvent(new browserWindow.PointerEvent("pointerdown", { bubbles: true, pointerId: 12, clientX: 20, clientY: 20 }));
     starter.dispatchEvent(new browserWindow.PointerEvent("pointerup", { bubbles: true, pointerId: 12, clientX: 5, clientY: 5 }));
   });
-  assert.equal([...view.container.querySelectorAll(".pitch-player")].some((button) => button.textContent?.includes("Cầu thủ 2")), true);
+  assert.equal([...view.container.querySelectorAll(".pitch-player")].some((button) => button.getAttribute("aria-label")?.includes("Cầu thủ 2,")), true);
   assert.equal([...view.container.querySelectorAll(".bench-player")].some((button) => button.textContent?.includes("Cầu thủ 8")), true);
   await act(async () => view.root.unmount());
 });

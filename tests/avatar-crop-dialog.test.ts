@@ -96,6 +96,15 @@ test("avatar crop dialog waits for a decoded source, then returns the chosen zoo
   const zoom = view.container.querySelector<HTMLInputElement>('input[name="avatarZoom"]');
   assert.ok(zoom);
   await act(async () => setValue(zoom, "2"));
+  const horizontal = view.container.querySelector<HTMLInputElement>('input[name="avatarPanX"]');
+  assert.ok(horizontal, "Keyboard-accessible horizontal crop control");
+  await act(async () => setValue(horizontal, "0.2"));
+  assert.equal(image.style.left, "70%");
+  const vertical = view.container.querySelector<HTMLInputElement>('input[name="avatarPanY"]');
+  assert.ok(vertical);
+  await act(async () => setValue(vertical, "0.1"));
+  assert.equal(image.style.top, "60%");
+  assert.ok([...view.container.querySelectorAll('button')].find(button => button.textContent === 'Xoay 90°'));
   await act(async () => save.click());
   assert.deepEqual(view.calls, [{ width: 1200, height: 800, zoom: 2 }]);
   await act(async () => view.root.unmount());

@@ -34,9 +34,9 @@ function numberOrNull(value: string): number | null {
   return value.trim() ? Number(value) : null;
 }
 
-async function persistAvatarPath(path: string | null): Promise<{ ok: boolean }> {
+async function persistAvatarPath(path: string | null, endpoint = "/api/account/profile"): Promise<{ ok: boolean }> {
   try {
-    const response = await fetch("/api/account/profile", {
+    const response = await fetch(endpoint, {
       method: "PATCH",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ avatarPath: path }),
@@ -47,13 +47,14 @@ async function persistAvatarPath(path: string | null): Promise<{ ok: boolean }> 
   }
 }
 
-function browserAvatarDependencies(): AvatarClientDependencies {
+function browserAvatarDependencies(endpoint = "/api/account/profile", managedUserId?: string): AvatarClientDependencies {
   const supabase = createBrowserSupabaseClient();
   const bucket = supabase.storage.from(AVATAR_BUCKET);
   return {
     async getCurrentUser() {
       const { data, error } = await supabase.auth.getUser();
-      return error || !data.user ? null : { id: data.user.id };
+      // Storage RLS independently verifies the manager and target membership.
+      return error || !data.user ? null : { id: managedUserId ?? data.user.id };
     },
     async upload(path, file, options) {
       const { error } = await bucket.upload(path, file as File, options);
@@ -63,7 +64,7 @@ function browserAvatarDependencies(): AvatarClientDependencies {
       const { error } = await bucket.remove(paths);
       return error ? { ok: false } : { ok: true };
     },
-    persistAvatarPath,
+    persistAvatarPath: path => persistAvatarPath(path, endpoint),
   };
 }
 
@@ -72,12 +73,15 @@ export default function ProfileForm({
   email,
   avatarUrl,
   initials,
+  managedTeamSlug,
 }: {
   profile: ProfileRecord;
   email: string;
   avatarUrl: string | null;
   initials: string;
+  managedTeamSlug?: string;
 }) {
+  const endpoint = managedTeamSlug ? `/api/teams/${encodeURIComponent(managedTeamSlug)}/players/${encodeURIComponent(profile.id)}/profile` : "/api/account/profile";
   const [displayName, setDisplayName] = useState(profile.displayName ?? "");
   const [phone, setPhone] = useState(profile.phone ?? "");
   const [dateOfBirth, setDateOfBirth] = useState(profile.dateOfBirth ?? "");
@@ -110,7 +114,7 @@ export default function ProfileForm({
     setFieldErrors({});
     setProfilePending(true);
     try {
-      const response = await fetch("/api/account/profile", {
+      const response = await fetch(endpoint, {
         method: "PATCH",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
@@ -129,6 +133,7 @@ export default function ProfileForm({
         return;
       }
       setMessage("Đã lưu hồ sơ cá nhân.");
+      if (managedTeamSlug) window.location.reload();
     } catch {
       setMessage(GENERIC_ERROR);
     } finally {
@@ -177,7 +182,7 @@ export default function ProfileForm({
         setAvatarCropError(validationMessage);
         return;
       }
-      const result = await replaceOwnAvatar(croppedFile, profile.avatarPath, browserAvatarDependencies());
+      const result = await replaceOwnAvatar(croppedFile, profile.avatarPath, browserAvatarDependencies(endpoint, managedTeamSlug ? profile.id : undefined));
       if (!result.ok) {
         setAvatarCropError(GENERIC_ERROR);
         return;
@@ -202,7 +207,7 @@ export default function ProfileForm({
     setMessage("");
     setAvatarPending(true);
     try {
-      const result = await removeOwnAvatar(profile.avatarPath, browserAvatarDependencies());
+      const result = await removeOwnAvatar(profile.avatarPath, browserAvatarDependencies(endpoint, managedTeamSlug ? profile.id : undefined));
       if (!result.ok) {
         setMessage(GENERIC_ERROR);
         return;
@@ -256,7 +261,8 @@ export default function ProfileForm({
       <form className="account-profile-card account-profile-form" onSubmit={saveProfile} aria-busy={profilePending}>
         <div className="account-profile-section-title">
           <span>THÔNG TIN CÁ NHÂN</span>
-          <h2>Thông tin của bạn</h2>
+          <h2>{managedTeamSlug ? "Chỉnh sửa hồ sơ cầu thủ" : "Thông tin của bạn"}</h2>
+          {managedTeamSlug && <p>Hồ sơ này dùng chung giữa các đội của cầu thủ. Thay đổi được ghi nhật ký; không thay đổi tài khoản đăng nhập.</p>}
         </div>
         <div className="account-profile-fields">
           <label>
@@ -264,10 +270,10 @@ export default function ProfileForm({
             <input name="displayName" value={displayName} maxLength={100} onChange={(event) => setDisplayName(event.target.value)} aria-invalid={Boolean(fieldErrors.displayName)} />
             {fieldErrors.displayName && <small role="alert">{fieldErrors.displayName}</small>}
           </label>
-          <label>
+          {!managedTeamSlug && <label>
             Email
             <input value={email} readOnly disabled />
-          </label>
+          </label>}
           <label>
             Số điện thoại
             <input name="phone" type="tel" value={phone} maxLength={30} onChange={(event) => setPhone(event.target.value)} aria-invalid={Boolean(fieldErrors.phone)} />

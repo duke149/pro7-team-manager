@@ -87,3 +87,14 @@ test("web push pre-apply artifact executes against the controlled applied Postgr
   assert.equal(value.prospective_objects.length, 7);
   assert.equal(value.notification_settings_anomalies, 0);
 });
+
+test("push cleanup lookups have usable indexes without granting private table access", () => {
+  for (const [table, predicate] of [
+    ["push_deliveries", "subscription_id = '00000000-0000-4000-8000-000000000001'::uuid"],
+    ["push_outbox", "notification_id = '00000000-0000-4000-8000-000000000001'::uuid and user_id = '00000000-0000-4000-8000-000000000002'::uuid"],
+  ]) {
+    const plan = psql(["-c", `set enable_seqscan=off; explain select id from private.${table} where ${predicate}`]).stdout;
+    assert.match(plan, /Index (Only )?Scan|Bitmap Index Scan/u, `${table} lookup needs an index path`);
+    assert.equal(psql(["-c", `select has_table_privilege('authenticated', 'private.${table}', 'SELECT')`]).stdout.trim(), "f");
+  }
+});

@@ -146,7 +146,7 @@ test("hosted route navigation preserves the five-slot Squad order with route lin
     "/teams/%C4%91%E1%BB%99i%20b%C3%B3ng/funds",
   ]);
   assert.match(html, /TEAM MANAGER/u);
-  assert.match(html, /href="\/teams\/%C4%91%E1%BB%99i%20b%C3%B3ng\/squad" class="active"/u);
+  assert.match(html, /href="\/teams\/%C4%91%E1%BB%99i%20b%C3%B3ng\/squad" aria-current="page" class="active"/u);
   assert.doesNotMatch(html, /href="\/account\/profile"/u);
 });
 
@@ -170,7 +170,7 @@ test("Admin mobile navigation renders all five authorized routes in the hosted o
     "/teams/%C4%91%E1%BB%99i%20b%C3%B3ng/funds",
   ]);
   assert.match(mobile, /class="mobile-nav mobile-nav--5"/u);
-  assert.match(mobile, /href="\/teams\/%C4%91%E1%BB%99i%20b%C3%B3ng\/funds" class="active"/u);
+  assert.match(mobile, /href="\/teams\/%C4%91%E1%BB%99i%20b%C3%B3ng\/funds" aria-label="Quỹ đội" aria-current="page" class="active"/u);
 });
 
 test("hosted route navigation hides only unauthorized Funds without changing the mobile link order", () => {

@@ -93,6 +93,22 @@ test("a stalled mark-read attempt times out before local navigation", async () =
   await act(async () => view.root.unmount());
 });
 
+test("modified notification clicks preserve native new-tab behavior without marking read", async () => {
+  let requests = 0;
+  globalThis.fetch = async () => { requests += 1; return Response.json({ ok: true, readAt: "2026-10-10T08:10:00.000Z" }); };
+  const view = await mounted();
+  try {
+    await act(async () => view.container.querySelector<HTMLButtonElement>('button[aria-label="Thông báo"]')?.click());
+    const link = view.container.querySelector<HTMLAnchorElement>(".notification-row a"); assert.ok(link);
+    for (const modifier of [{ ctrlKey: true }, { metaKey: true }, { shiftKey: true }, { altKey: true }]) {
+      const event = new browserWindow.MouseEvent("click", { bubbles: true, cancelable: true, ...modifier });
+      await act(async () => { link.dispatchEvent(event); });
+      assert.equal(event.defaultPrevented, false);
+    }
+    assert.equal(requests, 0);
+  } finally { await act(async () => view.root.unmount()); }
+});
+
 test("mark-read timeout also bounds a successful response whose JSON body stalls", async () => {
   globalThis.fetch = (async () => ({ ok: true, json: async () => new Promise<unknown>(() => {}) }) as Response) as typeof fetch;
   browserWindow.history.replaceState(null, "", "/teams/nat-fc/overview");
